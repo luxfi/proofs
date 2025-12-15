@@ -14,8 +14,10 @@
   - Cross-chain teleport conserves assets
   - Liquid staking accrues yield monotonically
 
-  3 axioms pending mechanisation (topo_equivalence, no_double_spend,
-  sequential_worldview_preserved). All other theorems fully proved.
+  Structural axioms: topo_equivalence (bubble-sort induction over DAG),
+  no_double_spend_axiom (requires Accept precondition model).
+  sequential_worldview_preserved is now a theorem (proved via topo_equivalence).
+  Crypto axioms (verify, batch_sound, fheAdd) model external hardness assumptions.
 
   Authors: Zach Kelling, Woo Bin
   Lux Industries Inc
