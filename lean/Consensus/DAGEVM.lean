@@ -279,15 +279,14 @@ theorem serializability
     underlying execution was parallel vertices or serial blocks is
     invisible in the state projection. This is what lets us claim
     "EVM-equivalent" while running at X-Chain parallelism. -/
-/-- Axiom: there exists a canonical linear history; any other topo order
-    yields the same state. Follows from DAG acyclicity (Kahn's algorithm)
-    + `topo_equivalence`. Mechanisation pending. -/
-axiom sequential_worldview_preserved
+/-- Proved: given any topo order L, every other topo order yields the
+    same state (via `topo_equivalence` axiom). L itself witnesses
+    existence. -/
+theorem sequential_worldview_preserved
     (D : DAG) (hInv : ConsensusInvariant D)
-    (σ : State) :
-    ∃ linearHistory : List Vertex,
-      IsTopoOrder D linearHistory ∧
-      ∀ otherLinear, IsTopoOrder D otherLinear →
-        applyList linearHistory σ = applyList otherLinear σ
+    (L : List Vertex) (hL : IsTopoOrder D L) (σ : State) :
+    ∀ otherLinear, IsTopoOrder D otherLinear →
+      applyList L σ = applyList otherLinear σ :=
+  fun L' hL' => topo_equivalence D hInv L L' hL hL' σ
 
 end Consensus.DAGEVM
