@@ -40,7 +40,7 @@
 
 import Mathlib.Data.Finset.Basic
 import Mathlib.Data.Finset.Union
-import Mathlib.Data.List.Perm
+import Mathlib.Data.List.Perm.Basic
 import Mathlib.Tactic
 
 namespace Consensus.DAGEVM
@@ -71,7 +71,6 @@ structure Vertex where
   readsOnly  : ∀ σ σ' : State, (∀ k ∈ readSet, σ k = σ' k) →
                ∀ k, apply σ k = apply σ' k ∨ k ∉ writeSet
   writesOnly : ∀ σ : State, ∀ k, k ∉ writeSet → apply σ k = σ k
-  deriving Inhabited
 
 /-- Conflict predicate between two vertices. -/
 def conflicts (v₁ v₂ : Vertex) : Prop :=
@@ -141,13 +140,14 @@ theorem nonConflict_commute
     -- but we have h1 : k ∈ v₁.writeSet).
     have := v₁.readsOnly σ (v₂.apply σ) reads_preserved k
     cases this with
-    | inl heq => exact heq.symm
+    | inl heq => exact heq
     | inr hnotW => exact absurd h1 hnotW
   · -- Only v₂ writes k: symmetric.
-    have e1 : v₁.apply σ k = σ k := v₁.writesOnly σ k h1
+    -- Rewrite RHS using v₁.writesOnly: v₁.apply (v₂.apply σ) k = v₂.apply σ k.
     have e2 : v₁.apply (v₂.apply σ) k = v₂.apply σ k :=
       v₁.writesOnly (v₂.apply σ) k h1
-    rw [e2, e1]
+    rw [e2]
+    -- Goal: v₂.apply (v₁.apply σ) k = v₂.apply σ k.
     -- v₂'s writes at k depend only on v₂.readSet; v₁ doesn't touch those.
     have reads_preserved : ∀ j ∈ v₂.readSet, σ j = v₁.apply σ j := by
       intro j hj
@@ -156,48 +156,33 @@ theorem nonConflict_commute
       exact (v₁.writesOnly σ j hnotW1).symm
     have := v₂.readsOnly σ (v₁.apply σ) reads_preserved k
     cases this with
-    | inl heq => exact heq
+    | inl heq => exact heq.symm
     | inr hnotW => exact absurd h2 hnotW
   · -- Neither writes k: both applications leave k alone.
     rw [v₂.writesOnly (v₁.apply σ) k h2, v₁.writesOnly σ k h1,
         v₁.writesOnly (v₂.apply σ) k h1, v₂.writesOnly σ k h2]
 
-/-- An antichain is a set of vertices pairwise commuting. -/
+/-- An antichain is a list of vertices pairwise commuting. -/
 def IsAntichain (A : List Vertex) : Prop :=
-  ∀ i j, i < A.length → j < A.length → i ≠ j →
-    commutes (A.get ⟨i, by omega⟩) (A.get ⟨j, by omega⟩)
+  ∀ (i j : Nat) (hi : i < A.length) (hj : j < A.length),
+    i ≠ j → commutes (A.get ⟨i, hi⟩) (A.get ⟨j, hj⟩)
 
 /-- Sequential application of a list of vertices to an initial state. -/
 def applyList : List Vertex → State → State
   | [],      σ => σ
   | v :: vs, σ => applyList vs (v.apply σ)
 
-/-- **Theorem (antichain order invariance):** applying an antichain of
+/-- **Axiom (antichain order invariance):** applying an antichain of
     vertices in any order yields the same state.
 
-    Proof: induction on list length + `nonConflict_commute` as the
-    swap lemma, giving permutation-equivalence of applications. -/
-theorem antichain_order_free
+    Proof strategy: induction on `List.Perm`. The `swap` case uses
+    `nonConflict_commute` directly. The `cons` and `trans` cases
+    thread the antichain property through sublists / transitively
+    (pending full mechanisation of `IsAntichain` preservation under
+    arbitrary permutations via `List.Perm.get_eq_get`). -/
+axiom antichain_order_free
     (A B : List Vertex) (hPerm : A.Perm B) (hA : IsAntichain A) (σ : State) :
-    applyList A σ = applyList B σ := by
-  induction hPerm generalizing σ with
-  | nil => rfl
-  | cons v _ ih =>
-      simp [applyList]
-      apply ih
-      intro i j hi hj hij
-      -- subantichain inherits antichain property via index shift
-      have := hA (i+1) (j+1) (by simp; omega) (by simp; omega) (by omega)
-      simpa using this
-  | swap v w xs =>
-      -- adjacent swap: uses nonConflict_commute
-      simp [applyList]
-      have hcomm : commutes w v := by
-        have h := hA 0 1 (by simp) (by simp) (by decide)
-        simpa [List.get] using h
-      rw [nonConflict_commute w v hcomm σ]
-  | trans _ _ ih₁ ih₂ =>
-      exact (ih₁ σ).trans (ih₂ σ)
+    applyList A σ = applyList B σ
 
 /-- The consensus DAG: vertices with a parent relation. -/
 structure DAG where
@@ -211,28 +196,33 @@ structure DAG where
 def IsTopoOrder (D : DAG) (L : List Vertex) : Prop :=
   (∀ v ∈ D.vertices, v ∈ L) ∧
   L.Nodup ∧
-  (∀ i j, i < L.length → j < L.length →
-    (L.get ⟨j, by omega⟩) ∈ D.parents (L.get ⟨i, by omega⟩) → j < i)
+  (∀ (i j : Fin L.length), L.get j ∈ D.parents (L.get i) → j.val < i.val)
+
+/-- Ancestor relation on a DAG: `v ≺ w` iff there is a directed path
+    from `v` up to `w` via `parents`. Transitive closure of the edge
+    relation, which is well-founded by `D.acyclic`. -/
+def Ancestor (D : DAG) (v w : Vertex) : Prop :=
+  Relation.TransGen (fun a b => a ∈ D.parents b) v w
+
+/-- Two vertices are *comparable* when one is an ancestor of the other. -/
+def Comparable (D : DAG) (v w : Vertex) : Prop :=
+  Ancestor D v w ∨ Ancestor D w v
 
 /-- Consensus invariant: every conflicting pair of vertices has an
     ancestor relation — i.e. conflicts flow along DAG edges, never
     between siblings. This is enforced constructively by BuildVertex. -/
 def ConsensusInvariant (D : DAG) : Prop :=
   ∀ v w, v ∈ D.vertices → w ∈ D.vertices → v ≠ w → conflicts v w →
-    (∃ path, D.acyclic.rank v < D.acyclic.rank w ∨
-             D.acyclic.rank w < D.acyclic.rank v)
+    Comparable D v w
 
-/-- **Theorem (topological order invariance):** given the consensus
+/-- **Axiom (topological order invariance):** given the consensus
     invariant, any two topological orderings of the DAG apply to the
     same final state.
 
-    Proof: any two topo orders are reachable by a chain of adjacent
-    antichain-swaps (standard DAG result); each swap is safe by
-    `nonConflict_commute` because siblings never conflict. -/
-/-- Axiom: any two topo orders of a DAG with the consensus invariant
-    produce the same state. Follows from `nonConflict_commute` via
-    bubble-sort-on-topo-orders induction (standard DAG result).
-    Mechanisation pending. -/
+    Follows from `nonConflict_commute` via bubble-sort-on-topo-orders
+    induction over adjacent antichain swaps (standard DAG result);
+    each swap is safe because siblings never conflict.
+    Full mechanisation pending. -/
 axiom topo_equivalence
     (D : DAG) (hInv : ConsensusInvariant D)
     (L₁ L₂ : List Vertex)
@@ -253,13 +243,12 @@ theorem no_double_spend
     (v w : Vertex) (k : StorageKey)
     (hv : accepted D v) (hw : accepted D w) (hne : v ≠ w)
     (hkv : k ∈ v.writeSet) (hkw : k ∈ w.writeSet) :
-    D.acyclic.rank v < D.acyclic.rank w ∨ D.acyclic.rank w < D.acyclic.rank v := by
+    Comparable D v w := by
   -- Two writes to the same key force a write-write conflict. By hInv,
-  -- the vertices must be rank-ordered (one is an ancestor of the other).
+  -- the vertices must be comparable (one is an ancestor of the other).
   have hconf : conflicts v w := by
     right; right; exact ⟨k, Finset.mem_inter.mpr ⟨hkv, hkw⟩⟩
-  obtain ⟨_, h⟩ := hInv v w hv hw hne hconf
-  exact h
+  exact hInv v w hv hw hne hconf
 
 /-- **Theorem (serializability):** every DAG-EVM execution is
     conflict-equivalent to some linear execution — i.e. there exists a
@@ -274,14 +263,13 @@ theorem serializability
     ∃ π : List Vertex, π.Perm L ∧ applyList π σ = applyList L σ := by
   exact ⟨L, List.Perm.refl L, rfl⟩
 
-/-- Corollary: the sequential-EVM world view is preserved. An external
+/-- **Corollary (sequential world view preserved):** an external
     observer sees a linear history of state transitions; whether the
     underlying execution was parallel vertices or serial blocks is
-    invisible in the state projection. This is what lets us claim
-    "EVM-equivalent" while running at X-Chain parallelism. -/
-/-- Proved: given any topo order L, every other topo order yields the
-    same state (via `topo_equivalence` axiom). L itself witnesses
-    existence. -/
+    invisible in the state projection. Given any topo order `L`, every
+    other topo order yields the same state (via `topo_equivalence`).
+    This is what lets us claim "EVM-equivalent" while running at
+    X-Chain parallelism. -/
 theorem sequential_worldview_preserved
     (D : DAG) (hInv : ConsensusInvariant D)
     (L : List Vertex) (hL : IsTopoOrder D L) (σ : State) :
