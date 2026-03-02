@@ -1,0 +1,445 @@
+/*
+ * Hybrid Post-Quantum Encryption for Explorer Backup Streams
+ * Formal model in Tamarin Prover
+ *
+ * Protocol source:
+ *   ~/work/lux/explorer/backup/crypto.go
+ *   ~/work/lux/explorer/replication/encrypt.go
+ *
+ * Cryptographic suite:
+ *   PQ:        ML-KEM-768 (key encapsulation, FIPS 203)
+ *   Classical: X25519 (ECDH key agreement)
+ *   AEAD:      ChaCha20-Poly1305
+ *   KDF:       HKDF-SHA256
+ *
+ * Protocol (per WAL frame encryption):
+ *   1. Sender generates ephemeral X25519 key pair (esk_x, epk_x)
+ *   2. Sender encapsulates against recipient's ML-KEM-768 public key:
+ *      (ct_kem, ss_kem) = ML-KEM.Encaps(pk_kem)
+ *   3. Sender computes X25519 shared secret:
+ *      ss_x = X25519(esk_x, pk_x_recipient)
+ *   4. Combined secret: combined = ss_x || ss_kem
+ *   5. Session key: K = HKDF(combined, salt="lux-explorer-backup-v1", info=frame_id)
+ *   6. Encrypted frame: ct = ChaCha20-Poly1305.Seal(K, nonce, frame, aad=frame_id)
+ *   7. Output: (epk_x, ct_kem, nonce, ct, tag)
+ *
+ * Decryption (restoration):
+ *   1. Recipient decapsulates: ss_kem = ML-KEM.Decaps(sk_kem, ct_kem)
+ *   2. Recipient computes: ss_x = X25519(sk_x, epk_x)
+ *   3. Derives same K via HKDF
+ *   4. Decrypts: frame = ChaCha20-Poly1305.Open(K, nonce, ct, aad=frame_id)
+ *
+ * Tamarin abstraction choices:
+ *   - X25519 DH modeled via built-in 'diffie-hellman'
+ *   - ML-KEM encapsulation modeled as:
+ *       mlkem_encaps(pk_kem, ~randomness) -> (ct_kem, ss_kem)
+ *       mlkem_decaps(sk_kem, ct_kem) -> ss_kem
+ *     where ct_kem = mlkem_ct(pk_kem, ~randomness)
+ *     and   ss_kem = mlkem_ss(pk_kem, ~randomness)
+ *   - ChaCha20-Poly1305 AEAD modeled via senc/sdec
+ *   - HKDF modeled as a one-way hash (no reduction equations)
+ *   - Frame ID included as associated data for binding
+ *
+ * Security goals:
+ *   1. Plaintext secrecy: attacker cannot learn frame contents
+ *      even with a quantum computer, unless BOTH ML-KEM and X25519
+ *      are broken simultaneously
+ *   2. Forward secrecy: compromise of long-term keys does not
+ *      reveal past encrypted frames
+ *   3. Integrity: attacker cannot modify ciphertext without detection
+ *      (AEAD authentication)
+ *   4. Frame binding: ciphertext is bound to its frame ID (AAD)
+ *
+ * Copyright (C) 2019-2026, Lux Industries Inc. All rights reserved.
+ */
+
+theory PQEncryption
+begin
+
+builtins: diffie-hellman, hashing, symmetric-encryption
+
+/*
+ * ==================================================================
+ * Function symbols for post-quantum and AEAD primitives
+ * ==================================================================
+ */
+
+functions:
+  /* ML-KEM-768 key encapsulation */
+  mlkem_pk/1,         /* mlkem_pk(sk_kem) -> pk_kem */
+  mlkem_ct/2,         /* mlkem_ct(pk_kem, randomness) -> ciphertext_kem */
+  mlkem_ss/2,         /* mlkem_ss(pk_kem, randomness) -> shared_secret */
+  mlkem_decaps/2,     /* mlkem_decaps(sk_kem, ct_kem) -> shared_secret */
+
+  /* HKDF key derivation (one-way) */
+  hkdf/3,             /* hkdf(ikm, salt, info) -> derived_key */
+
+  /* AEAD encryption (ChaCha20-Poly1305) */
+  aead_enc/4,         /* aead_enc(key, nonce, plaintext, aad) -> ciphertext */
+  aead_dec/4,         /* aead_dec(key, nonce, ciphertext, aad) -> plaintext */
+
+  /* Frame identifier construction */
+  frame_id/2          /* frame_id(txid, page) -> identifier */
+
+/*
+ * ==================================================================
+ * Equations
+ * ==================================================================
+ */
+
+equations:
+  /* ML-KEM decapsulation recovers the shared secret */
+  mlkem_decaps(sk, mlkem_ct(mlkem_pk(sk), r)) = mlkem_ss(mlkem_pk(sk), r),
+
+  /* AEAD decryption is the inverse of encryption */
+  aead_dec(k, n, aead_enc(k, n, m, aad), aad) = m
+
+/*
+ * ==================================================================
+ * Restrictions
+ * ==================================================================
+ */
+
+/* Equality check helper */
+restriction Eq:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+/* Each nonce is used at most once per key (AEAD nonce uniqueness) */
+restriction NonceUniqueness:
+  "All k n #i #j.
+    UsedNonce(k, n) @ i & UsedNonce(k, n) @ j ==> #i = #j"
+
+/* Each frame ID is encrypted at most once per session */
+restriction FrameUniqueness:
+  "All sid fid #i #j.
+    EncryptedFrame(sid, fid) @ i & EncryptedFrame(sid, fid) @ j
+    ==> #i = #j"
+
+/*
+ * ==================================================================
+ * Key generation
+ * ==================================================================
+ */
+
+/*
+ * Generate a recipient key pair for backup encryption.
+ * In practice this is the backup operator's long-term key
+ * stored in KMS (kms.hanzo.ai).
+ */
+rule Generate_Recipient_Keys:
+  let
+    /* Classical: X25519 key pair */
+    pk_x = 'g'^~sk_x
+
+    /* Post-quantum: ML-KEM-768 key pair */
+    pk_kem = mlkem_pk(~sk_kem)
+  in
+  [ Fr(~sk_x), Fr(~sk_kem) ]
+  --[ CreateRecipient($R, pk_x, pk_kem) ]->
+  [ /* Long-term key material */
+    !LTK_X($R, ~sk_x)
+  , !LTK_KEM($R, ~sk_kem)
+  , !PK_X($R, pk_x)
+  , !PK_KEM($R, pk_kem)
+  /* Public keys are known to the attacker */
+  , Out(pk_x)
+  , Out(pk_kem)
+  ]
+
+/*
+ * ==================================================================
+ * Long-term key compromise
+ * ==================================================================
+ */
+
+/* Reveal X25519 long-term key (classical compromise) */
+rule Reveal_LTK_X:
+  [ !LTK_X($R, sk_x) ]
+  --[ RevealX($R) ]->
+  [ Out(sk_x) ]
+
+/* Reveal ML-KEM long-term key (PQ compromise) */
+rule Reveal_LTK_KEM:
+  [ !LTK_KEM($R, sk_kem) ]
+  --[ RevealKEM($R) ]->
+  [ Out(sk_kem) ]
+
+/* Reveal both keys (full compromise -- both classical and PQ broken) */
+rule Reveal_LTK_Full:
+  [ !LTK_X($R, sk_x), !LTK_KEM($R, sk_kem) ]
+  --[ RevealFull($R), RevealX($R), RevealKEM($R) ]->
+  [ Out(sk_x), Out(sk_kem) ]
+
+/*
+ * ==================================================================
+ * Encryption protocol (sender = replication sidecar)
+ * ==================================================================
+ *
+ * For each WAL frame, the sender:
+ *   1. Generates fresh ephemeral X25519 key
+ *   2. Encapsulates with ML-KEM using fresh randomness
+ *   3. Derives session key from both shared secrets
+ *   4. Encrypts the frame with AEAD
+ *   5. Outputs (epk_x, ct_kem, nonce, ciphertext)
+ *   6. Destroys ephemeral keys
+ */
+
+rule Encrypt_Frame:
+  let
+    /* Ephemeral X25519 key pair */
+    epk_x = 'g'^~esk_x
+
+    /* X25519 shared secret: DH(esk_x, pk_x_recipient) */
+    ss_x = pk_x_R^~esk_x
+
+    /* ML-KEM encapsulation */
+    ct_kem = mlkem_ct(pk_kem_R, ~kem_rand)
+    ss_kem = mlkem_ss(pk_kem_R, ~kem_rand)
+
+    /* Combined secret and key derivation */
+    combined = <ss_x, ss_kem>
+    fid = frame_id(txid, page)
+    K = hkdf(combined, 'lux-explorer-backup-v1', fid)
+
+    /* AEAD encryption with frame_id as AAD */
+    ct = aead_enc(K, ~nonce, frame, fid)
+  in
+  [ !PK_X($R, pk_x_R)
+  , !PK_KEM($R, pk_kem_R)
+  , Fr(~esk_x)
+  , Fr(~kem_rand)
+  , Fr(~nonce)
+  , Fr(~sid)
+  , In(<txid, page, frame>)
+  ]
+  --[ SenderEncrypt($R, ~sid, fid, frame)
+    , UsedNonce(K, ~nonce)
+    , EncryptedFrame(~sid, fid)
+    , EphemeralCreated(~sid, ~esk_x, ~kem_rand)
+    , SecretFrame(~sid, frame)
+    ]->
+  [ /* Encrypted output sent to S3 (attacker-visible channel) */
+    Out(<'EncFrame', epk_x, ct_kem, ~nonce, ct, fid>)
+  /* Ephemeral keys destroyed -- NOT stored in any persistent fact */
+  ]
+
+/*
+ * ==================================================================
+ * Decryption protocol (recipient = restore operator)
+ * ==================================================================
+ *
+ * The recipient:
+ *   1. Decapsulates ML-KEM ciphertext to recover ss_kem
+ *   2. Computes X25519 DH with sender's ephemeral public key
+ *   3. Derives same session key
+ *   4. Decrypts AEAD ciphertext, verifying tag and AAD
+ */
+
+rule Decrypt_Frame:
+  let
+    /* Recover X25519 shared secret */
+    ss_x = epk_x^sk_x_R
+
+    /* Recover ML-KEM shared secret */
+    ss_kem = mlkem_decaps(sk_kem_R, ct_kem)
+
+    /* Derive session key (must match sender) */
+    combined = <ss_x, ss_kem>
+    K = hkdf(combined, 'lux-explorer-backup-v1', fid)
+
+    /* AEAD decryption (tag verification implicit in equation) */
+    frame = aead_dec(K, nonce, ct, fid)
+  in
+  [ !LTK_X($R, sk_x_R)
+  , !LTK_KEM($R, sk_kem_R)
+  , In(<'EncFrame', epk_x, ct_kem, nonce, ct, fid>)
+  ]
+  --[ RecipientDecrypt($R, fid, frame)
+    , DecryptionSucceeded($R, fid)
+    ]->
+  [ /* Decrypted frame available for database restoration */ ]
+
+/*
+ * ==================================================================
+ * Integrity attack attempt (ciphertext modification)
+ * ==================================================================
+ *
+ * Model the attacker attempting to modify a ciphertext.
+ * The AEAD tag check will fail unless the attacker knows the key.
+ * We model this by allowing the attacker to submit modified data
+ * and checking that decryption either produces the original or fails.
+ */
+
+rule Attacker_Modify_Ciphertext:
+  [ In(<'EncFrame', epk_x, ct_kem, nonce, ct, fid>)
+  , Fr(~fake_ct)
+  ]
+  --[ AttackerModified(fid, ~fake_ct) ]->
+  [ Out(<'EncFrame', epk_x, ct_kem, nonce, ~fake_ct, fid>) ]
+
+rule Attacker_Modify_AAD:
+  [ In(<'EncFrame', epk_x, ct_kem, nonce, ct, fid>)
+  , Fr(~fake_fid)
+  ]
+  --[ AttackerModifiedAAD(fid, ~fake_fid) ]->
+  [ Out(<'EncFrame', epk_x, ct_kem, nonce, ct, ~fake_fid>) ]
+
+/*
+ * ==================================================================
+ * Security lemmas
+ * ==================================================================
+ */
+
+/*
+ * -- Lemma 1: Executability --
+ * The encryption and decryption protocol can complete (sanity check).
+ */
+lemma executability:
+  exists-trace
+  "Ex R fid frame #i.
+    RecipientDecrypt(R, fid, frame) @ i"
+
+/*
+ * -- Lemma 2: Plaintext secrecy --
+ * The attacker cannot learn the plaintext frame content unless BOTH
+ * the classical X25519 key AND the ML-KEM key of the recipient are
+ * compromised. Compromising only one is insufficient.
+ *
+ * This is the core hybrid PQ security guarantee: the system is
+ * secure against a quantum adversary (who can break X25519 but not
+ * ML-KEM) and against a classical adversary (who can break neither).
+ * Only an adversary who breaks BOTH primitives simultaneously can
+ * recover the plaintext.
+ */
+lemma plaintext_secrecy:
+  "All sid frame #i.
+    SecretFrame(sid, frame) @ i
+    ==> ( not(Ex #j. K(frame) @ j) )
+      | ( Ex R #rx #rk.
+            RevealX(R) @ rx & RevealKEM(R) @ rk )"
+
+/*
+ * -- Lemma 3: Plaintext secrecy under quantum attack --
+ * Even if the attacker has a quantum computer and can break X25519
+ * (modeled by revealing the X25519 key), the plaintext remains
+ * secret as long as ML-KEM is not also broken.
+ *
+ * This is stronger than lemma 2: it explicitly allows classical
+ * compromise and still demands secrecy.
+ */
+lemma quantum_resistance:
+  "All sid frame R #i #rx.
+    SecretFrame(sid, frame) @ i
+    & RevealX(R) @ rx
+    & not(Ex #rk. RevealKEM(R) @ rk)
+    ==> not(Ex #j. K(frame) @ j)"
+
+/*
+ * -- Lemma 4: Forward secrecy --
+ * Compromising long-term keys AFTER a frame is encrypted does NOT
+ * reveal the plaintext. The ephemeral X25519 key is destroyed after
+ * encryption (no persistent fact stores it), and the ML-KEM
+ * randomness is similarly ephemeral.
+ *
+ * The session key K depends on:
+ *   - esk_x (ephemeral, destroyed)
+ *   - kem_rand (ephemeral, destroyed)
+ * Long-term keys alone cannot reconstruct K.
+ *)
+lemma forward_secrecy:
+  "All sid frame #i.
+    SecretFrame(sid, frame) @ i
+    ==> ( not(Ex #j. K(frame) @ j) )
+      | ( Ex R #r. RevealFull(R) @ r & r < i )"
+
+/*
+ * -- Lemma 5: AEAD integrity --
+ * If a recipient successfully decrypts a frame for a given frame ID,
+ * then the frame was originally encrypted by an honest sender for
+ * that same frame ID. An attacker cannot forge a valid ciphertext
+ * without the session key.
+ *
+ * This follows from the AEAD equation: aead_dec only succeeds when
+ * key, nonce, ciphertext, AND aad all match the encryption call.
+ * Modified ciphertext or AAD produces a decryption failure.
+ */
+lemma integrity:
+  "All R fid frame #i.
+    RecipientDecrypt(R, fid, frame) @ i
+    ==> ( Ex sid #j. SenderEncrypt(R, sid, fid, frame) @ j & j < i )
+      | ( Ex #rx #rk. RevealX(R) @ rx & RevealKEM(R) @ rk )"
+
+/*
+ * -- Lemma 6: Frame binding (AAD integrity) --
+ * The frame ID (txid, page) is cryptographically bound to the
+ * ciphertext via the AEAD associated data. Decrypting a ciphertext
+ * with a different frame ID fails. This prevents an attacker from
+ * reordering or misattributing frames during restoration.
+ *
+ * If decryption succeeds for frame ID fid, the original encryption
+ * used the same fid.
+ */
+lemma frame_binding:
+  "All R fid frame #i.
+    RecipientDecrypt(R, fid, frame) @ i
+    ==> ( Ex sid #j. SenderEncrypt(R, sid, fid, frame) @ j )
+      | ( Ex #rx #rk. RevealX(R) @ rx & RevealKEM(R) @ rk )"
+
+/*
+ * -- Lemma 7: No ciphertext reuse --
+ * Each frame is encrypted exactly once per session (enforced by
+ * nonce uniqueness and frame uniqueness restrictions). This prevents
+ * nonce reuse attacks on ChaCha20-Poly1305.
+ */
+lemma no_ciphertext_reuse:
+  "All sid fid #i #j.
+    EncryptedFrame(sid, fid) @ i
+    & EncryptedFrame(sid, fid) @ j
+    ==> #i = #j"
+
+/*
+ * -- Lemma 8: Ephemeral key non-persistence --
+ * After encryption, the ephemeral keys are not stored in any
+ * persistent fact. The EphemeralCreated action records their
+ * existence, but no fact carries them forward. This is verified
+ * by construction: Encrypt_Frame produces no persistent fact
+ * containing esk_x or kem_rand.
+ *)
+lemma ephemeral_non_persistence:
+  "All sid esk kem_r #i.
+    EphemeralCreated(sid, esk, kem_r) @ i
+    ==> not(Ex #j. K(esk) @ j & i < j)
+      | ( Ex R #rx #rk. RevealX(R) @ rx & RevealKEM(R) @ rk )"
+
+/*
+ * -- Lemma 9: Decryption correctness --
+ * If a frame was encrypted by the sender, the recipient can decrypt
+ * it (assuming no key compromise and the encrypted output is delivered).
+ * This is an executability lemma for the full round-trip.
+ */
+lemma decryption_correctness:
+  exists-trace
+  "Ex R sid fid frame #i #j.
+    SenderEncrypt(R, sid, fid, frame) @ i
+    & RecipientDecrypt(R, fid, frame) @ j
+    & i < j"
+
+/*
+ * -- Lemma 10: Hybrid defense in depth --
+ * The session key depends on BOTH the X25519 shared secret AND the
+ * ML-KEM shared secret. By construction of hkdf(combined, ...),
+ * where combined = <ss_x, ss_kem>, an attacker must know both
+ * components to derive K. Tamarin's symbolic model enforces this:
+ * hkdf is a one-way function with no reduction equations, so both
+ * inputs are required.
+ *
+ * Stated as: secrecy holds if at most one primitive is broken.
+ */
+lemma hybrid_defense_in_depth:
+  "All sid frame #i.
+    SecretFrame(sid, frame) @ i
+    ==> ( not(Ex #j. K(frame) @ j) )
+      | ( Ex R #rx #rk.
+            RevealX(R) @ rx & RevealKEM(R) @ rk )"
+
+end

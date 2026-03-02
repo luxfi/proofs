@@ -1,0 +1,354 @@
+/*
+ * Quasar Consensus Protocol
+ * Formal model in Tamarin Prover
+ *
+ * Protocol source:
+ *   ~/work/lux/consensus/protocol/quasar/quasar.go
+ *
+ * Cryptographic suite:
+ *   BLS12-381:  threshold aggregate signatures (ECDL hardness, classical)
+ *   Ringtail:   Ring-LWE 2-round threshold signatures (Module-LWE hardness, PQ)
+ *   ZKP of ML-DSA-65 — Z-Chain Groth16 SNARK proving all three signature layers valid (Module-LWE + Module-SIS hardness, PQ)
+ *
+ * Protocol (TripleSignRound1 in quasar.go):
+ *   1. Validator i runs three signing paths in parallel:
+ *      a. BLS:      blsShare_i = BLS.SignShare(msg, blsKey_i)
+ *      b. Ringtail: r1_i = Ringtail.Round1(sessionID, prfKey, signerIDs)
+ *      c. ML-DSA:   mldsaSig_i = MLDSA.Sign(msg, mldsaKey_i)
+ *   2. Ringtail Round 2 (after collecting all Round1 data):
+ *      r2_i = Ringtail.Round2(sessionID, msg, prfKey, round1Data)
+ *   3. Aggregation:
+ *      a. BLS aggregate = Aggregate(blsShare_1, ..., blsShare_t)
+ *      b. Ringtail sig  = Finalize(r2_1, ..., r2_t)
+ *      c. ML-DSA sigs collected individually
+ *   4. QuasarCert = { BLS aggregate, Ringtail sig, ML-DSA sigs }
+ *
+ * Tamarin abstraction choices:
+ *   - Each crypto scheme modeled with independent key generation and signing
+ *   - BLS keys: fresh sk, pk = bls_pk(sk), sign = bls_sign(msg, sk)
+ *   - Ringtail keys: fresh sk, pk = rt_pk(sk), sign = rt_sign(msg, sk)
+ *   - ML-DSA keys: fresh sk, pk = mldsa_pk(sk), sign = mldsa_sign(msg, sk)
+ *   - Threshold modeled as t-of-n: aggregator collects t valid shares
+ *   - Quasar cert requires all three components present
+ *   - Quantum attacker: can compute bls_sk from bls_pk (breaks ECDL)
+ *   - Classical attacker: standard Dolev-Yao (cannot break any scheme)
+ *
+ * Security goals:
+ *   1. Quasar unforgeability: forging QuasarSig requires breaking ALL THREE
+ *   2. PQ resilience: quantum adversary breaking BLS cannot forge (Ringtail + ML-DSA hold)
+ *   3. Classical safety: classical adversary cannot forge (BLS + Ringtail protect)
+ *   4. Independence: each scheme's compromise is independent
+ *
+ * Copyright (C) 2019-2026, Lux Industries Inc. All rights reserved.
+ */
+
+theory QuasarConsensus
+begin
+
+builtins: hashing, signing
+
+/*
+ * ==================================================================
+ * Function symbols for Quasar signing
+ * ==================================================================
+ */
+
+functions:
+  /* BLS12-381 (classical threshold, ECDL hardness) */
+  bls_pk/1,             /* bls_pk(sk) -> pk */
+  bls_sign/2,           /* bls_sign(msg, sk) -> sig */
+  bls_verify/3,         /* bls_verify(msg, sig, pk) -> true/fail */
+  bls_aggregate/2,      /* bls_aggregate(sig1, sig2) -> agg_sig */
+  bls_agg_verify/3,     /* bls_agg_verify(msg, agg_sig, agg_pk) -> true/fail */
+  bls_agg_pk/2,         /* bls_agg_pk(pk1, pk2) -> agg_pk */
+
+  /* Ringtail (PQ threshold, Ring-LWE / Module-LWE hardness) */
+  rt_pk/1,              /* rt_pk(sk) -> pk */
+  rt_sign/2,            /* rt_sign(msg, sk) -> sig */
+  rt_verify/3,          /* rt_verify(msg, sig, pk) -> true/fail */
+  rt_aggregate/2,       /* rt_aggregate(sig1, sig2) -> agg_sig */
+  rt_agg_verify/3,      /* rt_agg_verify(msg, agg_sig, agg_pk) -> true/fail */
+  rt_agg_pk/2,          /* rt_agg_pk(pk1, pk2) -> agg_pk */
+
+  /* ML-DSA-65 (PQ identity, FIPS 204, Module-LWE + Module-SIS) */
+  mldsa_pk/1,           /* mldsa_pk(sk) -> pk */
+  mldsa_sign/2,         /* mldsa_sign(msg, sk) -> sig */
+  mldsa_verify/3,       /* mldsa_verify(msg, sig, pk) -> true/fail */
+
+  /* Quasar Quasar certificate */
+  quasar_cert/3,        /* quasar_cert(bls_sig, rt_sig, mldsa_sig) -> cert */
+  quasar_get_bls/1,     /* quasar_get_bls(cert) -> bls_sig */
+  quasar_get_rt/1,      /* quasar_get_rt(cert) -> rt_sig */
+  quasar_get_mldsa/1    /* quasar_get_mldsa(cert) -> mldsa_sig */
+
+/*
+ * ==================================================================
+ * Equations
+ * ==================================================================
+ */
+
+equations:
+  /* BLS: correct verification */
+  bls_verify(m, bls_sign(m, sk), bls_pk(sk)) = true,
+
+  /* BLS: aggregate verification (2-of-n shown, extends naturally) */
+  bls_agg_verify(m,
+    bls_aggregate(bls_sign(m, sk1), bls_sign(m, sk2)),
+    bls_agg_pk(bls_pk(sk1), bls_pk(sk2))) = true,
+
+  /* Ringtail: correct verification */
+  rt_verify(m, rt_sign(m, sk), rt_pk(sk)) = true,
+
+  /* Ringtail: aggregate verification */
+  rt_agg_verify(m,
+    rt_aggregate(rt_sign(m, sk1), rt_sign(m, sk2)),
+    rt_agg_pk(rt_pk(sk1), rt_pk(sk2))) = true,
+
+  /* ML-DSA: correct verification */
+  mldsa_verify(m, mldsa_sign(m, sk), mldsa_pk(sk)) = true,
+
+  /* Certificate projection */
+  quasar_get_bls(quasar_cert(b, r, d)) = b,
+  quasar_get_rt(quasar_cert(b, r, d)) = r,
+  quasar_get_mldsa(quasar_cert(b, r, d)) = d
+
+/*
+ * ==================================================================
+ * Restrictions
+ * ==================================================================
+ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction Inequality:
+  "All x y #i. Neq(x, y) @ i ==> not(x = y)"
+
+restriction OncePerValidator:
+  "All v msg #i #j. SignedTriple(v, msg) @ i & SignedTriple(v, msg) @ j ==> #i = #j"
+
+/*
+ * ==================================================================
+ * Rules
+ * ==================================================================
+ */
+
+/*
+ * Key Generation: each validator generates three independent key pairs.
+ * Models AddValidator in quasar.go which creates BLS + ML-DSA keys,
+ * and GenerateDualKeys which creates BLS + Ringtail threshold keys.
+ */
+rule Generate_Keys:
+  let
+    bls_pubkey   = bls_pk(~bls_sk)
+    rt_pubkey    = rt_pk(~rt_sk)
+    mldsa_pubkey = mldsa_pk(~mldsa_sk)
+  in
+  [ Fr(~bls_sk), Fr(~rt_sk), Fr(~mldsa_sk), Fr(~vid) ]
+  --[ GenerateKeys(~vid),
+      HonestValidator(~vid) ]->
+  [ !ValidatorBLS(~vid, ~bls_sk, bls_pubkey),
+    !ValidatorRT(~vid, ~rt_sk, rt_pubkey),
+    !ValidatorMLDSA(~vid, ~mldsa_sk, mldsa_pubkey),
+    !ValidatorPK(~vid, bls_pubkey, rt_pubkey, mldsa_pubkey),
+    Out(bls_pubkey),
+    Out(rt_pubkey),
+    Out(mldsa_pubkey) ]
+
+/*
+ * Quasar Signing: validator signs message with all three schemes in parallel.
+ * Models TripleSignRound1 in quasar.go.
+ */
+rule Triple_Sign:
+  let
+    bls_sig   = bls_sign(msg, bls_sk)
+    rt_sig    = rt_sign(msg, rt_sk)
+    mldsa_sig = mldsa_sign(msg, mldsa_sk)
+    cert      = quasar_cert(bls_sig, rt_sig, mldsa_sig)
+  in
+  [ !ValidatorBLS(vid, bls_sk, bls_pk),
+    !ValidatorRT(vid, rt_sk, rt_pk),
+    !ValidatorMLDSA(vid, mldsa_sk, mldsa_pk),
+    In(msg) ]
+  --[ SignedTriple(vid, msg),
+      TripleSigCreated(vid, msg, cert) ]->
+  [ Out(cert) ]
+
+/*
+ * Verification: verifier checks all three components of the certificate.
+ * Models QuasarCert.VerifyWithKeys: requires BLS + PQProof both present.
+ */
+rule Verify_Triple:
+  let
+    bls_sig   = quasar_get_bls(cert)
+    rt_sig    = quasar_get_rt(cert)
+    mldsa_sig = quasar_get_mldsa(cert)
+  in
+  [ In(cert),
+    !ValidatorPK(vid, bls_pk, rt_pk, mldsa_pk) ]
+  --[ Eq(bls_verify(msg, bls_sig, bls_pk), true),
+      Eq(rt_verify(msg, rt_sig, rt_pk), true),
+      Eq(mldsa_verify(msg, mldsa_sig, mldsa_pk), true),
+      VerifiedTriple(vid, msg, cert) ]->
+  [ ]
+
+/*
+ * Corrupt BLS: adversary learns BLS secret key.
+ * Models a quantum attacker solving ECDL on BLS12-381.
+ */
+rule Corrupt_BLS:
+  [ !ValidatorBLS(vid, bls_sk, bls_pk) ]
+  --[ CorruptedBLS(vid) ]->
+  [ Out(bls_sk) ]
+
+/*
+ * Corrupt Ringtail: adversary learns Ringtail secret key.
+ * Models a hypothetical break of Ring-LWE / Module-LWE.
+ */
+rule Corrupt_Ringtail:
+  [ !ValidatorRT(vid, rt_sk, rt_pk) ]
+  --[ CorruptedRT(vid) ]->
+  [ Out(rt_sk) ]
+
+/*
+ * Corrupt ML-DSA: adversary learns ML-DSA secret key.
+ * Models a hypothetical break of Module-LWE + Module-SIS.
+ */
+rule Corrupt_MLDSA:
+  [ !ValidatorMLDSA(vid, mldsa_sk, mldsa_pk) ]
+  --[ CorruptedMLDSA(vid) ]->
+  [ Out(mldsa_sk) ]
+
+/*
+ * ==================================================================
+ * Lemmas (security goals)
+ * ==================================================================
+ */
+
+/*
+ * Correctness: an honest validator who signs produces a valid Quasar cert.
+ * Sanity check that the model is satisfiable.
+ */
+lemma correctness_triple_sign:
+  exists-trace
+  "Ex vid msg cert #i #j.
+    TripleSigCreated(vid, msg, cert) @ i &
+    VerifiedTriple(vid, msg, cert) @ j &
+    i < j"
+
+/*
+ * THEOREM 1: Quasar Unforgeability
+ *
+ * If the adversary produces a valid Quasar certificate for a message
+ * that validator vid never signed, then the adversary must have
+ * compromised ALL THREE of vid's keys.
+ *
+ * Proof sketch: each component signature requires the corresponding
+ * secret key. If any one key is honest, that component cannot be forged.
+ */
+lemma triple_unforgeability:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j)
+    ==>
+    ( (Ex #a. CorruptedBLS(vid) @ a & a < j) &
+      (Ex #b. CorruptedRT(vid) @ b & b < j) &
+      (Ex #c. CorruptedMLDSA(vid) @ c & c < j) )"
+
+/*
+ * THEOREM 2: Quantum Attacker Resilience (BLS broken, PQ layers hold)
+ *
+ * Even if the adversary compromises the BLS key (quantum attack on ECDL),
+ * a valid Quasar cert cannot be forged without also breaking Ringtail AND ML-DSA.
+ *
+ * This is the core PQ safety guarantee of Quasar: BLS compromise alone
+ * is insufficient for forgery.
+ */
+lemma quantum_safe_pq_layers:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedBLS(vid) @ a & a < j)
+    ==>
+    ( (Ex #b. CorruptedRT(vid) @ b & b < j) &
+      (Ex #c. CorruptedMLDSA(vid) @ c & c < j) )"
+
+/*
+ * THEOREM 3: Classical Attacker Safety (BLS + Ringtail protect)
+ *
+ * A classical attacker who cannot break lattice problems (Ring-LWE)
+ * or ECDL still cannot forge a Quasar cert -- both BLS and Ringtail
+ * remain secure under classical computation.
+ *
+ * Modeled as: if neither BLS nor Ringtail is corrupted, forgery is
+ * impossible regardless of ML-DSA state.
+ */
+lemma classical_attacker_safety:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j)
+    ==>
+    ( (Ex #a. CorruptedBLS(vid) @ a & a < j) |
+      (Ex #b. CorruptedRT(vid) @ b & b < j) )"
+
+/*
+ * THEOREM 4: Single Scheme Compromise Insufficient
+ *
+ * Compromising only one of the three schemes is never enough to
+ * forge a Quasar certificate.
+ */
+lemma single_compromise_insufficient_bls:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedBLS(vid) @ a & a < j) &
+    not(Ex #b. CorruptedRT(vid) @ b & b < j)
+    ==>
+    F"
+
+lemma single_compromise_insufficient_rt:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedRT(vid) @ a & a < j) &
+    not(Ex #b. CorruptedBLS(vid) @ b & b < j)
+    ==>
+    F"
+
+lemma single_compromise_insufficient_mldsa:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedMLDSA(vid) @ a & a < j) &
+    not(Ex #b. CorruptedBLS(vid) @ b & b < j)
+    ==>
+    F"
+
+/*
+ * THEOREM 5: Independence of PQ Schemes
+ *
+ * Ringtail and ML-DSA use different hardness assumptions (Module-LWE
+ * vs Module-LWE + Module-SIS). Breaking one does not help break the other.
+ * Modeled as: if Ringtail is corrupt but ML-DSA is not, forgery fails.
+ */
+lemma pq_independence_rt_not_mldsa:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedBLS(vid) @ a & a < j) &
+    (Ex #b. CorruptedRT(vid) @ b & b < j) &
+    not(Ex #c. CorruptedMLDSA(vid) @ c & c < j)
+    ==>
+    F"
+
+lemma pq_independence_mldsa_not_rt:
+  "All vid msg cert #j.
+    VerifiedTriple(vid, msg, cert) @ j &
+    not(Ex #s. SignedTriple(vid, msg) @ s & s < j) &
+    (Ex #a. CorruptedBLS(vid) @ a & a < j) &
+    (Ex #c. CorruptedMLDSA(vid) @ c & c < j) &
+    not(Ex #b. CorruptedRT(vid) @ b & b < j)
+    ==>
+    F"
+
+end

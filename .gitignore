@@ -1,0 +1,6 @@
+.lake
+lake-packages
+lake-manifest.json
+node_modules/
+.next/
+out/
