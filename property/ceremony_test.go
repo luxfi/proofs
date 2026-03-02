@@ -13,7 +13,7 @@
 //
 // References:
 //   - Ceremony: ~/work/lux/node/cmd/ceremony/ceremony.go
-//   - Verifier: ~/work/lux/node/vms/zkvm/proof_verifier.go
+//   - Verifier: ~/work/lux/chains/zkvm/verifier.go
 //   - EIP-1108: https://eips.ethereum.org/EIPS/eip-1108
 //   - EIP-197:  https://eips.ethereum.org/EIPS/eip-197
 package property
