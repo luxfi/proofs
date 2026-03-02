@@ -1,0 +1,264 @@
+/*
+ * FROST Threshold Signing Protocol
+ * Formal model in Tamarin Prover
+ *
+ * Protocol source:
+ *   ~/work/lux/consensus/protocol/quasar/quasar.go (GenerateDualKeys, BLS threshold)
+ *   FROST: Flexible Round-Optimized Schnorr Threshold Signatures (RFC 9591)
+ *
+ * Protocol:
+ *   DKG phase (trusted dealer model, matching GenerateDualKeys):
+ *     1. Dealer generates random polynomial f(x) of degree t-1
+ *     2. Group secret s = f(0), group public key Y = g^s
+ *     3. Share for party i: s_i = f(i), verification key Y_i = g^{s_i}
+ *     4. Shares distributed to n parties over secure channels
+ *
+ *   Signing phase (t-of-n, matching DualSignRound1 / TripleSignRound1):
+ *     Round 1:
+ *       Each signer i generates nonce pair (d_i, e_i), commits H(D_i, E_i)
+ *       Broadcasts (D_i = g^{d_i}, E_i = g^{e_i})
+ *     Round 2:
+ *       Binding factor rho_i = H(i, msg, B) where B = {(D_j, E_j)}
+ *       Signer i computes z_i = d_i + e_i * rho_i + lambda_i * s_i * c
+ *       where c = H(R, Y, msg) and R = product(D_j * E_j^{rho_j})
+ *     Aggregation:
+ *       sigma = (R, z) where z = sum(z_i)
+ *       Verification: g^z == R * Y^c
+ *
+ * Tamarin abstraction choices:
+ *   - Polynomial evaluation modeled via share generation function
+ *   - Nonces as fresh values per signing session
+ *   - Lagrange coefficient folded into signing equation
+ *   - Threshold check: aggregator collects exactly t valid shares
+ *   - t-1 shares reveal nothing: modeled by absence of derivation rule
+ *
+ * Security goals:
+ *   1. Unforgeability: t valid shares needed for valid signature
+ *   2. Secrecy: t-1 compromised shares reveal nothing about group secret
+ *   3. Correctness: t honest signers always produce valid signature
+ *
+ * Copyright (C) 2019-2026, Lux Industries Inc. All rights reserved.
+ */
+
+theory FROSTThreshold
+begin
+
+builtins: hashing, signing, multiset
+
+/*
+ * ==================================================================
+ * Function symbols
+ * ==================================================================
+ */
+
+functions:
+  /* Key generation / shares */
+  frost_group_pk/1,     /* frost_group_pk(group_secret) -> group_pk */
+  frost_share/2,        /* frost_share(group_secret, party_id) -> share_i */
+  frost_share_pk/1,     /* frost_share_pk(share_i) -> verification_key_i */
+
+  /* Signing */
+  frost_sign_share/4,   /* frost_sign_share(msg, share_i, nonce_d, nonce_e) -> z_i */
+  frost_nonce_commit/2, /* frost_nonce_commit(nonce_d, nonce_e) -> (D_i, E_i) */
+  frost_partial_R/2,    /* frost_partial_R(nonce_d, nonce_e) -> R_i contribution */
+
+  /* Aggregation (2-of-n shown) */
+  frost_aggregate/2,    /* frost_aggregate(z_1, z_2) -> z */
+  frost_group_R/2,      /* frost_group_R(R_1, R_2) -> R */
+
+  /* Verification */
+  frost_verify/4,       /* frost_verify(msg, z, R, group_pk) -> true/fail */
+
+  /* Reconstruction attempt (requires t shares) */
+  frost_reconstruct/2   /* frost_reconstruct(share_1, share_2) -> group_secret */
+
+/*
+ * ==================================================================
+ * Equations
+ * ==================================================================
+ */
+
+equations:
+  /* Share public key derivation */
+  frost_share_pk(frost_share(s, i)) = frost_share_pk(frost_share(s, i)),
+
+  /* Correct verification: aggregate of t valid sign_shares verifies */
+  frost_verify(m,
+    frost_aggregate(
+      frost_sign_share(m, frost_share(s, i1), d1, e1),
+      frost_sign_share(m, frost_share(s, i2), d2, e2)),
+    frost_group_R(
+      frost_partial_R(d1, e1),
+      frost_partial_R(d2, e2)),
+    frost_group_pk(s)) = true,
+
+  /* Reconstruction: t shares reconstruct the secret (2-of-n) */
+  frost_reconstruct(frost_share(s, i1), frost_share(s, i2)) = s
+
+/*
+ * ==================================================================
+ * Restrictions
+ * ==================================================================
+ */
+
+restriction Equality:
+  "All x y #i. Eq(x, y) @ i ==> x = y"
+
+restriction DistinctParties:
+  "All i1 i2 s #t. DistinctShares(i1, i2, s) @ t ==> not(i1 = i2)"
+
+/*
+ * ==================================================================
+ * Rules
+ * ==================================================================
+ */
+
+/*
+ * Trusted Dealer DKG: generates group secret and distributes shares.
+ * Models GenerateDualKeys in quasar.go.
+ */
+rule DKG_TrustedDealer:
+  [ Fr(~group_secret) ]
+  --[ DKGComplete(~group_secret),
+      SecretGenerated(~group_secret) ]->
+  [ !GroupPK(frost_group_pk(~group_secret)),
+    !GroupSecret(~group_secret),
+    Out(frost_group_pk(~group_secret)) ]
+
+/*
+ * Share Distribution: dealer sends share to party i over secure channel.
+ */
+rule Distribute_Share:
+  let share_i = frost_share(group_secret, ~party_id)
+  in
+  [ !GroupSecret(group_secret), Fr(~party_id) ]
+  --[ ShareDistributed(~party_id, share_i),
+      HonestParty(~party_id) ]->
+  [ !PartyShare(~party_id, share_i),
+    !PartyVerificationKey(~party_id, frost_share_pk(share_i)) ]
+
+/*
+ * Signing Round 1: party generates nonces and commits.
+ */
+rule Sign_Round1:
+  [ !PartyShare(pid, share_i), Fr(~nonce_d), Fr(~nonce_e), In(msg) ]
+  --[ Round1(pid, msg, ~nonce_d, ~nonce_e) ]->
+  [ SigningState(pid, msg, share_i, ~nonce_d, ~nonce_e),
+    Out(frost_nonce_commit(~nonce_d, ~nonce_e)) ]
+
+/*
+ * Signing Round 2: party produces partial signature.
+ */
+rule Sign_Round2:
+  let z_i = frost_sign_share(msg, share_i, nonce_d, nonce_e)
+      R_i = frost_partial_R(nonce_d, nonce_e)
+  in
+  [ SigningState(pid, msg, share_i, nonce_d, nonce_e) ]
+  --[ SignedShare(pid, msg, z_i) ]->
+  [ PartialSig(pid, msg, z_i, R_i) ]
+
+/*
+ * Aggregation: collect t=2 partial signatures and produce group signature.
+ */
+rule Aggregate_Threshold:
+  let z   = frost_aggregate(z1, z2)
+      R   = frost_group_R(R1, R2)
+  in
+  [ PartialSig(p1, msg, z1, R1),
+    PartialSig(p2, msg, z2, R2) ]
+  --[ Aggregated(msg, z, R),
+      DistinctShares(p1, p2, msg) ]->
+  [ Out(<z, R>) ]
+
+/*
+ * Verification: verifier checks aggregate signature against group key.
+ */
+rule Verify_Signature:
+  [ In(<z, R>), !GroupPK(gpk), In(msg) ]
+  --[ Eq(frost_verify(msg, z, R, gpk), true),
+      Verified(msg, z, gpk) ]->
+  [ ]
+
+/*
+ * Corrupt Party: adversary learns a party's share.
+ */
+rule Corrupt_Party:
+  [ !PartyShare(pid, share_i) ]
+  --[ Corrupted(pid, share_i) ]->
+  [ Out(share_i) ]
+
+/*
+ * ==================================================================
+ * Lemmas
+ * ==================================================================
+ */
+
+/*
+ * Correctness: two honest signers can produce a valid signature.
+ */
+lemma correctness:
+  exists-trace
+  "Ex msg z gpk #i.
+    Verified(msg, z, gpk) @ i"
+
+/*
+ * THEOREM 1: Threshold Unforgeability
+ *
+ * A valid signature requires contributions from at least t=2 parties
+ * who each possessed a valid share. If the adversary never corrupted
+ * t parties, they cannot forge.
+ */
+lemma threshold_unforgeability:
+  "All msg z gpk #v.
+    Verified(msg, z, gpk) @ v
+    ==>
+    ( (Ex p1 p2 z1 z2 #s1 #s2.
+        SignedShare(p1, msg, z1) @ s1 &
+        SignedShare(p2, msg, z2) @ s2 &
+        not(p1 = p2) &
+        s1 < v & s2 < v)
+    | (Ex p1 sh1 p2 sh2 #c1 #c2.
+        Corrupted(p1, sh1) @ c1 &
+        Corrupted(p2, sh2) @ c2 &
+        not(p1 = p2)) )"
+
+/*
+ * THEOREM 2: Single Share Reveals Nothing
+ *
+ * Compromising exactly one share (t-1 = 1) does not allow the
+ * adversary to reconstruct the group secret. The group secret
+ * remains secret if fewer than t parties are corrupted.
+ *
+ * Modeled as: group secret s is secret unless t shares are leaked.
+ * With only 1 share, the adversary cannot derive s.
+ */
+lemma group_secret_secrecy:
+  "All s #g.
+    SecretGenerated(s) @ g
+    ==>
+    ( not(Ex #k. K(s) @ k)
+    | (Ex p1 sh1 p2 sh2 #c1 #c2.
+        Corrupted(p1, sh1) @ c1 &
+        Corrupted(p2, sh2) @ c2 &
+        not(p1 = p2)) )"
+
+/*
+ * THEOREM 3: t-1 Shares Insufficient for Signing
+ *
+ * If only one party is corrupted, the adversary cannot produce
+ * a valid aggregate signature (needs t=2 shares to sign).
+ */
+lemma subtreshold_cannot_sign:
+  "All msg z gpk #v.
+    Verified(msg, z, gpk) @ v &
+    /* exactly one corruption */
+    (Ex p1 sh1 #c1.
+      Corrupted(p1, sh1) @ c1 &
+      not(Ex p2 sh2 #c2. Corrupted(p2, sh2) @ c2 & not(p1 = p2)))
+    ==>
+    /* then an honest signer must have participated */
+    (Ex p_h z_h #s.
+      SignedShare(p_h, msg, z_h) @ s &
+      not(Ex sh_h #ch. Corrupted(p_h, sh_h) @ ch))"
+
+end
