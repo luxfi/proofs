@@ -1,0 +1,55 @@
+%% ============================================================
+%% lss/lifecycle-safety.tex
+%% ============================================================
+%%
+%% Canonical LSS lifecycle invariants for any kernel adapter.
+%% ============================================================
+
+\subsection*{LSS lifecycle invariants}
+
+The following lemmas hold for any LSS-managed threshold kernel
+(Pulsar, Lens, CMP) carrying state-tuple
+$(\eta, g, \mathsf{rb}, V, t, \mathsf{State})$.
+
+\begin{lemma}[Generation monotonicity]
+\label{lem:gen-monotonic}
+Across any sequence of $\mathsf{DynamicReshare}$ or $\mathsf{Refresh}$
+calls within an era, $g$ increases monotonically by exactly $1$ per
+call. Across $\mathsf{Rollback}(g_{\text{target}})$, the restored state
+carries $g = g_{\text{current}} + 1$ and
+$\mathsf{rb} = g_{\text{current}}$ (cf.\
+\texttt{quasar-cert-soundness.tex} Lemma 10
+\texttt{lem:gen-mono}).
+\end{lemma}
+
+\begin{lemma}[KeyEraID stability]
+\label{lem:eta-stable}
+$\eta$ is unchanged by $\mathsf{Refresh}$, $\mathsf{Reshare}$, or
+$\mathsf{Rollback}$. $\eta$ increments by $1$ \emph{only} on
+$\mathsf{Reanchor}$; the new era starts at $g = 0$, $\mathsf{rb} = 0$
+(cf.\ Lemma 11 \texttt{lem:eta-stable}).
+\end{lemma}
+
+\begin{lemma}[GroupKey byte-identity]
+\label{lem:gk-byte-identical}
+The $\mathsf{GroupKey}$ pointer (the $(\mathbf{A}, \tilde{\mathbf{b}})$
+public-key bytes for Pulsar; the $(g, h, X)$ bytes for Lens) is
+\emph{byte-identical} across every $\mathsf{Refresh}$ and
+$\mathsf{Reshare}$ within a key era. The proof reduces to the
+master-secret preservation theorem
+(\texttt{pulsar/reshare-preservation.tex}
+Theorem~\ref{thm:pulsar-reshare-preserves-s}) plus the deterministic
+formula $\tilde{\mathbf{b}} = \lfloor\mathbf{A}\cdot\mathbf{s} +
+\mathbf{e}\rceil_\Xi$ with $\mathbf{e}$ erased post-Bootstrap (cf.\
+Lemma 12 \texttt{lem:gk-identical}).
+\end{lemma}
+
+\begin{lemma}[Rollback lineage reconstructibility]
+\label{lem:rollback-lineage}
+Given the snapshot history $\{(\eta_i, g_i, \mathsf{rb}_i,
+\mathsf{State}_i)\}$ persisted by the LSS RollbackManager, the
+\emph{forward} lineage of the chain is reconstructible: for any
+current state, the chain of $\mathsf{rb}$ pointers traces back to the
+genesis state of the era (cf.\ Lemma 13
+\texttt{lem:rollback-lineage}).
+\end{lemma}

@@ -1,0 +1,46 @@
+%% ============================================================
+%% quasar/horizon-soundness.tex
+%% ============================================================
+%%
+%% Canonical Horizon (Prism-bound) soundness theorem.
+%% ============================================================
+
+\subsection*{Horizon soundness}
+
+\begin{theorem}[Horizon-final implies all lanes verify the same transcript]
+\label{thm:horizon-soundness}
+Let $\mathsf{cert}$ be a Horizon certificate
+(Definition~\ref{def:horizon-cert}) with
+$\mathsf{Prism}(\mathsf{cert}) = 1$. Then the underlying validator set
+of size $n$ with $f < n/3$ corruptions cannot have produced a Horizon-
+final certificate for two distinct $\mathsf{NebulaRoot}$ values at the
+same epoch and round, except with negligible probability under:
+\begin{enumerate}[nosep]
+  \item BLS12-381 co-CDH (for the Beam lane);
+  \item Module-LWE / Module-SIS (for the Pulsar lane,
+        Theorem~\ref{thm:pulsar-suf-cma});
+  \item EUF-CMA security of ML-DSA-65 / FIPS 204 (for the ML-DSA cert
+        set lane).
+\end{enumerate}
+The proof is by independent reduction: any pair of Prism-accepted certs
+on conflicting bundle roots forces a forgery in at least one lane.
+This is independent across the three lanes (different hardness
+assumptions); a quantum adversary breaking BLS does not break Pulsar
+or ML-DSA, and vice-versa.
+
+\textbf{Companion proof:} \texttt{quasar-cert-soundness.tex} Theorem
+7.5 (classical soundness), 7.6 (parallel-lane liveness), 7.7 (PQ
+safety).
+\end{theorem}
+
+\begin{remark}[Groth16 wrapper does not contribute PQ security]
+\label{rem:groth16-wrapper}
+A Z-Chain Groth16 rollup proof of ML-DSA cert-set verification
+(Definition~\ref{def:proof-lane}) is a \emph{classical succinct proof of
+post-quantum signature verification}. The proof system is
+pairing-based and is not post-quantum. Horizon's PQ soundness
+(Theorem~\ref{thm:horizon-soundness} parts 2 and 3) flows from the
+ML-DSA signatures and Pulsar threshold signature alone; the Groth16
+proof is verified for compatibility / compression only and is not part
+of the PQ reduction. See Remark~\ref{rem:groth16-not-pq}.
+\end{remark}

@@ -1,0 +1,100 @@
+%% ============================================================
+%% definitions/transcript-binding.tex
+%% ============================================================
+%%
+%% Canonical transcript-binding definitions. Used by Pulsar Activation,
+%% Quasar Horizon, and Warp 2.0 envelopes. Single source of truth.
+%% ============================================================
+
+\subsection*{Pulsar-SHA3 hash profile}
+
+\begin{definition}[Pulsar-SHA3 hash suite]
+\label{def:pulsar-sha3}
+The default Lux PQ-threshold hash profile, per FIPS 202 / NIST SP 800-185.
+All operations under domain-separated personalization tags:
+\begin{align*}
+H_c(\tau)               &\;:=\; \mathrm{cSHAKE256}(\text{``PULSAR-HC-v1''}, \tau) \to 32 \text{ bytes}\\
+H_u(\tau, n)            &\;:=\; \mathrm{cSHAKE256}(\text{``PULSAR-HU-v1''}, \tau) \to n \text{ bytes (XOF)}\\
+H_T(\tau_1, \ldots, \tau_k) &\;:=\; \mathrm{TupleHash256}(\text{``PULSAR-TRANSCRIPT-v1''}, \tau_1, \ldots, \tau_k) \to 32 \text{ bytes}\\
+\mathsf{PRF}(K, m, n)   &\;:=\; \mathrm{KMAC256}(K, m, n, \text{``PULSAR-PRF-v1''})\\
+\mathsf{MAC}(K, m, n)   &\;:=\; \mathrm{KMAC256}(K, m, n, \text{``PULSAR-MAC-v1''})\\
+\mathsf{Pairwise}(\kappa, \mathsf{ctx}, n) &\;:=\;
+  \mathrm{KMAC256}(\kappa, \mathrm{enc}(\mathsf{ctx}), n, \text{``PULSAR-PAIRWISE-v1''})
+\end{align*}
+where $\mathrm{enc}(\mathsf{ctx})$ canonically encodes
+$(\mathsf{chain\_id}, \mathsf{key\_era\_id}, \mathsf{generation},
+\mathsf{group\_id}, i, j)$.
+
+A second profile $\mathsf{Pulsar\text{-}BLAKE3}$ (optional, non-normative,
+faster) is defined symmetrically with BLAKE3 personalization tags.
+Production deployments MUST use $\mathsf{Pulsar\text{-}SHA3}$.
+The profile identifier $\mathsf{HashSuiteID}$ is bound into every transcript.
+\end{definition}
+
+\subsection*{TranscriptInputs canonicalization}
+
+\begin{definition}[Pulsar TranscriptInputs.Hash]
+\label{def:pulsar-transcript}
+$\mathsf{TranscriptHash}(\mathcal{T}) := H_T(\tau_1, \tau_2, \ldots)$
+where $\tau_1, \ldots, \tau_k$ are length-prefixed encodings of:
+\begin{align*}
+&\mathsf{chain\_id}, \mathsf{network\_id}, \mathsf{group\_id}, \\
+&\mathsf{key\_era\_id}, \mathsf{old\_generation}, \mathsf{new\_generation}, \\
+&\mathsf{old\_epoch\_id}, \mathsf{new\_epoch\_id}, \\
+&\mathsf{old\_set\_hash}, \mathsf{new\_set\_hash}, \\
+&\mathsf{threshold\_old}, \mathsf{threshold\_new}, \\
+&\mathsf{group\_public\_key\_hash}, \mathsf{nebula\_root}, \\
+&\mathsf{hash\_suite\_id}, \mathsf{implementation\_version}, \\
+&\mathsf{variant} \in \{\text{``refresh''}, \text{``reshare''}\}.
+\end{align*}
+Field count, order, and length-prefix encoding are canonical (see
+\texttt{pulsar/reshare/transcript.go}). Two distinct field tuples
+yield distinct hashes by collision resistance of TupleHash256.
+\end{definition}
+
+\begin{definition}[Pulsar Activation message]
+\label{def:pulsar-activation-msg}
+$\mathsf{ActivationMsg} := \text{``QUASAR-PULSAR-ACTIVATE-v1''}
+\,\|\, \mathsf{TranscriptHash}(\mathcal{T}) \,\|\,
+\mathsf{ReshareTranscript.Hash}(\mathcal{R})$
+where $\mathcal{R}$ encodes (commit digests, complaint hashes,
+disqualified senders, qualified quorum) per
+\texttt{pulsar/reshare/activation.go}.
+\end{definition}
+
+\subsection*{Quasar Horizon transcript}
+
+\begin{definition}[Quasar Horizon transcript]
+\label{def:horizon-transcript}
+The canonical bundle root signed by all Horizon lanes:
+\begin{align*}
+\mathsf{QuasarTranscript} := H_T\bigl( &\mathsf{NebulaRoot}, \\
+& \mathsf{chain\_id}, \mathsf{network\_id},
+  \mathsf{epoch}, \mathsf{round}, \\
+& \mathsf{validator\_set\_hash}, \\
+& \mathsf{key\_era\_id}, \mathsf{generation}, \\
+& \mathsf{hash\_suite\_id} \bigr).
+\end{align*}
+Every certificate lane in a Horizon certificate (Beam, ML-DSA cert
+set, Pulsar Pulse, optional Lens) signs the same
+$\mathsf{QuasarTranscript}$ value.
+\end{definition}
+
+\subsection*{Warp 2.0 envelope binding}
+
+\begin{definition}[Warp 2.0 envelope]
+\label{def:warp-v2-envelope}
+A Warp 2.0 cross-chain message envelope carries a version byte
+$0x02$ and binds:
+\begin{align*}
+\mathsf{WarpEnvelopeV2} := \bigl( &\mathsf{sourceChainID}, \mathsf{payload}, \\
+& \mathsf{Beam} = \sigma_{\textsc{bls}}, \mathsf{signerBitSet}, \\
+& \mathsf{MLDSACertSet}, \\
+& \mathsf{sourceNebulaRoot}, \mathsf{sourceKeyEraID}, \mathsf{sourceGeneration}, \\
+& \mathsf{HashSuiteID}, \mathsf{Pulse} \bigr).
+\end{align*}
+The Pulse signs $H_T(\mathsf{sourceChainID}, \mathsf{payload},
+\mathsf{sourceNebulaRoot}, \mathsf{sourceKeyEraID},
+\mathsf{sourceGeneration})$. v1 verifiers reject envelope byte $0x02$
+(forward-only; no v1↔v2 negotiation per LP-105 deprecation timeline).
+\end{definition}

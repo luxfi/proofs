@@ -1,0 +1,129 @@
+%% ============================================================
+%% definitions/finality-definitions.tex
+%% ============================================================
+%%
+%% Canonical finality state-machine and certificate-composition
+%% definitions for Quasar Horizon. Single source of truth.
+%% ============================================================
+
+\subsection*{Quasar finality states}
+
+\begin{definition}[Finality states]
+\label{def:finality-states}
+A bundle root $\mathsf{NebulaRoot}_b$ progresses through the finality
+state lattice:
+\begin{align*}
+\mathsf{Observed} &\;\subset\; \mathsf{Beam\text{-}final}
+   \;\subset\; \mathsf{PQ\text{-}attested} \\
+&\;\subset\; \mathsf{Pulse\text{-}sealed}
+   \;\subset\; \mathsf{Horizon\text{-}final}
+\end{align*}
+where each state requires the previous plus the additional certificate
+specified in Definition~\ref{def:horizon-cert}.
+\end{definition}
+
+\begin{definition}[Horizon certificate]
+\label{def:horizon-cert}
+$\mathsf{HorizonCertificate} := (\mathsf{Beam}, \mathsf{MLDSA},
+\mathsf{Pulse}, \mathsf{NebulaRoot}, \mathsf{KeyEraID},
+\mathsf{GroupID}, \mathsf{Generation}, \mathsf{HashSuiteID})$
+where:
+\begin{itemize}[nosep]
+  \item $\mathsf{Beam} = \sigma_{\textsc{bls}}$ is a BLS12-381 aggregate
+        signature over $\mathsf{QuasarTranscript}$
+        (Definition~\ref{def:horizon-transcript}).
+  \item $\mathsf{MLDSA}$ is a cert set: signer bitmap plus the per-validator
+        FIPS-204 ML-DSA-65 signatures, OR a Z-Chain Groth16 rollup
+        witness compressing the verification of the cert set.
+  \item $\mathsf{Pulse} = \sigma_{\textsc{pulsar}}$ is a Pulsar threshold
+        signature over $\mathsf{QuasarTranscript}$.
+\end{itemize}
+\end{definition}
+
+\subsection*{Prism: certificate-composition verifier}
+
+\begin{definition}[Prism]
+\label{def:prism}
+$\mathsf{Prism}(\mathsf{cert}) \to \{0, 1\}$ accepts a Horizon
+certificate iff all six verification predicates hold:
+\begin{enumerate}[nosep]
+  \item Domain separation and transcript binding: every lane signs the
+        same $\mathsf{QuasarTranscript}$ (Definition
+        \ref{def:horizon-transcript}); $\mathsf{HashSuiteID}$,
+        $\mathsf{KeyEraID}$, $\mathsf{Generation}$, $\mathsf{NebulaRoot}$
+        match across lanes.
+  \item BLS Beam aggregate verifies under the validator set's BLS
+        public-key registry.
+  \item ML-DSA cert set verifies against the signer bitmap (or Groth16
+        rollup against public-inputs hash).
+  \item Pulsar Pulse verifies under the active KeyEra's GroupKey via
+        $\mathsf{Pulsar.Verify}$ (Definition~\ref{def:pulsar-verify}).
+  \item Signer-set and validator-set hashes match the chain's epoch state.
+  \item Nebula root, epoch, round linkage matches.
+\end{enumerate}
+$\mathsf{Horizon\text{-}final}$ is defined as
+$\mathsf{Prism}(\mathsf{cert}) = 1$. It is \textbf{not}
+``BLS OR Pulsar''; it is the bound conjunction of all required lanes.
+\end{definition}
+
+\subsection*{Network tier model: L1 / L2 / L3}
+
+\begin{definition}[Lux network tiers]
+\label{def:network-tiers}
+A Lux-architecture chain occupies exactly one of three tiers:
+\begin{description}[nosep,leftmargin=2em]
+  \item[L1 (sovereign):] no $\mathsf{primary\_network\_id}$ declared.
+        Own validator set, own KeyEraID lineage, own Beam, ML-DSA cert
+        set, and Pulse. May or may not be declared as another chain's
+        primary; this is a graph property, not a protocol distinction.
+  \item[L2 (co-validating):] declares
+        $\mathsf{primary\_network\_id} = N_P$.
+        Activation cert binds $\mathsf{primary\_nebula\_root}$
+        from $N_P$; validator set is required to be a subset of $N_P$'s
+        active set at the era's Bootstrap. Not a rollup — produces its
+        own Beam, ML-DSA, Pulse.
+  \item[L3 (rollup / validity / app-execution):] settles or anchors to
+        an L1 or L2 via succinct proofs (e.g.\ Groth16, STARK), FHE
+        circuits, or fraud / validity proofs. The proof system is a
+        \emph{compatibility / compression / privacy adapter}, not the PQ
+        root of trust. PQ finality of an L3 inherits from the
+        underlying L1/L2's Pulse + ML-DSA, never from a pairing-based
+        SNARK alone.
+\end{description}
+A chain may transition between tiers via a Reanchor-class governance
+event.
+\end{definition}
+
+\subsection*{Proof-lane classification}
+
+\begin{definition}[Proof lane]
+\label{def:proof-lane}
+Distinct from the certificate lanes (Beam, ML-DSA, Pulse), Lux supports
+optional \emph{succinct proof wrappers} that compress or hide
+verification work:
+\begin{description}[nosep,leftmargin=2em]
+  \item[Groth16 wrapper (classical):] pairing-based SNARK over BLS12-381.
+        Useful for compressing ML-DSA cert-set verification into a
+        $\sim 192$-byte witness (Z-Chain rollup, LP-307). \textbf{Not
+        post-quantum} — pairing-based assumptions break under Shor's
+        algorithm. Treat as a classical compatibility/privacy layer
+        only.
+  \item[Future PQ-friendly wrapper:] STARK or lattice-based proof
+        system replacing Groth16 for true PQ succinctness. Open
+        production-research target; not a current shipping component.
+\end{description}
+PQ finality is provided by ML-DSA + Pulsar. The proof lane is a
+wrapper, not a root of trust.
+\end{definition}
+
+\begin{remark}[Groth16 of ML-DSA]
+\label{rem:groth16-not-pq}
+A Groth16 proof asserting that an ML-DSA signature set verified is a
+\textbf{classical succinct proof of post-quantum signature verification}.
+The signature itself is PQ; the proof system wrapping the verification
+is \textbf{not post-quantum}: pairing-based SNARKs over BLS12-381 are
+broken under Shor's algorithm, identical to the BLS Beam. Lux
+specifications must phrase this honestly: the Groth16 lane is a
+compatibility / compression / privacy adapter; PQ finality lives in
+ML-DSA and Pulsar.
+\end{remark}

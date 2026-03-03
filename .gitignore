@@ -4,3 +4,12 @@ lake-manifest.json
 node_modules/
 .next/
 out/
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+*.bbl
+*.blg
+*.synctex.gz

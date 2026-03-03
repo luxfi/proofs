@@ -1,0 +1,35 @@
+%% ============================================================
+%% pulsar/hash-suite-separation.tex
+%% ============================================================
+%%
+%% Canonical hash-suite domain-separation theorem.
+%% ============================================================
+
+\subsection*{Hash-suite domain separation}
+
+\begin{theorem}[Cross-suite signatures do not collide]
+\label{thm:hash-suite-separation}
+Let $\sigma_{\textsc{sha3}}$ and $\sigma_{\textsc{blake3}}$ be Pulsar
+signatures produced under
+$\mathsf{HashSuiteID} = \mathsf{Pulsar\text{-}SHA3}$ and
+$\mathsf{HashSuiteID} = \mathsf{Pulsar\text{-}BLAKE3}$ respectively,
+on otherwise identical input. Then
+$\mathsf{Pulsar.Verify}_{\mathsf{Pulsar\text{-}SHA3}}(
+\mathsf{GroupKey}, m, \sigma_{\textsc{blake3}}) = 0$
+and symmetrically for the other direction, with overwhelming
+probability over the verifier's hash function.
+
+The separation is ensured by binding $\mathsf{HashSuiteID}$ into
+the transcript via the TupleHash personalization
+(Definition~\ref{def:pulsar-transcript}); a cross-suite forgery
+would constitute a collision on the personalized TupleHash, which is
+collision-resistant under the underlying SHA3/BLAKE3 sponge.
+\end{theorem}
+
+\begin{remark}[Era-pinning]
+The $\mathsf{HashSuiteID}$ is recorded at $\mathsf{Pulsar.Bootstrap}$
+and remains immutable through every $\mathsf{Reshare}$ within an era.
+Reanchor MAY change the suite for the new era. This pinning prevents
+``split-brain'' scenarios where activation verifies under one suite
+and routine signing under another.
+\end{remark}

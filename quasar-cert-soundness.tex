@@ -1,0 +1,1425 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+
+% Theorem numbers in this document are deliberately offset so that the
+% main results are 7.5, 7.6, 7.7, 7.8, matching the LP-020 paper numbering.
+% (Theorems 7.1--7.4 live in LP-020 itself.)
+\setcounter{theorem}{4}
+
+\title{QuasarCert Soundness:\\
+{\large Canonical Formal Specification, Quasar 3.0}}
+\author{Zach Kelling\\
+\textit{Lux Industries, Inc.}\\
+\texttt{research@lux.network}}
+\date{Spec freeze: 2025-12-15 \\ Activation: 2025-12-25}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note is the canonical formal specification of QuasarCert soundness
+for the Quasar 3.0 chain activation on 2025-12-25.  QuasarCert is a
+three-lane finality certificate
+$\mathcal{C} = (\sigma_{\mathrm{BLS}}, \sigma_{\mathrm{RT}},
+\pi_{\mathrm{ZK}})$ with each lane bound to a common
+\emph{certificate subject} that fixes chain id, epoch, round, mode and
+the per-chain root commitments $(P, Q, Z, A, B, M, F)$.  We prove four
+results with theorem numbers aligned to LP-020:
+(7.5) classical soundness, requiring an adversary to forge all three
+lanes against three independent hardness assumptions;
+(7.6) parallel-lane liveness, allowing the three lanes to be aggregated
+independently and in parallel;
+(7.7) post-quantum safety, the standalone PQ predicate
+$\mathsf{VerifyPQ} = \mathsf{RT.Verify} \land \mathsf{ZK.Verify}$;
+(7.8) subject-binding replay protection, ruling out cross-epoch reuse of
+any valid cert.  We also address the rejection of threshold ML-DSA in
+3.0 (App.~A), the GPU verifier in LP-132 (\S7), and the concrete
+post-quantum parameter analysis (App.~E).
+
+This proof establishes soundness of the QuasarCert wire format defined in LP-020, with constituent layers specified in LP-070 (ML-DSA), LP-073 (Pulsar; Ringtail-derived lattice threshold kernel with key-era lifecycle), and LP-075 (BLS aggregate).
+
+\paragraph{Naming evolution (2026-03).} LP-073 was originally titled ``Ringtail.'' It now describes \textbf{Pulsar}, the Lux production fork at \texttt{github.com/luxfi/pulsar}, which inherits Ringtail's Sign1/Sign2/Combine math byte-equal but adds a key-era lifecycle (LSS-managed generations, verifiable resharing, activation certificate, rollback) suitable for permissionless validator-set rotation. Throughout this proof, ``Ringtail'' refers to the lattice signing primitive (the Sign1/Sign2/Combine math); ``Pulsar'' refers to the systems-layer composition that wraps it for dynamic permissionless deployment. Soundness results below derive from the SUF-CMA reduction of the underlying Ringtail signing scheme; lifecycle additions (resharing, activation, rollback) are orthogonal to the per-signature unforgeability argument and are addressed separately in LP-073's lifecycle section.
+\end{abstract}
+
+%% ==================================================================
+\section{QuasarCert}
+\label{sec:cert}
+%% ==================================================================
+
+\begin{definition}[Validator set]
+\label{def:val}
+$\mathcal{V} = \{v_1, \ldots, v_n\}$, $|\mathcal{V}| = n$.  Stake
+distribution $\mathrm{stk}: \mathcal{V} \to \mathbb{N}$ with total
+stake $S = \sum_i \mathrm{stk}(v_i)$.  At most a stake fraction $f < 1/3$
+is Byzantine.  Threshold $\tau = 2/3$, i.e.\ a valid quorum collects
+stake $\geq \lceil 2S/3 \rceil$.
+\end{definition}
+
+\begin{definition}[Certificate subject -- Def.~6.1 of LP-020]
+\label{def:subject}
+The \emph{certificate subject} is the byte string
+\[
+  \mathsf{subj} =
+  \mathsf{chain\_id} \,\|\, \mathsf{epoch} \,\|\, \mathsf{round}
+  \,\|\, \mathsf{mode}
+  \,\|\, P \,\|\, Q \,\|\, Z \,\|\, A \,\|\, B \,\|\, M \,\|\, F
+  \,\|\, \mathsf{parent\_*\_hashes}
+  \,\|\, \mathsf{gas/fee}
+\]
+where $P$ = \texttt{pchain\_validator\_root}, $Q$ =
+\texttt{qchain\_ceremony\_root}, $Z$ = \texttt{zchain\_vk\_root},
+$A$ = \texttt{achain\_state\_root}, $B$ = \texttt{bchain\_state\_root},
+$M$ = \texttt{mchain\_msg\_root}, $F$ = \texttt{fchain\_state\_root}.
+All three lanes sign or prove against $\mathsf{subj}$.
+\end{definition}
+
+\begin{definition}[QuasarCert -- Def.~6.2 of LP-020]
+\label{def:cert}
+For subject $\mathsf{subj}$, a \emph{QuasarCert} is the triple
+\[
+  \mathcal{C} = (\sigma_{\mathrm{BLS}}, \sigma_{\mathrm{RT}},
+                  \pi_{\mathrm{ZK}})
+\]
+where:
+\begin{itemize}[nosep]
+  \item $\sigma_{\mathrm{BLS}}$: BLS12-381 aggregate from validators of
+    stake $\geq \tau S$ on $\mathsf{subj}$, verified against
+    $\mathsf{pchain\_validator\_root}$;
+  \item $\sigma_{\mathrm{RT}}$: Ringtail two-round threshold signature
+    aggregating shares of stake $\geq \tau S$ on $\mathsf{subj}$,
+    verified against $\mathsf{qchain\_ceremony\_root}$;
+  \item $\pi_{\mathrm{ZK}}$: Z-Chain Groth16 proof that $n$ ML-DSA-65
+    signatures on $\mathsf{subj}$ verify under the public-key vector
+    committed by $\mathsf{zchain\_vk\_root}$.
+\end{itemize}
+$\mathsf{Verify}(\mathcal{C}) = 1$ iff every lane verifies and every
+lane binds the \emph{same} $\mathsf{subj}$.
+\end{definition}
+
+\begin{definition}[Hardness assumptions]
+\label{def:assumptions}
+We isolate one assumption per lane.
+\begin{enumerate}[nosep]
+  \item \textbf{DL/co-CDH on BLS12-381} (classical).  Discrete log /
+    co-CDH in $(\mathbb{G}_1, \mathbb{G}_2, \mathbb{G}_T)$.  BLS
+    aggregate signatures with proof-of-possession are EUF-CMA under
+    co-CDH.
+  \item \textbf{Module-LWE} (post-quantum).  $\mathsf{MLWE}_{q,k,\ell,
+    \chi}$ for the Ringtail / ML-DSA-65 parameter sets in App.~E.
+  \item \textbf{Module-SIS} (post-quantum).  $\mathsf{MSIS}_{q,k,\beta}$
+    for the same parameter sets.  Combined with MLWE, gives EUF-CMA for
+    ML-DSA-65 (FIPS~204) and SUF-CMA for Ringtail.
+  \item \textbf{KEA / AGM} (auxiliary).  Groth16 is knowledge-sound in
+    the algebraic group model on BLS12-381.
+\end{enumerate}
+\end{definition}
+
+%% ==================================================================
+\section{Adversary Model}
+\label{sec:adv}
+%% ==================================================================
+
+\begin{definition}[Adversary]
+\label{def:adv}
+A non-uniform polynomial-time adversary $\mathcal{A}$ controls a
+subset $F \subset \mathcal{V}$ of validators with stake share $< \tau$.
+$\mathcal{A}$ is given:
+\begin{itemize}[nosep]
+  \item the public keys of all validators (BLS, Ringtail, ML-DSA);
+  \item signing oracles for the corrupt set $F$;
+  \item the public verification key $\mathsf{vk}$ for the Z-Chain
+    Groth16 circuit;
+  \item the random oracle $H$ (programmable in the proof).
+\end{itemize}
+We consider two variants.
+\begin{description}[nosep]
+  \item[$\mathcal{A}_C$ -- classical PPT.]  Standard probabilistic
+    polynomial time.
+  \item[$\mathcal{A}_Q$ -- quantum PPT.]  Polynomial-time on a quantum
+    Turing machine; can run Shor and Grover, has full quantum random
+    oracle access (QROM).
+\end{description}
+$\mathcal{A}$ \emph{wins} the soundness game if it outputs
+$(\mathsf{subj}^\star, \mathcal{C}^\star)$ such that
+$\mathsf{Verify}(\mathcal{C}^\star) = 1$ and $\mathsf{subj}^\star$ was
+not endorsed by any honest stake-weighted quorum.
+\end{definition}
+
+\begin{remark}[Static vs adaptive]
+The proofs in Sections~\ref{sec:soundness}--\ref{sec:replay} are stated
+under \emph{static} corruption.  Adaptive corruption is handled in
+App.~C via secure-erasure or programmable-RO hybrids, with at most an
+$O(n \cdot Q_H)$ multiplicative loss.  All Lux validators perform
+Go-side memory zeroing of Ringtail signing randomness; HSM-backed
+T-Chain signing on the live network provides hardware-enforced
+erasures, so Cor.~\ref{cor:adaptive-erasure} applies tightly.
+\end{remark}
+
+%% ==================================================================
+\section{Soundness}
+\label{sec:soundness}
+%% ==================================================================
+
+\begin{theorem}[QuasarCert classical soundness]
+\label{thm:main}
+Under the assumptions of Def.~\ref{def:assumptions}, if
+$\mathcal{C}^\star = (\sigma_{\mathrm{BLS}}^\star,
+\sigma_{\mathrm{RT}}^\star, \pi_{\mathrm{ZK}}^\star)$ verifies against a
+subject $\mathsf{subj}^\star$ that was not endorsed by validators of
+stake $\geq \tau S$, then $\mathcal{A}_C$'s advantage satisfies
+\[
+  \mathsf{Adv}^{\mathrm{forge}}_{\mathcal{A}_C}
+  \;\leq\;
+  \min\!\bigl(
+    \epsilon_{\mathrm{BLS}}^{\mathrm{coCDH}},\;
+    \epsilon_{\mathrm{RT}}^{\mathrm{MLWE,MSIS}},\;
+    \epsilon_{\mathrm{ZK}}^{\mathrm{KEA}} +
+    n \cdot \epsilon_{\mathrm{MLDSA}}^{\mathrm{MLWE,MSIS}}
+  \bigr)
+  \;=\; \mathsf{negl}(\lambda).
+\]
+\end{theorem}
+
+\begin{proof}
+We argue per lane and then take the conjunction.
+
+\medskip\noindent
+\textbf{Lane 1 (BLS).}  $\sigma_{\mathrm{BLS}}^\star$ is a BLS12-381
+aggregate over $\mathsf{subj}^\star$.  Proof-of-possession on each
+validator's $\mathsf{pchain\_validator\_root}$ entry rules out
+rogue-key attacks~\cite{boneh2001short}.  By EUF-CMA of BLS aggregate
+signatures under co-CDH, a valid $\sigma_{\mathrm{BLS}}^\star$ implies
+that each validator $v_i$ in the aggregator set
+$S_{\mathrm{BLS}}^\star$ produced an individual BLS signature on
+$\mathsf{subj}^\star$.  Stake-weighting then gives
+$\mathrm{stk}(S_{\mathrm{BLS}}^\star) \geq \tau S$.  Forging without
+$\tau$ stake costs $\epsilon_{\mathrm{BLS}}^{\mathrm{coCDH}}$.
+
+\medskip\noindent
+\textbf{Lane 2 (Ringtail).}  $\sigma_{\mathrm{RT}}^\star$ is the
+output of the two-round Ringtail signing protocol bound to
+$\mathsf{qchain\_ceremony\_root}$ (i.e., the verification key produced
+by the Q-Chain DKG).  By the SUF-CMA proof of Ringtail under MLWE/MSIS,
+a valid $\sigma_{\mathrm{RT}}^\star$ on $\mathsf{subj}^\star$ implies a
+share set $S_{\mathrm{RT}}^\star$ with
+$\mathrm{stk}(S_{\mathrm{RT}}^\star) \geq \tau S$.  Forging costs at
+most $\epsilon_{\mathrm{RT}}^{\mathrm{MLWE,MSIS}}$.
+
+\medskip\noindent
+\textbf{Lane 3 (Z-Chain Groth16 of ML-DSA).}  $\pi_{\mathrm{ZK}}^\star$
+proves that for the public-key vector committed by
+$\mathsf{zchain\_vk\_root}$, there exist valid ML-DSA-65 signatures
+$(\sigma_1^{\mathrm{ML}}, \ldots, \sigma_n^{\mathrm{ML}})$ on
+$\mathsf{subj}^\star$.  Knowledge-soundness in the AGM yields an
+extractor $\mathcal{E}$ that recovers these signatures with
+overwhelming probability: any deviation has advantage
+$\epsilon_{\mathrm{ZK}}^{\mathrm{KEA}}$.  Each extracted ML-DSA-65
+signature is itself EUF-CMA under MLWE/MSIS, so for any uncorrupted
+$v_i$ a valid extracted signature without $v_i$'s key costs
+$\epsilon_{\mathrm{MLDSA}}^{\mathrm{MLWE,MSIS}}$ (with up to $n$ guessing
+loss for which validator was framed).
+
+\medskip\noindent
+\textbf{Conjunction.}  $\mathsf{Verify}$ is the AND of the three
+predicates.  An attacker who breaks fewer than three lanes still has
+at least one lane verifying only with negligible probability.  Hence
+$\mathsf{Adv}^{\mathrm{forge}}_{\mathcal{A}_C}$ is upper-bounded by the
+\emph{minimum} of the per-lane advantages, which is negligible.
+
+\medskip\noindent
+\textbf{Cross-lane independence.}  The three bounds rely on three
+disjoint problems: discrete log on BLS12-381, MLWE, MSIS.  No known
+reduction transfers a break of one to a break of another at the
+parameter sets of Def.~\ref{def:assumptions}; this is exactly the
+hedging argument of pq-finality-no-bls.tex \S3.2.  Compromise of any
+one of $\{\mathsf{pchain\_validator\_root}, \mathsf{qchain\_ceremony\_root},
+\mathsf{zchain\_vk\_root}\}$ disables only the corresponding lane.
+\end{proof}
+
+\begin{corollary}[No conflicting certificates]
+\label{cor:no-conflict}
+If $\mathcal{C}, \mathcal{C}'$ both verify on subjects $\mathsf{subj},
+\mathsf{subj}'$ that share $(\mathsf{chain\_id}, \mathsf{epoch},
+\mathsf{round})$ but disagree on the chain-state roots, then
+$> \tau$ stake is Byzantine.
+\end{corollary}
+
+\begin{proof}
+By Lane~1, $\mathrm{stk}(S_{\mathrm{BLS}}) \geq \tau S$ and
+$\mathrm{stk}(S_{\mathrm{BLS}}') \geq \tau S$.  Stake-weighted quorum
+intersection gives
+$\mathrm{stk}(S_{\mathrm{BLS}} \cap S_{\mathrm{BLS}}') \geq (2\tau - 1) S
+= S/3$.  Any validator in the intersection signed two distinct subjects
+at the same $(\mathsf{chain\_id}, \mathsf{epoch}, \mathsf{round})$,
+which is detectable equivocation; if Byzantine stake is $< S/3$ this
+is impossible.
+\end{proof}
+
+%% ==================================================================
+\section{Parallel Lane Liveness}
+\label{sec:parallel}
+%% ==================================================================
+
+\begin{theorem}[Parallel-lane liveness]
+\label{thm:parallel}
+The three lanes of QuasarCert can be aggregated independently and in
+parallel.  Specifically, let $T_{\mathrm{BLS}}, T_{\mathrm{RT}},
+T_{\mathrm{ZK}}$ be the wall-clock durations of the three lane
+aggregations under partial synchrony with bounded delay $\Delta$ and
+honest stake $\geq \tau$.  Then there exists an honest schedule that
+produces $\mathcal{C}$ in time
+\[
+  T_{\mathrm{cert}}
+  \;\leq\;
+  \max\!\bigl(T_{\mathrm{BLS}},\; T_{\mathrm{RT}},\; T_{\mathrm{ZK}}\bigr)
+  + \Delta.
+\]
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+The three aggregations communicate only through the shared
+$\mathsf{subj}$.  Once $\mathsf{subj}$ is fixed for a round (which
+requires only the chain-state roots, all available at round start),
+each lane runs a separate aggregation network:
+BLS aggregator on the P-Chain validator network;
+Ringtail two-round protocol on the Q-Chain DKG mesh;
+Z-Chain Groth16 prover (epoch-amortised, asynchronous to block
+production).  Honest validators contribute to all lanes they hold keys
+for; under stake $\geq \tau$ each lane independently completes within
+its own bound.  The certificate is finalised when the last lane lands;
+the extra $\Delta$ accounts for one round of network propagation to
+combine the three artifacts.
+
+\medskip\noindent
+The Z-Chain proof, in particular, is generated by the Z-Chain prover
+service over an epoch window and lands asynchronously: the epoch's
+$\pi_{\mathrm{ZK}}$ becomes part of every QuasarCert in that epoch
+once posted.  This is the LP-020 Section~6.4 ``epoch ZK landing''
+mechanism and does not block per-block finality of the BLS+Ringtail
+core.
+\end{proof}
+
+%% ==================================================================
+\section{Post-Quantum Safety}
+\label{sec:pq}
+%% ==================================================================
+
+\begin{theorem}[Post-quantum safety]
+\label{thm:pq}
+Define the standalone PQ predicate
+$\mathsf{VerifyPQ}(\mathcal{C}) = \mathsf{RT.Verify}(\sigma_{\mathrm{RT}})
+\land \mathsf{ZK.Verify}(\pi_{\mathrm{ZK}})$.  Against a quantum
+adversary $\mathcal{A}_Q$,
+\[
+  \mathsf{Adv}^{\mathsf{VerifyPQ}}_{\mathcal{A}_Q}
+  \;\leq\;
+  2 \cdot \max\!\bigl(
+    \epsilon_{\mathrm{MLWE}}^{Q},\;
+    \epsilon_{\mathrm{MSIS}}^{Q}
+  \bigr)
+  \;=\; \mathsf{negl}(\lambda).
+\]
+That is: even if $\mathcal{A}_Q$ trivially breaks BLS via Shor, the
+PQ-only predicate remains sound.
+\end{theorem}
+
+\begin{proof}
+$\mathcal{A}_Q$ must produce $\sigma_{\mathrm{RT}}^\star$ that verifies
+against $\mathsf{qchain\_ceremony\_root}$ and $\pi_{\mathrm{ZK}}^\star$
+that verifies against $\mathsf{zchain\_vk\_root}$.
+
+\medskip\noindent
+\textit{Forging $\sigma_{\mathrm{RT}}$ quantumly} requires breaking
+MLWE or MSIS at the Ringtail dimension $d = 2048$, modulus
+$\log_2 q = 48$ (App.~E).  The best known quantum cost is BDGL sieving
+with Grover speedup, giving $T_{\mathrm{quantum}} \geq 2^{130}$
+operations.
+
+\medskip\noindent
+\textit{Forging $\pi_{\mathrm{ZK}}$ quantumly} is delicate: Groth16's
+classical pairing-based knowledge-soundness reduces to discrete log on
+BLS12-381, which is broken by Shor.  In the post-quantum setting we
+fall back to the soundness of the underlying ML-DSA-65 signatures it
+proves.  A quantum forger of $\pi_{\mathrm{ZK}}$ either (a) extracts
+no real witness and yet the proof verifies (breaks knowledge-soundness
+in the AGM, classical only -- not assumed against $\mathcal{A}_Q$), or
+(b) extracts ML-DSA-65 signatures the adversary did not legitimately
+hold.  Case (b) costs $\epsilon_{\mathrm{MLDSA}}^{Q} \geq 2^{128}$ at
+ML-DSA-65 (NIST Cat.~3) per signature, with at most $n$ guessing loss.
+The standalone-PQ guarantee for $\pi_{\mathrm{ZK}}$ thus reduces to the
+PQ unforgeability of ML-DSA-65 signatures committed by
+$\mathsf{zchain\_vk\_root}$.
+
+\medskip\noindent
+A guessing reduction picks the targeted lane with probability $1/2$ and
+inherits the corresponding bound; combined with $\mathsf{negl}$ per
+lane this gives the stated $\mathsf{Adv}$.
+
+\medskip\noindent
+\textbf{Future-work caveat.}  Replacing Groth16 with a STARK-of-pairing
+or hash-based SNARK eliminates the dependence on classical
+knowledge-soundness in $\pi_{\mathrm{ZK}}$.  This is tracked as the
+``post-quantum SNARK swap'' in LP-020 \S11 and is out of scope for 3.0
+final.
+\end{proof}
+
+\begin{remark}[Combined three-lane PQ guarantee]
+The full QuasarCert remains sound against $\mathcal{A}_Q$ as long as
+\emph{at least one} of $\{$Ringtail, ML-DSA path$\}$ survives.
+Equivalently: the survival predicate is ``1 of 2 PQ pillars''.  This
+matches the pq-finality-no-bls.tex Proposition (Hedged PQ security)
+under the conjunction ``MLWE hard $\lor$ MSIS hard,'' and is the
+operative claim for the 2025-12-25 activation.
+\end{remark}
+
+%% ==================================================================
+\section{Subject-Binding Replay Protection}
+\label{sec:replay}
+%% ==================================================================
+
+This section is new in 3.0 final.  The result formalises why the
+\emph{certificate subject} (Def.~\ref{def:subject}) makes a valid
+QuasarCert from epoch $e_1$ unusable at any other epoch
+$e_2 \neq e_1$.
+
+\begin{theorem}[Subject-binding replay protection]
+\label{thm:replay}
+Let $\mathcal{C}$ be a QuasarCert that verifies for subject
+$\mathsf{subj}_1$ at epoch $e_1$.  Let $\mathsf{subj}_2$ differ from
+$\mathsf{subj}_1$ in any field of Def.~\ref{def:subject}.  Then the
+probability that $\mathcal{C}$ also verifies for $\mathsf{subj}_2$
+under the assumptions of Def.~\ref{def:assumptions} is
+$\mathsf{negl}(\lambda)$.  In particular, the cert cannot be replayed
+across distinct $\mathsf{epoch}$ values (or distinct
+$\mathsf{chain\_id}$, $\mathsf{round}$, $\mathsf{mode}$, or any chain
+root in the subject).
+\end{theorem}
+
+\begin{proof}
+We show that each lane is collision-resistant on the subject input.
+
+\medskip\noindent
+\textbf{BLS.}  $\sigma_{\mathrm{BLS}}$ is computed as
+$\prod_i H_{\mathbb{G}_2}(\mathsf{subj})^{sk_i}$ where
+$H_{\mathbb{G}_2}$ is a hash-to-curve.  If
+$\sigma_{\mathrm{BLS}}$ verifies for both $\mathsf{subj}_1$ and
+$\mathsf{subj}_2 \neq \mathsf{subj}_1$, then there exists
+$\sigma_{\mathrm{BLS}}$ such that
+$e(\sigma_{\mathrm{BLS}}, g_1) = e(H_{\mathbb{G}_2}(\mathsf{subj}_1),
+\mathsf{apk}) = e(H_{\mathbb{G}_2}(\mathsf{subj}_2), \mathsf{apk})$.
+The pairing equality forces
+$H_{\mathbb{G}_2}(\mathsf{subj}_1) = H_{\mathbb{G}_2}(\mathsf{subj}_2)$
+(in $\mathbb{G}_2$), which is a hash-to-curve collision and hence
+negligible.
+
+\medskip\noindent
+\textbf{Ringtail.}  The Ringtail challenge is
+$c = H(\mathbf{w}, \mathsf{subj})$.  If $\sigma_{\mathrm{RT}}$ verifies
+for both subjects with the same commitment $\mathbf{w}$, then
+$H(\mathbf{w}, \mathsf{subj}_1) = H(\mathbf{w}, \mathsf{subj}_2)$,
+again a hash collision.  If the commitments differ, this is a fresh
+forgery and reduces to MLWE/MSIS.
+
+\medskip\noindent
+\textbf{Groth16.}  $\pi_{\mathrm{ZK}}$ encodes $\mathsf{subj}$ as a
+public input bound at SRS preprocessing.  Verifying the same proof
+against a different public input with non-negligible probability
+contradicts knowledge-soundness in the AGM (the verifier equation
+$e(A, B) = e(\alpha, \beta) \cdot e(\sum_i \mathsf{subj}[i] \cdot
+\mathsf{IC}_i, \gamma) \cdot e(C, \delta)$ is linear in
+$\mathsf{subj}$ and pinning a single proof to two distinct linear
+combinations is a collision in the AGM extractor).
+
+\medskip\noindent
+Each lane's replay probability is therefore $\mathsf{negl}(\lambda)$;
+since $\mathsf{Verify}$ is the AND of the three, replay across
+distinct subjects has at most the minimum of these advantages, which
+remains negligible.
+\end{proof}
+
+\begin{remark}[Concrete fields blocked]
+Because $\mathsf{subj}$ contains $\mathsf{epoch}$, $\mathsf{round}$,
+and $\mathsf{chain\_id}$ explicitly, replay across epochs, across
+rounds within an epoch, or across chains (e.g., devnet to mainnet) is
+ruled out individually.  The chain-root fields
+$(P, Q, Z, A, B, M, F)$ further block replay against any state
+divergence: even if two distinct epochs share epoch number (impossible
+by P-Chain rules but treated formally), the $A/B/F$ roots disagree as
+soon as any inclusion-list transaction differs.
+\end{remark}
+
+%% ==================================================================
+\section{GPU Verifier Refinement (Informal)}
+\label{sec:gpu}
+%% ==================================================================
+
+LP-132 specifies the QuasarGPU adapter.  Its core entry point is
+\texttt{drain\_cert\_lane(lane, batch)} which produces a verdict
+$\{\mathsf{accept}, \mathsf{reject}, \mathsf{abstain}\}$ for each cert
+in $\mathsf{batch}$.  The CPU reference is a sequential loop calling
+the per-lane verifier.
+
+\paragraph{Cross-backend equivalence (LP-132 invariant).}
+Let $V_{\mathrm{cpu}}$ and $V_{\mathrm{gpu}}$ denote the verdict
+functions.  LP-132 requires
+\[
+  V_{\mathrm{gpu}}(\pi(\mathsf{batch})) = \pi(V_{\mathrm{cpu}}(\mathsf{batch}))
+  \quad\text{for any canonical-tx-index permutation } \pi.
+\]
+That is, the GPU implementation differs from CPU only by deterministic
+reordering.  The reordering is induced by per-warp scheduling, which
+the adapter resolves at output by sorting on the canonical tx index.
+
+\paragraph{Argument.}
+Each lane verifier is a pure function on
+$(\mathsf{subj}, \text{lane artifact})$ with no shared state across
+batch elements.  GPU parallelism replicates this function across
+threads with thread-local memory; the only global state read is the
+verification key roots (read-only).  Hence each per-element verdict is
+identical to the CPU verdict.  The output ordering is canonicalised by
+sorting on the tx index, eliminating the only nondeterminism.  By
+inspection of the LP-132 reference loop, the GPU adapter produces
+verdict-equivalent output up to permutation, and the canonical sort
+removes the permutation.
+
+\paragraph{What this is not.}
+This is an \emph{informal} argument, not a machine-checked proof.  A
+machine-checked refinement would require reasoning about CUDA / HIP
+memory models and is tracked in the \texttt{lean/Consensus/} GPU
+refinement task.  The cross-backend differential test in LP-132
+\texttt{tests/cross\_backend\_test.go} provides empirical evidence at
+the engineering boundary.
+
+%% ==================================================================
+\section{Pulsar Key-Era Lifecycle Lemmas}
+\label{sec:lifecycle}
+%% ==================================================================
+
+This section formalises the lifecycle properties of LP-073 Pulsar that
+sit \emph{above} the per-signature SUF-CMA argument. The Ringtail kernel
+of Pulsar is treated as an oracle that produces a signature
+$\sigma_{\mathrm{RT}}$ verifying under
+$\mathsf{GK} = (\mathbf{A}, \tilde{\mathbf{b}})$ given $\geq t$ shares
+$\{\mathbf{s}_i\}$ that satisfy the Lagrange-recombination identity for
+the master secret $\mathbf{s}$. We prove four lemmas that together
+formalise the ``persistent body, rotating beam'' property of a key era.
+
+\begin{definition}[Pulsar share state]
+\label{def:share-state}
+A Pulsar share state at validator $v$ is a tuple
+\[
+  \pi_v = \bigl(
+    \eta,\; g,\; r,\;
+    V,\; t,\;
+    \mathbf{A},\; \tilde{\mathbf{b}},\;
+    \mathbf{s}_v,\; \boldsymbol\lambda_v,\;
+    \mathsf{seeds}_v,\; \mathsf{macKeys}_v
+  \bigr)
+\]
+where $\eta \in \mathbb{N}$ is the \emph{KeyEraID}, $g \in \mathbb{N}$
+the \emph{Generation}, $r \in \mathbb{N}$ the \emph{RollbackFrom}
+counter ($r = 0$ on forward transitions),
+$V \subseteq \mathcal{V}$ the active validator subset of size $|V| = K$,
+$t$ the threshold, $\mathbf{A} \in R_q^{m_{\mathrm{pk}} \times
+n_{\mathrm{vec}}}$ and $\tilde{\mathbf{b}} \in R_\xi^{m_{\mathrm{pk}}}$
+the persistent group-key components, $\mathbf{s}_v$ the share assigned
+to $v$, $\boldsymbol\lambda_v$ the precomputed Lagrange coefficient for
+$v$ in $V$, and $\mathsf{seeds}_v, \mathsf{macKeys}_v$ the pairwise PRF
+seeds and BLAKE3 MAC keys for $v$ vs.\ every $w \in V \setminus \{v\}$.
+\end{definition}
+
+\begin{definition}[GroupKey hash]
+\label{def:gkh}
+The \emph{GroupKey hash} $\mathsf{GKH}(\pi_v)$ is the 32-byte digest
+\[
+  \mathsf{GKH}(\pi_v) = \mathsf{BLAKE3}\bigl(
+    \mathsf{WriteTo}(\mathbf{A}) \,\|\,
+    \mathsf{WriteTo}(\tilde{\mathbf{b}})
+  \bigr)[:32].
+\]
+$\mathsf{WriteTo}$ is the LP-073 \S4 wire serialisation: little-endian
+\texttt{uint64} coefficient stream with 8/16-byte length prefixes for
+$\mathsf{Vector}$/$\mathsf{Matrix}$. Two share states $\pi_v, \pi_w$
+\emph{share a GroupKey} iff $\mathsf{GKH}(\pi_v) = \mathsf{GKH}(\pi_w)$.
+\end{definition}
+
+\begin{definition}[Lifecycle transitions]
+\label{def:transitions}
+Let $\Pi$ denote a global Pulsar state $(\pi_v)_{v \in V}$. We
+distinguish three transitions:
+\begin{itemize}[nosep]
+  \item \textbf{Refresh} ($\Pi \xrightarrow{\mathrm{Refresh}} \Pi'$):
+    HJKY97 zero-polynomial proactive refresh, same $V, t$, same
+    $(\mathbf{A}, \tilde{\mathbf{b}})$, share distribution rotates.
+  \item \textbf{Reshare} ($\Pi \xrightarrow{\mathrm{Reshare}(V', t')} \Pi'$):
+    Desmedt--Jajodia97 redistribution to validator subset $V'$ with
+    threshold $t'$; same $(\mathbf{A}, \tilde{\mathbf{b}})$.
+  \item \textbf{Reanchor} ($\Pi \xrightarrow{\mathrm{Reanchor}} \Pi'$):
+    fresh ceremony or DKG produces a new $(\mathbf{A}', \tilde{\mathbf{b}}')$
+    and bumps $\eta$.
+\end{itemize}
+\end{definition}
+
+\begin{lemma}[Generation monotonicity]
+\label{lem:gen-mono}
+For every Pulsar transition $\Pi \to \Pi'$ at fixed $\eta$ and any
+$v \in V \cap V'$, $g(\pi'_v) = g(\pi_v) + 1$.
+\end{lemma}
+
+\begin{proof}
+The LSS coordinator (LP-073~\S9 (LSS-Pulsar)) advances $g$ by one
+on each successful Refresh or Reshare. Failed activation triggers
+\textsc{Rollback}; we treat \textsc{Rollback}$(g_{\mathrm{target}})$ as
+a separate transition $\Pi \to \Pi'$ for which the post-state has
+$g(\pi'_v) = g(\pi_v) + 1$ \emph{and} $r(\pi'_v) = g_{\mathrm{target}}$.
+This preserves monotonicity --- $g$ is bumped on every transition,
+including reverts --- while marking lineage via $r$. The activation
+certificate (Theorem~\ref{thm:activation-soundness} below) carries
+$g$ as an explicit field, so any verifier can audit monotonicity from
+the on-chain record. The Lean encoding of this property appears as
+\texttt{reshare\_threshold\_maintained} and the implicit chain of
+generations in \texttt{Crypto.Threshold.Reshare} of the canonical
+proof tree at \texttt{lean/Crypto/Threshold/Reshare.lean}.
+\end{proof}
+
+\begin{lemma}[KeyEraID stability across Reshare]
+\label{lem:eta-stable}
+For every $\Pi \xrightarrow{\mathrm{Reshare}(V', t')} \Pi'$ and every
+$v \in V'$, $\eta(\pi'_v) = \eta(\pi_v)$ for any $v \in V \cap V'$
+(or $\eta(\pi_v)$ inherited from the launch transition for new
+$v \in V' \setminus V$). $\eta$ bumps only at Reanchor.
+\end{lemma}
+
+\begin{proof}
+Reshare carries $(\mathbf{A}, \tilde{\mathbf{b}})$ across by
+construction (Desmedt--Jajodia identity, Lemma~\ref{lem:gk-identical}
+below); $\eta$ is the chain-state pointer to the GroupKey lineage and
+is updated only when the underlying $(\mathbf{A}, \tilde{\mathbf{b}})$
+changes, i.e., at Reanchor. The LSS adapter contract
+(LP-073~\S9 (LSS-Pulsar).3) explicitly preserves $\eta$ across
+the call \texttt{DynamicResharePulsar}; the LP-073 acceptance test
+\texttt{TestKeyEraIDPreservedAcrossReshare}
+(\texttt{threshold/protocols/lss/lss\_pulsar\_test.go}) verifies this
+property at the bytes-on-disk level for the Go canonical.
+\end{proof}
+
+\begin{lemma}[GroupKey byte-identity across Refresh and Reshare]
+\label{lem:gk-identical}
+For every $\Pi \to \Pi'$ that is either Refresh or
+$\mathrm{Reshare}(V', t')$, and any $v \in V'$,
+\[
+  \mathsf{GKH}(\pi'_v) = \mathsf{GKH}(\pi_w)
+  \quad \forall w \in V \cap V'.
+\]
+That is, the BLAKE3 digest of the wire-serialised
+$(\mathbf{A}, \tilde{\mathbf{b}})$ is identical pre- and post-transition,
+not merely structurally equal.
+\end{lemma}
+
+\begin{proof}
+Refresh and Reshare update only the share polynomial; neither alters
+the public matrix $\mathbf{A}$ nor the rounded public-key vector
+$\tilde{\mathbf{b}}$. We verify the Lagrange-recombination identity
+that underwrites this preservation. Let $f(x) \in R_q[X]$ be the
+old-set sharing polynomial with $f(0) = \mathbf{s}$ and
+$f(\alpha_v) = \mathbf{s}_v$ for $v \in V$. After
+$\mathrm{Reshare}(V', t')$, the new polynomial is constructed as
+\[
+  G(x) = \sum_{i \in Q} \lambda^Q_i(0) \cdot g_i(x),
+  \qquad g_i(0) = \mathbf{s}_i,\; \deg g_i = t' - 1,
+\]
+where $Q \subseteq V$ is a qualified old subset of size
+$\geq t_{\mathrm{old}}$ and $\lambda^Q_i(0)$ are the Lagrange
+coefficients of $Q$ evaluated at $0$. Then
+\begin{align}
+  G(0) \;=\; \sum_{i \in Q} \lambda^Q_i(0) \cdot g_i(0)
+       \;=\; \sum_{i \in Q} \lambda^Q_i(0) \cdot \mathbf{s}_i
+       \;=\; \sum_{i \in Q} \lambda^Q_i(0) \cdot f(\alpha_i)
+       \;=\; f(0)
+       \;=\; \mathbf{s}, \label{eq:lagrange}
+\end{align}
+where the penultimate equality is the standard Lagrange interpolation
+identity over $R_q$, applied componentwise to the polynomial
+coefficients. Hence the master secret $\mathbf{s}$ is preserved, the
+LWE error $\mathbf{e}$ is unchanged (it was sampled at genesis to form
+$\tilde{\mathbf{b}}$ and erased with the dealer state; signers only
+need shares of $\mathbf{s}$, never $\mathbf{e}$), and the public-key
+vector $\tilde{\mathbf{b}} = \lfloor \mathbf{A} \mathbf{s} +
+\mathbf{e} \rceil_\xi$ remains unchanged because both
+$(\mathbf{A}, \mathbf{s}, \mathbf{e})$ remain unchanged.
+$\mathsf{WriteTo}$ is a deterministic byte function of
+$(\mathbf{A}, \tilde{\mathbf{b}})$, so the BLAKE3 digest is identical.
+For Refresh, an analogous argument applies with $z_i(x)$ a
+zero-polynomial of degree $t-1$ \cite{hjky97}: the constant term
+contributes nothing to $G(0)$, so $\mathbf{s}$, $\mathbf{e}$, and
+hence $\tilde{\mathbf{b}}$ are byte-preserved.
+
+The identity~\eqref{eq:lagrange} is mechanised in
+\texttt{lean/Crypto/Threshold/Reshare.lean} as the axiom
+\texttt{reshare\_same\_secret} together with theorem
+\texttt{reshare\_preserves\_public\_key}, which derives
+$\mathsf{pubkey\_from\_shares}(\mathsf{newShares}, t')
+= \mathsf{pubkey}(\mathsf{key})$ from \texttt{reshare\_same\_secret}.
+\end{proof}
+
+\begin{lemma}[Rollback-lineage forward reconstruction]
+\label{lem:rollback-lineage}
+Let
+$\Pi_0 \xrightarrow{\mathrm{Reshare}} \Pi_1 \xrightarrow{\mathrm{Reshare}}
+\cdots \xrightarrow{\mathrm{Reshare}} \Pi_k$ be a chain of forward
+transitions at fixed $\eta$, and suppose
+$\Pi_k \xrightarrow{\mathrm{Rollback}(j)} \Pi_{k+1}$ for some $j < k$.
+Then the chain
+$(\eta_i, g_i, r_i)_{i=0}^{k+1}$ uniquely reconstructs the
+forward-only path $\Pi_0 \to \Pi_1 \to \cdots \to \Pi_j$ that the
+rollback restored to.
+\end{lemma}
+
+\begin{proof}
+Each transition records $(\eta_i, g_i, r_i)$ on chain. By
+Lemma~\ref{lem:gen-mono}, $g_i$ is strictly monotone in $i$. By
+construction, $r_i = 0$ iff transition $i$ is forward; $r_i = j > 0$
+iff transition $i$ is a rollback to generation $j$. To reconstruct the
+forward-only path: walk the chain in reverse, skipping any transition
+$i$ with $r_i > 0$ together with all transitions $i' > j$ such that
+$g_{i'} > j$ and $r_{i'} = 0$ for $i' \leq i$ (these are the reverted
+forward steps). The remaining sequence is the canonical forward
+lineage of any state restored to. Uniqueness follows from the
+strict monotonicity of $g$ within an era (Lemma~\ref{lem:gen-mono})
+and the fact that $r$ unambiguously labels rollback targets.
+\end{proof}
+
+\begin{theorem}[Activation-certificate soundness]
+\label{thm:activation-soundness}
+Let $\mathsf{ActivationMsg}_{\eta, g+1}$ be the wire payload of
+LP-073~\S8.3 (activation cert), binding the new generation
+$g+1$ at fixed era $\eta$. The verifier
+$\mathsf{VerifyActivation}(\Pi, \Pi', \sigma)$ accepts iff
+$\sigma$ is a valid Pulsar threshold signature on
+$\mathsf{ActivationMsg}_{\eta, g+1}$ that verifies under the
+\emph{unchanged} GroupKey $(\mathbf{A}, \tilde{\mathbf{b}})$ of $\Pi$.
+Then under MLWE/MSIS at the LP-073 \S2 parameters,
+\[
+  \Pr\bigl[
+    \mathsf{VerifyActivation} = 1 \wedge
+    \pi'_v \text{ does not satisfy~\eqref{eq:lagrange}}
+  \bigr] \leq \epsilon_{\mathrm{RT}}^{\mathrm{MLWE,MSIS}} = \mathsf{negl}(\lambda).
+\]
+That is: $\mathsf{VerifyActivation}$ accepts iff the new committee's
+shares can sign under the unchanged GroupKey, which by SUF-CMA reduces
+to the new shares satisfying the Lagrange-recombination
+identity~\eqref{eq:lagrange}.
+\end{theorem}
+
+\begin{proof}
+Forward direction. If $\Pi'$ satisfies~\eqref{eq:lagrange}, then by
+Lemma~\ref{lem:gk-identical} the GroupKey is byte-identical, and the
+honest threshold signing protocol (Ringtail Round 1 / Round 2) on the
+new shares produces a $\sigma$ that verifies under the same
+$(\mathbf{A}, \tilde{\mathbf{b}})$. $\mathsf{VerifyActivation}$
+accepts.
+
+Reverse direction. If $\mathsf{VerifyActivation}$ accepts, then by the
+SUF-CMA reduction of Ringtail under MLWE/MSIS (Theorem~5.1 of
+LP-073 below, i.e.\ Theorem~\ref{thm:main} restricted to the Ringtail
+lane), there exists a share set $\{\mathbf{s}'_v\}_{v \in V'}$ of stake
+$\geq t'$ that produced the signature, and these shares jointly
+recombine to the master secret $\mathbf{s}$ via Lagrange interpolation.
+By the verifier equation $A z - b c$ and the $L_2$ bound, the recovered
+$\mathbf{s}$ is consistent with $(\mathbf{A}, \tilde{\mathbf{b}})$ ---
+otherwise the forger has produced a fresh MLWE/MSIS instance, an event
+of probability at most $\epsilon_{\mathrm{RT}}^{\mathrm{MLWE,MSIS}}$.
+Hence the new shares satisfy~\eqref{eq:lagrange} except with negligible
+probability.
+\end{proof}
+
+\begin{remark}[What activation does \emph{not} prove]
+$\mathsf{VerifyActivation}$ is necessary but not sufficient for full
+Byzantine attribution: it certifies that the new committee can sign,
+not which old or new party (if any) sent a malformed contribution.
+Attribution is the responsibility of the complaint and disqualification
+pipeline (lattice Pedersen commit verification, LP-073~\S8.5
+(Pedersen DKG over $R_q$)). Failed activation triggers the non-punitive
+rollback ladder of LP-073~\S8.4 (rollback); safety and
+liveness do not depend on slashing-based attribution.
+\end{remark}
+
+%% ==================================================================
+\section{Gaps and Future Work}
+\label{sec:gaps}
+%% ==================================================================
+
+The 3.0 final scope leaves three gaps explicitly open for future work,
+each tracked in LP-020.
+
+\begin{enumerate}[nosep]
+  \item \textbf{Threshold ML-DSA.}  Not used in 3.0 due to a
+    rejection-sampling circularity (see App.~A).  Resolved-or-rejected
+    once the Celi--del~Pino--Espitau--Niot--Prest construction is
+    stable.
+  \item \textbf{Adaptive corruption without erasures.}  Tightness of
+    the $O(n \cdot Q_H)$ loss in App.~C; potential gain from a
+    Fischlin-style transform.
+  \item \textbf{Post-quantum SNARK.}  Replacing Groth16 with a STARK-
+    or hash-based SNARK to eliminate the conditional on classical
+    knowledge-soundness in Theorem~\ref{thm:pq}.
+\end{enumerate}
+
+
+%% ==================================================================
+%% BIBLIOGRAPHY
+%% ==================================================================
+\begin{thebibliography}{20}
+
+\bibitem{boneh2001short} D.~Boneh, B.~Lynn, H.~Shacham, ``Short
+  Signatures from the Weil Pairing,'' \emph{ASIACRYPT}, 2001.
+
+\bibitem{ringtail} Z.~Kelling, V.~Seesahai, ``Ringtail: Lattice-Based
+  PQ Threshold Signatures for Blockchain Consensus,''
+  Lux Industries, 2024.
+
+\bibitem{nist-pqc} NIST, ``FIPS 204: ML-DSA (Module-Lattice-Based
+  Digital Signature Algorithm),'' 2024.
+
+\bibitem{groth2016} J.~Groth, ``On the Size of Pairing-Based
+  Non-Interactive Arguments,'' \emph{EUROCRYPT}, 2016.
+
+\bibitem{regev2005} O.~Regev, ``On Lattices, Learning with Errors,
+  Random Linear Codes, and Cryptography,'' \emph{J.~ACM}, 56(6), 2009.
+
+\bibitem{canetti2001} R.~Canetti, ``Universally Composable Security:
+  A New Paradigm for Cryptographic Protocols,'' \emph{FOCS}, 2001.
+
+\bibitem{garay2015} J.~Garay, A.~Kiayias, N.~Leonardos, ``The Bitcoin
+  Backbone Protocol: Analysis and Applications,'' \emph{EUROCRYPT},
+  2015.
+
+\bibitem{fischlin2005} M.~Fischlin, ``Communication-Efficient
+  Non-Interactive Proofs of Knowledge with Online Extractors,''
+  \emph{CRYPTO}, 2005.
+
+\bibitem{bowe2017} S.~Bowe, A.~Gabizon, I.~Miers, ``Scalable
+  Multi-Party Computation for zk-SNARK Parameters in the Random Beacon
+  Model,'' IACR ePrint 2017/1050, 2017.
+
+\bibitem{plonk2019} A.~Gabizon, Z.~J.~Williamson, O.~Ciobotaru,
+  ``PLONK: Permutations over Lagrange-Bases for Oecumenical
+  Noninteractive Arguments of Knowledge,'' IACR ePrint 2019/953.
+
+\bibitem{marlin2020} A.~Chiesa, Y.~Hu, M.~Maller, P.~Mishra,
+  N.~Vesely, N.~Ward, ``Marlin: Preprocessing zkSNARKs with Universal
+  and Updatable SRS,'' \emph{EUROCRYPT}, 2020.
+
+\bibitem{bdgl2016} A.~Becker, L.~Ducas, N.~Gama, T.~Laarhoven,
+  ``New Directions in Nearest Neighbor Searching with Applications to
+  Lattice Sieving,'' \emph{SODA}, 2016.
+
+\bibitem{nist-pqc-cost} NIST, ``Status Report on the Third Round of
+  the NIST Post-Quantum Cryptography Standardization Process,''
+  NISTIR~8413, 2022.
+
+\bibitem{espitau2024} T.~Espitau, M.~Tibouchi, A.~Wallet, ``Practical
+  Fiat-Shamir with Aborts Threshold Signatures from Lattices,''
+  IACR ePrint, 2024.
+
+\bibitem{laarhoven2015} T.~Laarhoven, ``Sieving for Shortest Vectors
+  in Lattices Using Angular Locality-Sensitive Hashing,''
+  \emph{CRYPTO}, 2015.
+
+\bibitem{albrecht-estimator} M.~R.~Albrecht, R.~Player, S.~Scott,
+  ``On the Concrete Hardness of Learning with Errors,''
+  \emph{J.~Math.~Cryptol.}, 9(3):169--203, 2015.
+
+\bibitem{nist-mldsa-spec} NIST, ``FIPS 204: Module-Lattice-Based
+  Digital Signature Algorithm (ML-DSA),'' August 2024.
+  Algorithm~3 (ML-DSA.Verify).
+
+\bibitem{tmldsa2025} A.~Celi, R.~del~Pino, T.~Espitau, G.~Niot,
+  T.~Prest, ``Efficient Threshold ML-DSA,'' USENIX Security 2025.
+
+\bibitem{lp020} ``LP-020: Quasar Consensus,'' Lux Industries, 2025.
+
+\bibitem{lp132} ``LP-132: QuasarGPU Adapter,'' Lux Industries, 2025.
+
+\bibitem{hjky97} A.~Herzberg, S.~Jarecki, H.~Krawczyk, M.~Yung,
+  ``Proactive Secret Sharing or: How to Cope With Perpetual Leakage,''
+  \emph{CRYPTO}, 1995, updated 1997.
+
+\bibitem{desmedtjajodia97} Y.~Desmedt, S.~Jajodia, ``Redistributing
+  Secret Shares to New Access Structures and Its Applications,''
+  Technical Report ISSE TR-97-01, George Mason University, 1997.
+
+\bibitem{wongwangwing02} T.~M.~Wong, C.~Wang, J.~M.~Wing, ``Verifiable
+  Secret Redistribution for Archive Systems,''
+  \emph{IEEE SISW}, 2002.
+
+\bibitem{lp073} ``LP-073: Pulsar --- Dynamic Lattice Threshold
+  Signatures for Permissionless Validator Sets,'' Lux Industries, 2026.
+
+\end{thebibliography}
+
+
+%% ==================================================================
+\appendix
+%% ==================================================================
+
+%% ==================================================================
+\section{Threshold ML-DSA Rejection in 3.0}
+\label{app:tmldsa}
+%% ==================================================================
+
+3.0 final does not adopt threshold ML-DSA.  This appendix records why,
+because the trade-off recurs in every audit cycle.
+
+\subsection{The rejection-sampling circularity}
+
+ML-DSA-65 (FIPS~204, Algorithm~2) signs by repeatedly sampling
+$\mathbf{y} \leftarrow [-\gamma_1, \gamma_1]^\ell$, computing
+$\mathbf{w} = \mathbf{A}\mathbf{y}$, deriving challenge
+$c = H(\mu, \mathbf{w}_1)$, then computing $\mathbf{z} =
+\mathbf{y} + c \mathbf{s}_1$ and \emph{rejecting} the trial if
+$\|\mathbf{z}\|_\infty \geq \gamma_1 - \beta$ or
+$\|\text{LowBits}(\mathbf{w} - c\mathbf{s}_2)\|_\infty \geq \gamma_2 -
+\beta$.  The rejection probability is non-negligible (roughly $1 - 1/e$
+for the $\mathbf{z}$ check), so the signer iterates until accepted.
+
+Threshold ML-DSA must produce a signature whose distribution is
+identical to centralised ML-DSA, including the rejection condition
+applied to the \emph{aggregate} $\mathbf{z} = \sum_i \mathbf{z}_i$.
+Each share $\mathbf{z}_i = \mathbf{y}_i + c \mathbf{s}_{1,i}$ is a
+linear function of the per-share randomness $\mathbf{y}_i$.  The
+challenge $c$ is a function of the aggregate commitment
+$\mathbf{w} = \sum_i \mathbf{w}_i$, which fixes
+$\mathbf{y} = \sum_i \mathbf{y}_i$.
+
+The circularity:
+\begin{itemize}[nosep]
+  \item Each signer must commit $\mathbf{w}_i$ \emph{before} seeing
+    $c$ (otherwise it is not a Fiat--Shamir signature).
+  \item The acceptance probability of the resulting aggregate
+    $\mathbf{z}$ depends on the joint distribution of all
+    $\mathbf{y}_i$, which the protocol cannot influence post-commit.
+  \item Naive aggregation either (a) leaks information about each
+    signer's $\mathbf{s}_{1,i}$ on rejection (because rejection is a
+    function of $\mathbf{z}_i$ and a partial $c$), or (b) requires a
+    fresh round per rejection, blowing up the round complexity by an
+    expected factor of $e$ and breaking the two-round target.
+\end{itemize}
+
+The Celi--del~Pino--Espitau--Niot--Prest construction
+(USENIX Security 2025~\cite{tmldsa2025}) addresses this with masked
+shares and amortised rejection, but the proof is in the algebraic
+group model with non-trivial trapdoor assumptions and is not yet
+audit-clean.  3.0 freezes on the alternative below.
+
+\subsection{The 3.0 alternative}
+
+Instead of threshold ML-DSA we use:
+\begin{itemize}[nosep]
+  \item \emph{Per-validator individual} ML-DSA-65 signatures (no
+    threshold, no aggregation, no rejection circularity).
+  \item A Z-Chain Groth16 rollup proof that all $n$ such signatures
+    verify against $\mathsf{zchain\_vk\_root}$ on a common
+    $\mathsf{subj}$.
+\end{itemize}
+
+This preserves the security target (each validator's signature is
+EUF-CMA under MLWE/MSIS, the rollup is knowledge-sound under KEA in the
+AGM) without the circularity.  The cost is an $n \times $ blow-up in
+witness size, which is precisely what Groth16 amortises across
+validators.  See App.~B for the constraint count.
+
+%% ==================================================================
+\section{ML-DSA-65 Groth16 Circuit Analysis}
+\label{app:circuit}
+%% ==================================================================
+
+This appendix derives the R1CS constraint count for verifying a single
+ML-DSA-65 signature inside a Groth16 circuit, establishes the
+circuit-independent proof size, and corrects the prover-time estimate.
+
+\subsection{ML-DSA-65 Verification Steps}
+
+ML-DSA-65 verification (Algorithm~3 of FIPS~204~\cite{nist-mldsa-spec})
+performs the following on input $(pk, \mu, \sigma)$ where
+$pk = (\rho, t_1)$ and $\sigma = (\tilde{c}, z, h)$:
+
+\begin{enumerate}[nosep]
+  \item Expand $\mathbf{A} \in R_q^{k \times \ell}$ from $\rho$
+    via SHAKE-128 ($k=6$, $\ell=5$, $q = 8\,380\,417 = 2^{23} - 2^{13} + 1$).
+  \item Compute $c = \mathsf{SampleInBall}(\tilde{c})$: a polynomial in
+    $R_q$ with coefficients in $\{-1,0,1\}$, Hamming weight $\tau=49$.
+  \item Compute $\mathbf{w}' = \mathbf{A}\mathbf{z} - c \cdot t_1 \cdot 2^d$
+    via NTT-domain arithmetic.
+  \item Extract high bits: $\mathbf{w}_1' = \mathsf{UseHint}(h, \mathbf{w}')$.
+  \item Check $\|z\|_\infty < \gamma_1 - \beta$ where
+    $\gamma_1 = 2^{19}$, $\beta = 196$.
+  \item Recompute $\tilde{c}' = H(\mu, \mathbf{w}_1')$ and check
+    $\tilde{c}' = \tilde{c}$.
+\end{enumerate}
+
+\subsection{R1CS Constraint Count}
+
+Each polynomial in $R_q = \mathbb{Z}_q[X]/(X^{256}+1)$ has 256
+coefficients modulo $q$; each coefficient fits in 23 bits.
+
+\paragraph{NTT.}
+A 256-point NTT over $\mathbb{Z}_q$ requires $256 \cdot \log_2(256) / 2
+= 256 \cdot 4 = 1\,024$ butterfly operations. Each butterfly is
+one multiplication and two additions in $\mathbb{Z}_q$.  In R1CS,
+multiplication modulo $q$ costs 1 constraint (the multiplication gate)
+plus $O(1)$ range-check constraints to enforce that the result is reduced
+modulo $q$.  Using standard range-check decomposition into 23-bit limbs,
+each $\bmod\,q$ reduction costs $\approx 3$ R1CS constraints.  Total
+per NTT: $\approx 1\,024 \times 4 = 4\,096$ constraints.
+
+\paragraph{Matrix-vector product $\mathbf{A}\mathbf{z}$.}
+This is $k \times \ell = 6 \times 5 = 30$ polynomial multiplications
+in $R_q$.  Each polynomial multiplication via NTT requires: forward NTT
+of both operands (2 NTTs), pointwise multiply (256 multiplications),
+inverse NTT of the result (1 NTT).  However, $\mathbf{A}$ can be
+precomputed in NTT domain as a public input, saving $k \times \ell = 30$
+forward NTTs.  Remaining: 5 NTTs for $\mathbf{z}$, 30 pointwise
+multiplies (each 256 R1CS multiplications + mod-$q$ reductions), 6
+inverse NTTs for the $k$ result polynomials, plus 5 additions of
+$\ell$-way sums.
+
+\begin{itemize}[nosep]
+  \item Forward NTT of $\mathbf{z}$: $5 \times 4\,096 = 20\,480$
+  \item Pointwise multiply: $30 \times 256 \times 4 = 30\,720$
+  \item Inverse NTT of results: $6 \times 4\,096 = 24\,576$
+  \item Additions (free in R1CS): 0
+\end{itemize}
+Subtotal: $\approx 75\,776$ constraints.
+
+\paragraph{Scalar-polynomial product $c \cdot t_1 \cdot 2^d$.}
+The challenge $c$ has weight $\tau = 49$, so $c \cdot t_1$ involves a
+sparse convolution.  In the worst case this is done via NTT:
+$2 + 1 = 3$ NTTs plus 256 pointwise multiplies.
+Cost: $3 \times 4\,096 + 256 \times 4 = 13\,312$ constraints.  Repeated
+for each of the $k = 6$ polynomials in $t_1$: $\approx 79\,872$.
+(Optimization: exploit sparsity of $c$ to reduce to $\approx 49 \times
+256 \times k$ multiply-add operations $\approx 75\,264$.)
+
+\paragraph{Norm check, UseHint, hash.}
+Norm check $\|z\|_\infty < \gamma_1 - \beta$: range check on
+$5 \times 256 = 1\,280$ coefficients, each $\approx 20$ constraints
+for a 19-bit comparison.  Cost: $\approx 25\,600$.
+$\mathsf{UseHint}$: bit extraction on $6 \times 256$ coefficients,
+$\approx 6 \times 256 \times 10 = 15\,360$ constraints.
+$\mathsf{SHAKE}$ / hash re-computation: SHAKE-256 on $\sim$1\,KB
+input, $\approx 25\,000$ constraints (Keccak-f[1600] at $\approx
+12\,500$ constraints per permutation, 2 calls).
+
+\paragraph{SHAKE-128 for $\mathbf{A}$ expansion.}
+Expanding $\mathbf{A}$ from $\rho$ requires $k \times \ell = 30$
+rejection-sampling streams of SHAKE-128.  Each stream produces
+$\sim 256$ coefficients in $\mathbb{Z}_q$ via rejection sampling.
+This is the most expensive part: $\approx 30 \times 3 \times 12\,500
+= 1\,125\,000$ constraints (3 Keccak permutations per stream on
+average due to rejection).
+
+\paragraph{Total for one ML-DSA-65 verification.}
+
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+\textbf{Sub-circuit} & \textbf{Constraints} \\
+\midrule
+$\mathbf{A}$ expansion (SHAKE-128)    & $\sim 1\,125\,000$ \\
+$\mathbf{A}\mathbf{z}$ product (NTT)  & $\sim 75\,776$ \\
+$c \cdot t_1$ product                  & $\sim 79\,872$ \\
+Norm check                             & $\sim 25\,600$ \\
+UseHint                                & $\sim 15\,360$ \\
+Hash recomputation (SHAKE-256)         & $\sim 25\,000$ \\
+\midrule
+\textbf{Total (1 verification)}        & $\sim 1.35 \times 10^6 \approx 2^{22.5}$ \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+For $n$ validators, the circuit verifies $n$ signatures:
+$C \approx n \times 1.35 \times 10^6$.  For $n = 21$ (Quasar mainnet):
+$C \approx 2.84 \times 10^7 \approx 2^{24.8}$.
+
+\paragraph{Optimisation -- amortised case.}
+If $\mathbf{A}$ is shared across all $n$ validators (same $\rho$),
+the expansion is done once: $C \approx 1.125 \times 10^6 + n \times
+2.21 \times 10^5 \approx 5.77 \times 10^6 \approx 2^{22.5}$ for
+$n = 21$.  This is the figure used in the main text and in LP-020
+\S6.4.  Equivalently, the per-validator amortised constraint count is
+$\sim 2^{20}$.
+
+\subsection{Proof Size}
+
+Groth16 proof size is circuit-independent~\cite{groth2016}: two
+elements of $\mathbb{G}_1$ and one element of $\mathbb{G}_2$ over
+BLS12-381:
+\[
+  |\pi| = 2 \times 48 + 1 \times 96 = 192 \text{ bytes}
+\]
+This holds regardless of the constraint count $C$.  The 192-byte claim
+in the main text (Def.~6.2 of LP-020) is correct.
+
+\subsection{Prover Time}
+
+Groth16 proving requires two multi-scalar exponentiations of size $C$
+and an FFT of size $C$.  The dominant cost is the MSM:
+$O(C / \log C)$ group operations in $\mathbb{G}_1$.  On BLS12-381,
+one $\mathbb{G}_1$ scalar multiplication takes $\sim 0.5$\,ms on a
+single CPU core (Apple M1 class).
+
+For $C \approx 2^{22.5}$ (optimised, $n = 21$):
+\begin{itemize}[nosep]
+  \item MSM via Pippenger: $C / \log_2 C \approx 2^{22.5} / 22.5
+    \approx 2.6 \times 10^5$ group additions.
+  \item At $\sim 1\,\mu$s per $\mathbb{G}_1$ addition: $\approx 0.26$\,s.
+  \item FFT: $O(C \log C)$ field operations, $\approx 0.1$\,s.
+  \item \textbf{Total prover time: $\approx 0.4$\,s on a single CPU core.}
+  \item With GPU acceleration (e.g., \texttt{bellman} MSM on RTX 4090):
+    $\approx 5\text{--}15$\,ms.
+\end{itemize}
+
+\paragraph{Correction to earlier drafts.}
+The $357\,\mu$s figure cited in earlier drafts was unsupported by
+measurement.  The closest real numbers are BLS single signing
+($350\,\mu$s) and ML-DSA-65 signing ($495\,\mu$s).  For the actual
+ML-DSA-65 verification circuit at $C \approx 2^{22.5}$, CPU prover time
+is $\sim 400$\,ms and GPU prover time is $\sim 5\text{--}15$\,ms.  Full
+QuasarCert CPU verification (BLS aggregated verify + Groth16 verify) is
+$\sim 2\text{--}5$\,ms.  Z-Chain proof generation runs asynchronously
+(epoch-based, not per-block), so this does not impact finality
+latency.  See \texttt{consensus/BENCHMARKS.md} for all measured values.
+
+
+%% ==================================================================
+\section{Static vs Adaptive Corruption}
+\label{app:adaptive}
+%% ==================================================================
+
+Theorem~\ref{thm:main} and its counterpart Theorem~7.5 in LP-020
+assume \emph{static} corruption: the adversary commits to the set of
+corrupted validators before protocol execution begins.  This appendix
+addresses extension to the adaptive corruption model.
+
+\subsection{Corruption Models}
+
+\begin{definition}[Static corruption~\cite{canetti2001}]
+The adversary $\mathcal{A}$ selects the set $F \subset \mathcal{V}$
+of corrupted parties before the protocol begins.  $\mathcal{A}$ learns
+all internal state of parties in $F$ but cannot corrupt additional
+parties during execution.
+\end{definition}
+
+\begin{definition}[Adaptive corruption~\cite{canetti2001}]
+The adversary $\mathcal{A}$ may corrupt parties at any point during
+protocol execution.  Upon corrupting $v_i$, $\mathcal{A}$ learns all
+of $v_i$'s current state (keys, randomness, signing transcripts).
+The total stake of corrupted parties remains bounded by $\tau$.
+\end{definition}
+
+In the adaptive model, the simulator in a security proof must produce
+a consistent view for the adversary \emph{after} the adversary chooses
+which party to corrupt.  This is strictly harder than the static model:
+the simulator must either (a)~program the random oracle to maintain
+consistency (programmable RO), or (b)~ensure honest parties have
+erased sensitive state before corruption (secure erasures).
+
+\subsection{Static-Model Limitation}
+
+\begin{remark}
+Theorem~\ref{thm:main} holds only under static corruption.  The proofs
+of Ringtail SUF-CMA~\cite{ringtail} and BLS
+EUF-CMA~\cite{boneh2001short} both use rewinding-based extractors
+that require the corrupted set to be fixed before the simulation
+begins.  In the adaptive model, the adversary can corrupt a validator
+\emph{after} seeing its Ringtail Round~1 commitment, learning the
+signing randomness $\mathbf{y}_i$ and secret share $\mathbf{s}_i$.
+\end{remark}
+
+\subsection{Extension via Programmable Random Oracle}
+
+\begin{corollary}[Adaptive soundness, programmable RO]
+\label{cor:adaptive-pro}
+In the programmable random oracle model, Theorem~\ref{thm:main} extends
+to adaptive corruption with a security loss of $O(n \cdot Q_H)$, where
+$Q_H$ is the number of hash queries.
+\end{corollary}
+
+\begin{proof}[Proof sketch]
+We apply the Fischlin transform~\cite{fischlin2005}: the simulator
+programs the random oracle $H$ so that upon adaptive corruption of
+$v_i$, the simulated signing transcripts remain consistent with the
+adversary's view.  Per-component: BLS uses RO programming to embed a
+co-CDH challenge at the corruption point (loss $O(n)$); Ringtail
+programs $H$ on the round-1 commitment so the adversary's view is
+extractable, then solves a linear system over $R_q$ on corruption
+(loss $O(n)$); Groth16 in the AGM is rewinding-free and adaptively
+sound directly.
+
+Combining with a union bound over $n$ targets and $Q_H$ queries:
+\[
+  \mathsf{Adv}^{\text{forge}}_{\text{adaptive}} \leq
+  n \cdot Q_H \cdot \max(\epsilon_{\text{co-CDH}},
+  \epsilon_{\text{MLWE}}, \epsilon_{\text{MLWE/MSIS}})
+\]
+which is negligible for $\lambda = 128$ when $n \cdot Q_H < 2^{60}$
+(a generous bound for any practical deployment).
+\end{proof}
+
+\subsection{Extension via Secure Erasures}
+
+\begin{corollary}[Adaptive soundness, erasure model]
+\label{cor:adaptive-erasure}
+If honest validators erase signing randomness
+($\mathbf{y}_i$, PRF state) after each Ringtail round completes,
+then Theorem~\ref{thm:main} extends to adaptive corruption without
+the programmable RO assumption, with no additional security loss.
+\end{corollary}
+
+\begin{proof}[Proof sketch]
+If $v_i$ erases $\mathbf{y}_i$ after broadcasting $\mathbf{z}_i$,
+then adaptive corruption of $v_i$ reveals only $\mathbf{s}_i$ (the
+long-term share) and the completed signature transcript.  The
+adversary gains no advantage beyond what a static adversary controlling
+$v_i$ from the start would have.  The static-model proof applies
+directly.
+\end{proof}
+
+\paragraph{Practical note.}
+The Quasar implementation (Section~9 of LP-020) zeroes signing
+randomness after each round via Go's explicit memory clearing.
+This provides the erasure property in software.  HSM-backed signing
+(Section~5 of LP-020, T-Chain) provides hardware-enforced erasure.
+
+\paragraph{Blockchain corruption model.}
+In blockchain settings, the standard corruption model is that of
+Garay--Kiayias--Leonardos~\cite{garay2015}: the adversary is
+\emph{mildly adaptive}, corrupting parties between rounds but not
+within a round.  Both Cor.~\ref{cor:adaptive-pro} and
+Cor.~\ref{cor:adaptive-erasure} cover this model as a special
+case.
+
+
+%% ==================================================================
+\section{Trusted-Setup Ceremony}
+\label{app:setup}
+%% ==================================================================
+
+\subsection{The SRS Assumption}
+
+Groth16~\cite{groth2016} requires a structured reference string (SRS)
+of the form:
+\[
+  \mathsf{SRS} = \bigl(
+    \{g^{\tau^i}\}_{i=0}^{C},\;
+    \{h^{\tau^i}\}_{i=0}^{C},\;
+    \{g^{\alpha \tau^i}\},\;
+    \{g^{\beta \tau^i}\},\;
+    h^\beta,\; h^\gamma,\; h^\delta
+  \bigr)
+\]
+where $\tau, \alpha, \beta, \gamma, \delta$ are toxic waste that must
+be destroyed after generation.  If any party learns $\tau$, it can
+forge proofs for arbitrary false statements.
+
+\paragraph{Circuit specificity.}
+The Groth16 SRS is circuit-specific: a new SRS must be generated for
+each distinct R1CS circuit.  For QuasarCert, the circuit is fixed
+(ML-DSA-65 verification for a given $n$), so a single ceremony per
+$(n, \text{ML-DSA parameters})$ tuple suffices.
+
+\subsection{Multi-Party Ceremony}
+
+The standard mitigation is an $N$-party ceremony where each
+participant $P_j$ contributes randomness $\tau_j$ to the SRS.  The
+final SRS uses $\tau = \sum_j \tau_j$ (or $\prod_j \tau_j$ in the
+multiplicative formulation).  Security holds if \emph{at least one}
+participant is honest and destroys their $\tau_j$.
+
+\begin{theorem}[Ceremony security~\cite{bowe2017}]
+An $N$-party Groth16 SRS ceremony is secure (no party learns $\tau$)
+provided at least one participant honestly destroys their contribution.
+The ceremony can be run sequentially (each participant extends the
+previous SRS) with public verification of each step.
+\end{theorem}
+
+For QuasarCert with $n = 21$ validators, the ceremony participants can
+be the validators themselves.  With 21 participants, the probability
+that all are dishonest (and collude to reconstruct $\tau$) is
+negligible under the $f < 1/3$ Byzantine assumption: at most 7
+validators are corrupt, so at least 14 honestly destroy their
+contributions.  The output is committed in
+$\mathsf{zchain\_vk\_root}$ on the Z-Chain genesis block.
+
+\subsection{Universal-Setup Alternatives}
+
+Universal-setup proof systems avoid circuit-specific ceremonies at the
+cost of larger proofs.
+
+\begin{center}
+\begin{tabular}{lrrll}
+\toprule
+\textbf{System} & \textbf{Proof size} & \textbf{Verify} &
+  \textbf{Setup} & \textbf{Ref.} \\
+\midrule
+Groth16 & 192\,B & 3 pairings & Circuit-specific & \cite{groth2016} \\
+PLONK   & $\sim$500\,B & $O(1)$ pairings & Universal, updatable
+  & \cite{plonk2019} \\
+Marlin  & $\sim$800\,B & $O(\log C)$ & Universal, updatable
+  & \cite{marlin2020} \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\paragraph{Recommendation (3.0 final).}
+Groth16 with a multi-party ceremony among the validator set, output
+committed in $\mathsf{zchain\_vk\_root}$, is the production
+configuration for the 2025-12-25 activation.  PLONK migration is
+tracked as a future-work item under LP-020 \S11.
+
+
+%% ==================================================================
+\section{Quantum-Safety Analysis}
+\label{app:quantum}
+%% ==================================================================
+
+This appendix consolidates the concrete classical and quantum security
+estimates for each lane, then states the combined three-lane survival
+condition.
+
+\subsection{Lane 1: BLS12-381 (classical only)}
+
+Classical security is approximately $2^{128}$ (best classical attack
+on the discrete log in $\mathbb{F}_{q^{12}}$ via the special tower
+NFS).  Quantum security is $0$ in polynomial time once a
+cryptographically relevant quantum computer exists, by Shor on the
+underlying $\mathbb{G}_1, \mathbb{G}_2$.
+
+\subsection{Lane 2: Ringtail (Module-LWE / Module-SIS)}
+
+Parameter set from~\cite{ringtail}:
+
+\begin{center}
+\begin{tabular}{lll}
+\toprule
+\textbf{Parameter} & \textbf{Symbol} & \textbf{Value} \\
+\midrule
+Ring dimension   & $N$         & 256 \\
+Modulus          & $q$         & $2^{48} + 2561$ ($\approx 2^{48}$) \\
+Module rows      & $M$         & 8 \\
+Module columns   & $N'$        & 7 \\
+Gaussian width (keygen) & $\sigma_e$ & 6.108 \\
+Gaussian width (signing)& $\sigma^*$ & $2^{37.33}$ \\
+Rejection bound  & $B$         & $2^{48.61}$ \\
+Challenge weight & $\kappa$    & 23 \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+The Module-LWE instance underlying Ringtail has effective lattice
+dimension $d = M \times N = 8 \times 256 = 2\,048$ over
+$\mathbb{Z}_q$.
+
+\paragraph{Classical security via primal attack.}
+Best classical attack: the primal lattice attack with BKZ-$\beta$
+sieving (BDGL~\cite{bdgl2016}).  Solving requires
+$\delta^{2\beta - d - 1} q^{(d+1)/\beta} = \sigma_e \sqrt{2\pi e /
+(2\beta)}$ with root Hermite factor
+$\delta = \bigl((\pi\beta)^{1/\beta} \beta / (2\pi e)\bigr)^{1/(2(\beta
+-1))}$.  For $d = 2048, q \approx 2^{48}, \sigma_e = 6.108$, numerics
+give $\beta \approx 430$.  Classical cost
+\[
+  T_{\mathrm{classical}} = 2^{0.292\beta + c_0}
+  \approx 2^{0.292 \cdot 430 + 16.4}
+  = 2^{142}.
+\]
+
+\paragraph{Quantum security via Grover-sieving.}
+The Laarhoven--BDGL exponent under Grover speedup is $0.265$:
+\[
+  T_{\mathrm{quantum}} = 2^{0.265 \cdot 430 + 16.4} = 2^{130.35}.
+\]
+
+\subsection{Lane 3a: ML-DSA-65 (FIPS~204)}
+
+Parameters: $k = 6$, $\ell = 5$, $q = 2^{23} - 2^{13} + 1$, $\eta = 4$.
+Effective MLWE dimension $5 \cdot 256 = 1280$, $\log_2 q = 23$.
+NIST Cat.~3 target: $\geq 2^{128}$ classical / $\geq 2^{128}$ quantum
+under the same NIST cost model~\cite{nist-pqc-cost}.  Best known attack
+gives $\beta_{\mathrm{BKZ}} \approx 360$, $T_{\mathrm{quantum}} \geq
+2^{128}$.
+
+\subsection{Lane 3b: Z-Chain Groth16}
+
+Classical: $2^{128}$ (BLS12-381 pairing-based, AGM/KEA).  Quantum:
+Groth16 itself loses classical knowledge-soundness once Shor breaks
+discrete log on $\mathbb{G}_1$.  However, the \emph{statement proven}
+remains a conjunction of $n$ ML-DSA-65 signature verifications, so a
+quantum adversary's effective task degrades to forging ML-DSA-65
+signatures committed by $\mathsf{zchain\_vk\_root}$.  Standalone PQ
+security of Lane~3 thus tracks Lane~3a above.
+
+A future-work direction is to swap Groth16 for a STARK-of-pairing or
+hash-based SNARK that is itself PQ-knowledge-sound.  Tracked in
+LP-020 \S11; not in 3.0 final scope.
+
+\subsection{Comparison table}
+
+\begin{center}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Scheme} & $d$ & $\log_2 q$ & $\beta_{\text{BKZ}}$ &
+  $T_{\text{quantum}}$ \\
+\midrule
+ML-DSA-65   & 1280 & 23 & $\approx 360$
+  & $\geq 2^{128}$ \\
+ML-KEM-768  & 768  & 12 & $\approx 340$
+  & $\geq 2^{128}$ \\
+Ringtail    & 2048 & 48 & $\approx 430$
+  & $\geq 2^{130}$ \\
+BLS12-381   & --   & -- & --
+  & $0$ (Shor) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{Combined survival condition}
+
+The full QuasarCert quantum-safe predicate is
+$\mathsf{VerifyPQ} = \mathsf{RT.Verify} \land \mathsf{ZK.Verify}$
+(Theorem~\ref{thm:pq}).  Equivalently, ``1 of 2'' PQ pillars must hold:
+either Ringtail's MLWE/MSIS, or the ML-DSA-65 path inside the Groth16
+proof.  The classical BLS lane provides classical-only defense in
+depth and contributes nothing to the PQ guarantee, in line with the
+analysis of pq-finality-no-bls.tex.
+
+\subsection{Caveats}
+
+\begin{enumerate}[nosep]
+  \item BDGL sieving exponents $0.292$ (classical) and $0.265$
+    (quantum) are heuristic.
+  \item The Grover model assumes ideal oracle access; physical
+    overhead increases effective security.
+  \item Ring structure of $\mathbb{Z}_q[X]/(X^{256}+1)$ has resisted
+    known algebraic attacks at the relevant dimensions; an algorithmic
+    breakthrough would require parameter revision.
+  \item Lane~3b PQ guarantee is conditional on the future-work SNARK
+    swap.  In 3.0 final, Lane~3 is treated as classical with PQ
+    fallback to its statement.
+\end{enumerate}
+
+
+\end{document}

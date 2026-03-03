@@ -1,5 +1,9 @@
 # Lux Proofs
 
+> Lux is not merely adding post-quantum signatures to a chain; it defines a hybrid finality architecture for DAG-native consensus, with protocol-agnostic threshold lifecycle, post-quantum threshold sealing, and cross-chain propagation of Horizon finality.
+
+See [LP-105 §Claims and evidence](https://github.com/luxfi/lps/blob/main/LP-105-lux-stack-lexicon.md#claims-and-evidence) for the canonical claims/evidence table and the ten architectural commitments — single source of truth.
+
 Machine-checked proofs, protocol specifications, and property tests for the Lux consensus stack.
 
 ## Inventory

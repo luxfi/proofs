@@ -1,0 +1,47 @@
+%% ============================================================
+%% pulsar/activation-safety.tex
+%% ============================================================
+%%
+%% Canonical Activation circuit-breaker safety theorem.
+%% ============================================================
+
+\subsection*{Activation circuit-breaker safety}
+
+\begin{theorem}[Activation cert is necessary and sufficient for safe transition]
+\label{thm:pulsar-activation-safety}
+Let $\mathsf{state}_g$ be the Pulsar share state at generation $g$, and
+let $\mathsf{state}_{g+1}$ be a candidate next-generation state produced
+by $\mathsf{DynamicResharePulsar}$
+(Definition~\ref{def:lss-pulsar-adapter}). Suppose
+$\mathsf{Pulsar.Verify}(\mathsf{GroupKey}, \mathsf{ActivationMsg}_{g+1},
+\sigma_{\text{act}}) = 1$ where $\sigma_{\text{act}} = \mathsf{Pulsar.}
+\mathsf{Activate}(\{\mathsf{Share}'_j\}, \mathsf{ActivationMsg}_{g+1})$.
+Then with overwhelming probability:
+\begin{enumerate}[nosep]
+  \item The new shares $\{\mathsf{Share}'_j\}$ recombine via Lagrange
+        to the same master secret $\mathbf{s}$ underlying
+        $\mathsf{state}_g$ (cf.\ Theorem~\ref{thm:pulsar-reshare-preserves-s}).
+  \item The new committee can produce verifying signatures under the
+        unchanged $\mathsf{GroupKey}$ for any future message.
+  \item The KeyEraID $\eta$ is unchanged from $\mathsf{state}_g$.
+\end{enumerate}
+Conversely, if any of (1), (2), (3) fail, the activation verification
+fails with overwhelming probability.
+
+\textbf{Soundness reduction:} a forgery of $\sigma_{\text{act}}$
+without a quorum of valid new shares reduces to Pulsar SUF-CMA
+(Theorem~\ref{thm:pulsar-suf-cma}) under the unchanged GroupKey.
+
+\textbf{Companion proof:} \texttt{quasar-cert-soundness.tex}
+Theorem 14 (\texttt{thm:activation-soundness}).
+\end{theorem}
+
+\begin{lemma}[Failure-mode containment]
+\label{lem:activation-fail-safe}
+If $\mathsf{Pulsar.Verify}$ on the activation cert returns $0$, the
+chain remains at state $\mathsf{state}_g$. The candidate
+$\mathsf{state}_{g+1}$ is discarded; the LSS RollbackManager retains
+$\mathsf{state}_g$ as the active snapshot. This containment is
+unconditional (does not depend on the cryptographic assumption); it is
+a structural property of the chain's state-machine acceptance rule.
+\end{lemma}

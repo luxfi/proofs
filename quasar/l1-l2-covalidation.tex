@@ -1,0 +1,45 @@
+%% ============================================================
+%% quasar/l1-l2-covalidation.tex
+%% ============================================================
+%%
+%% Canonical L2 co-validation security theorem.
+%% ============================================================
+
+\subsection*{L2 co-validation security}
+
+\begin{theorem}[L2 co-validation security inheritance]
+\label{thm:l2-covalidation}
+Let $\mathsf{Chain}_X$ be an L2 with
+$\mathsf{primary\_network\_id} = N_P$, and let
+$V_X \subseteq V_{N_P}^{(\eta_P, g_P)}$ at the moment of
+$\mathsf{Chain}_X$'s key-era Bootstrap. If a Horizon-final certificate
+on $\mathsf{Chain}_X$ binds
+$\mathsf{primary\_nebula\_root} = R_P$ (a NebulaRoot of $N_P$ at era
+$\eta_P$ generation $g_P$), then any adversary forging conflicting
+finality on $\mathsf{Chain}_X$ must:
+\begin{enumerate}[nosep]
+  \item Compromise enough of $V_X$ to forge an L2-local Pulse, AND
+  \item Either compromise enough of $V_{N_P}$ to forge an alternative
+        $R_P$ (whence the security reduction inherits Theorem
+        \ref{thm:horizon-soundness} applied to $N_P$), OR
+  \item Break the transcript binding (collision on TupleHash256
+        \cite{nistsp800185}).
+\end{enumerate}
+Therefore the L2's safety bound is at least the minimum of $N_P$'s
+safety bound and the L2's own validator-set safety bound.
+
+\textbf{Note.} This is co-validation security, not rollup security.
+There is no fraud-proof window, no validity-proof anchoring; the
+inheritance is purely via shared validator-set membership and
+transcript binding.
+\end{theorem}
+
+\begin{remark}[L3 is a different layer model]
+$\mathsf{Chain}_X$ at L3 (rollup / validity / app-execution layer per
+Definition~\ref{def:network-tiers}) inherits security via a
+\emph{succinct proof} of state transitions, not via co-validation
+membership. L3 chains MAY use Groth16 or STARKs for compression. PQ
+finality of an L3 inherits from the underlying L1/L2's Pulse + ML-DSA;
+the proof system itself is not the PQ root of trust
+(Remark~\ref{rem:groth16-wrapper}).
+\end{remark}

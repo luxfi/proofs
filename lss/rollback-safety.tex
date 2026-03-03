@@ -1,0 +1,28 @@
+%% ============================================================
+%% lss/rollback-safety.tex
+%% ============================================================
+%%
+%% Canonical Rollback safety theorem.
+%% ============================================================
+
+\subsection*{Rollback safety}
+
+\begin{theorem}[Rollback never crosses an era boundary]
+\label{thm:rollback-era-boundary}
+$\mathsf{Rollback}(g_{\text{target}})$ succeeds iff
+$g_{\text{target}}$ is in the current era's snapshot history. The
+RollbackManager refuses any rollback whose target snapshot has
+$\eta_{\text{snapshot}} \neq \eta_{\text{current}}$. Therefore a
+Reanchor cannot be rolled back via the standard rollback API; only a
+new Reanchor (governance-gated) can undo a prior Reanchor.
+\end{theorem}
+
+\begin{theorem}[Rollback preserves liveness under failed activation]
+\label{thm:rollback-liveness}
+If $\mathsf{state}_{g+1}$'s activation cert fails verification
+(Lemma~\ref{lem:activation-fail-safe}) and the chain calls
+$\mathsf{Rollback}(g)$, the chain continues to produce signatures
+under $\mathsf{state}_g$'s shares. The new generation marker is
+$g' = g_{\text{current}}+1$ with $\mathsf{rb} = g$, distinguishing
+the rolled-back lineage from a forward $g+1$ that never existed.
+\end{theorem}
