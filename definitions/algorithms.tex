@@ -1,0 +1,139 @@
+%% ============================================================
+%% definitions/algorithms.tex
+%% ============================================================
+%%
+%% Canonical algorithm definitions for the Lux PQ-threshold stack.
+%% This file is the SINGLE SOURCE OF TRUTH for algorithm signatures.
+%% Papers MAY summarize but MUST NOT redefine these algorithms.
+%%
+%% Use:    \input{../../proofs/definitions/algorithms.tex}
+%% or:     \cite{lux:proofs:definitions:algorithms}
+%% ============================================================
+
+\subsection*{Pulsar core algorithms}
+
+\begin{definition}[Pulsar.Setup]
+\label{def:pulsar-setup}
+$\mathsf{Pulsar.Setup}(1^\lambda) \to (\mathsf{params})$ deterministically
+derives the lattice ring $R_q = \mathbb{Z}_q[X]/(X^{256}+1)$ with
+$q = \texttt{0x1000000004A01}$ (48-bit NTT-friendly prime), the matrix
+dimensions $(M, N_{\textrm{vec}}) = (8, 7)$, and the Gaussian sampling
+parameters $(\sigma_E, \sigma^*, \sigma_u)$ from \texttt{pulsar/sign/config.go}.
+\end{definition}
+
+\begin{definition}[Pulsar.Gen]
+\label{def:pulsar-gen}
+$\mathsf{Pulsar.Gen}(\mathsf{params}, t, n; \rho) \to
+(\mathsf{GroupKey}, \{\mathsf{Share}_i\}_{i \in [n]})$
+where $\rho$ is one-time genesis randomness. Output:
+\begin{itemize}[nosep]
+  \item $\mathsf{GroupKey} = (\mathbf{A}, \tilde{\mathbf{b}})$ with
+        $\mathbf{A} \in R_q^{M \times N_{\textrm{vec}}}$ uniform and
+        $\tilde{\mathbf{b}} = \lfloor \mathbf{A}\cdot\mathbf{s} +
+        \mathbf{e} \rceil_\Xi$ for Gaussian $\mathbf{s}, \mathbf{e}$.
+  \item Shares $\{\mathsf{Share}_i\}$ are a $(t, n)$-Shamir secret sharing
+        of $\mathbf{s}$ over $R_q$, in NTT-Mont form.
+\end{itemize}
+After ceremony close, $(\mathbf{s}, \mathbf{e})$ are erased.
+\end{definition}
+
+\begin{definition}[Pulsar.Sign1, Sign2, Combine]
+\label{def:pulsar-sign}
+The two-round MAC-authenticated signing protocol (per
+\texttt{pulsar/sign/sign.go}):
+\begin{align*}
+\mathsf{Sign1}(\mathsf{Share}_i, \mathsf{sid}, \mathsf{prfKey}, T)
+  &\to (D_i, \{\mathsf{MAC}_{ij}\}_{j \in T \setminus \{i\}}) \\
+\mathsf{Sign2}(\mathsf{Share}_i, \{D_j\}_{j \in T}, \{\mathsf{MAC}\},
+  m, \mathsf{sid}, \mathsf{prfKey}, T) &\to z_i \\
+\mathsf{Combine}(\{z_j\}_{j \in T}) &\to \sigma = (c, z, \Delta).
+\end{align*}
+Round 1 is message-independent and offline-pre\-com\-pu\-tab\-le.
+$\mathsf{prfKey}$ is the per-pair PRF seed from $\mathsf{Share}_i.\mathsf{Seeds}$.
+\end{definition}
+
+\begin{definition}[Pulsar.Verify]
+\label{def:pulsar-verify}
+$\mathsf{Pulsar.Verify}(\mathsf{GroupKey}, m, \sigma) \to \{0, 1\}$
+checks that $\sigma = (c, z, \Delta)$ satisfies the Lyubashevsky-style
+acceptance predicate:
+$\|z\|_2^2 \leq B^2$,
+$c = H_c(\mathbf{A}, \tilde{\mathbf{b}}, m, D)$,
+$\mathbf{A}\cdot z = D + c\cdot\tilde{\mathbf{b}} + \Delta$.
+\end{definition}
+
+\subsection*{Pulsar lifecycle algorithms}
+
+\begin{definition}[Pulsar.Refresh]
+\label{def:pulsar-refresh}
+$\mathsf{Pulsar.Refresh}(\{\mathsf{Share}_j\}_{j \in V}, t)
+\to \{\mathsf{Share}'_j\}_{j \in V}$.
+Each $i \in V$ samples a degree-$(t-1)$ zero-polynomial $z_i(X)$
+with $z_i(0) = 0$ over $R_q^{N_{\textrm{vec}}}$, distributes
+$z_i(\alpha_j)$ privately, and every $j$ updates
+$\mathbf{s}'_j = \mathbf{s}_j + \sum_i z_i(\alpha_j)$. Master secret
+$\mathbf{s}$ is unchanged. (HJKY97 \cite{hjky97}.)
+\end{definition}
+
+\begin{definition}[Pulsar.Reshare]
+\label{def:pulsar-reshare}
+$\mathsf{Pulsar.Reshare}(\{\mathsf{Share}_i\}_{i \in Q}, t_{\text{old}},
+V_{\text{new}}, t_{\text{new}}) \to \{\mathsf{Share}'_j\}_{j \in V_{\text{new}}}$.
+Each $i \in Q$ (qualified subset, $|Q| \geq t_{\text{old}}$) samples
+$g_i(X)$ of degree $t_{\text{new}}-1$ with $g_i(0) = \mathbf{s}_i$,
+delivers $g_i(\beta_j)$ privately to each new $j$, and each new $j$
+computes $\mathbf{s}'_j = \sum_{i \in Q} \lambda^Q_i \cdot g_i(\beta_j)$
+where $\lambda^Q_i$ are Lagrange coefficients for $Q$ evaluated at $0$.
+Master secret unchanged by Lagrange identity. (Desmedt-Jajodia
+\cite{desmedtjajodia97}; verifiable via Wong-Wang-Wing
+\cite{wongwangwing02}.)
+\end{definition}
+
+\begin{definition}[Pulsar.Activate]
+\label{def:pulsar-activate}
+$\mathsf{Pulsar.Activate}(\{\mathsf{Share}'_j\}_{j \in V_{\text{new}}},
+\mathsf{ActivationMsg}) \to \sigma_{\text{act}}$.
+The new committee threshold-signs the canonical activation message
+under the \emph{unchanged} $\mathsf{GroupKey}$. The chain accepts the
+new committee iff $\mathsf{Pulsar.Verify}(\mathsf{GroupKey},
+\mathsf{ActivationMsg}, \sigma_{\text{act}}) = 1$. (See
+\texttt{pulsar/reshare/activation.go}; canonical signing prefix
+\texttt{QUASAR-PULSAR-ACTIVATE-v1}.)
+\end{definition}
+
+\subsection*{LSS lifecycle algorithms}
+
+\begin{definition}[LSS.SaveSnapshot, LSS.Rollback]
+\label{def:lss-snap}
+The snapshot manager persists $(\eta, g, V_t, t, \mathsf{State}_g)$
+tuples. $\mathsf{Rollback}(g_{\text{target}})$ returns
+$\mathsf{State}_{g_{\text{target}}}$ marked
+$(g_{\text{current}}+1, \mathsf{rb} = g_{\text{current}})$. (Per
+\texttt{threshold/protocols/lss/rollback.go} and
+\texttt{lss\_pulsar.go: PulsarSnapshotManager}.)
+\end{definition}
+
+\begin{definition}[DynamicResharePulsar adapter]
+\label{def:lss-pulsar-adapter}
+$\mathsf{DynamicResharePulsar}(\{\mathsf{PulsarConfig}_i\}_{i \in V_{\text{old}}},
+V_{\text{new}}, t_{\text{new}}) \to
+\{\mathsf{PulsarConfig}'_j\}_{j \in V_{\text{new}}}$
+validates lifecycle invariants (consistent $\eta$, $g$, GroupKey),
+delegates lattice math to $\mathsf{Pulsar.Reshare}$, increments $g$,
+preserves $\eta$, sets $\mathsf{rb}=0$, and persists snapshot. (Per
+\texttt{threshold/protocols/lss/lss\_pulsar.go}.)
+\end{definition}
+
+\subsection*{Lens core algorithms (mirror)}
+
+\begin{definition}[Lens.Sign1, Sign2, Aggregate]
+\label{def:lens-sign}
+The FROST 2-round Schnorr threshold signing protocol per RFC 9591
+\cite{rfc9591}, instantiated over a prime-order group $\mathbb{G}$ of
+order $\ell$ (Ed25519, secp256k1, or Ristretto255). Lens inherits the
+RFC 9591 algorithm byte-equal; the Lux-specific contribution is the
+\textbf{key-era lifecycle wrapping} identical to Pulsar's
+(Definitions \ref{def:pulsar-refresh}--\ref{def:pulsar-activate}, with
+$R_q$ replaced by $\mathbb{Z}_\ell$ and lattice Pedersen replaced by
+curve Pedersen $g^s \cdot h^r$). (Per \texttt{lens/sign/sign.go}.)
+\end{definition}

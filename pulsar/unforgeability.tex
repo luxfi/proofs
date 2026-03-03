@@ -1,0 +1,47 @@
+%% ============================================================
+%% pulsar/unforgeability.tex
+%% ============================================================
+%%
+%% Canonical Pulsar SUF-CMA unforgeability theorem.
+%% Papers cite this; do not redefine.
+%% ============================================================
+
+\subsection*{Pulsar threshold signature unforgeability}
+
+\begin{theorem}[Pulsar SUF-CMA under MLWE/MSIS]
+\label{thm:pulsar-suf-cma}
+Let $\mathcal{A}$ be a probabilistic polynomial-time adversary against
+Pulsar with at most $q_S$ signing queries and at most $t-1$ corrupted
+parties. Then
+\[
+  \mathrm{Adv}^{\mathsf{SUF\text{-}CMA}}_{\mathsf{Pulsar}}(\mathcal{A})
+  \;\leq\;
+  q_S \cdot \mathrm{Adv}^{\mathsf{MLWE}}_{q, \sigma_E}(\mathcal{B}_1)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{MSIS}}_{q, [\mathbf{A}|-c\tilde{\mathbf{b}}], 2B}(\mathcal{B}_2)
+  \;+\;
+  \mathrm{negl}(\lambda).
+\]
+The reduction algorithms $\mathcal{B}_1$ (MLWE distinguisher) and
+$\mathcal{B}_2$ (MSIS solver) run in time polynomial in $\mathcal{A}$'s
+running time. Concrete parameters in
+\texttt{quasar-cert-soundness.tex} App.~E give classical security
+$\geq 2^{142}$ and quantum security $\geq 2^{130}$ via BDGL sieving
+plus Grover speedup.
+
+\textbf{Lean mechanization:} \texttt{Crypto.Ringtail.\\
+ringtail\_pq\_unforgeability} in \texttt{lean/Crypto/Ringtail.lean};
+\texttt{Crypto.Threshold.Reshare.reshare\_preserves\_public\_key} in
+\texttt{lean/Crypto/Threshold/Reshare.lean}.
+\end{theorem}
+
+\begin{remark}[Hash-suite invariance]
+\label{rem:hash-suite-invariance}
+The reduction is independent of the choice of
+$\mathsf{HashSuiteID} \in \{\mathsf{Pulsar\text{-}SHA3},
+\mathsf{Pulsar\text{-}BLAKE3}\}$ provided the suite is collision-resistant
+and behaves as a programmable random oracle in the SUF-CMA game. Both
+shipped suites satisfy this; activation certificates and signatures
+under different suites are distinct objects (the suite identifier is
+bound into the transcript, Definition~\ref{def:pulsar-transcript}).
+\end{remark}

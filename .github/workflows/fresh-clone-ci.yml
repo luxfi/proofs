@@ -1,0 +1,119 @@
+name: Fresh-Clone CI
+
+# Additive workflow: fresh-clones the repo into a clean Ubuntu container
+# and compiles every .tex via latexmk -pdf, then runs bibtex citation
+# checks. Resulting PDFs are uploaded as artifacts. Required for the
+# Mar-3 PQ Consensus Architecture Freeze (LP-105 §"Production
+# implementation").
+
+on:
+  push:
+    branches: [main, dev]
+    tags: ['v*']
+  workflow_dispatch:
+
+jobs:
+  fresh-clone-build:
+    name: Fresh clone latexmk
+    runs-on: ubuntu-latest
+    container:
+      image: ubuntu:24.04
+    steps:
+      - name: Install build deps
+        run: |
+          apt-get update
+          apt-get install -y --no-install-recommends \
+            ca-certificates curl git \
+            texlive-latex-base texlive-latex-recommended \
+            texlive-latex-extra texlive-fonts-recommended \
+            texlive-fonts-extra texlive-science \
+            texlive-bibtex-extra biber latexmk make \
+            > /dev/null
+
+      - name: Fresh clone
+        run: |
+          git clone --depth 1 \
+            "https://github.com/${GITHUB_REPOSITORY}.git" repo
+          cd repo
+          git fetch --depth 1 origin "${GITHUB_SHA}"
+          git checkout "${GITHUB_SHA}"
+
+      - name: Find all top-level .tex documents
+        id: docs
+        working-directory: repo
+        run: |
+          # A "top-level" .tex is one that contains \documentclass.
+          # We compile each independently. Subfiles (\input'd .tex) are
+          # not compiled directly — they get included by their parent.
+          mapfile -t docs < <(grep -rlE '^\s*\\documentclass' \
+            --include='*.tex' . | sort -u)
+          printf 'top-level documents:\n'
+          printf '  %s\n' "${docs[@]}"
+          printf '%s\n' "${docs[@]}" > ../tex-docs.txt
+
+      - name: Compile each .tex via latexmk
+        working-directory: repo
+        run: |
+          set -e
+          mkdir -p ../pdfs ../logs
+          while IFS= read -r doc; do
+            [ -z "$doc" ] && continue
+            doc_dir="$(dirname "$doc")"
+            doc_base="$(basename "$doc" .tex)"
+            echo "==> latexmk $doc"
+            ( cd "$doc_dir" && \
+              latexmk -pdf -interaction=nonstopmode -halt-on-error \
+                -file-line-error "$doc_base.tex" \
+                > "../$doc_base.latexmk.log" 2>&1 ) || {
+              echo "::error file=$doc::latexmk failed for $doc"
+              cat "$doc_dir/../$doc_base.latexmk.log" || true
+              exit 1
+            }
+            cp "$doc_dir/$doc_base.pdf" "../pdfs/" 2>/dev/null || \
+              echo "::warning::no PDF emitted for $doc"
+            cp "$doc_dir/$doc_base.latexmk.log" "../logs/" 2>/dev/null || true
+          done < ../tex-docs.txt
+
+      - name: Citation check via bibtex
+        working-directory: repo
+        run: |
+          # bibtex is already invoked by latexmk; surface any
+          # "I didn't find a database entry for" warnings as a hard fail.
+          fail=0
+          while IFS= read -r doc; do
+            [ -z "$doc" ] && continue
+            doc_dir="$(dirname "$doc")"
+            doc_base="$(basename "$doc" .tex)"
+            blg="$doc_dir/$doc_base.blg"
+            [ -f "$blg" ] || continue
+            if grep -E 'I didn.t find a database entry for|Citation .+ undefined' "$blg"; then
+              echo "::error file=$doc::bibtex citation errors in $blg"
+              fail=1
+            fi
+          done < ../tex-docs.txt
+          [ "$fail" -eq 0 ] || exit 1
+
+      - name: Tag artifact set
+        id: tag
+        working-directory: repo
+        run: |
+          freeze_tag="$(git tag --sort=-v:refname | head -n1)"
+          echo "tag=${freeze_tag:-untagged}" >> "$GITHUB_OUTPUT"
+          echo "sha=${GITHUB_SHA}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload PDFs
+        uses: actions/upload-artifact@v4
+        with:
+          name: fresh-clone-pdfs-${{ steps.tag.outputs.sha }}-${{ steps.tag.outputs.tag }}
+          path: pdfs/
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload latexmk logs
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: fresh-clone-logs-${{ steps.tag.outputs.sha }}-${{ steps.tag.outputs.tag }}
+          path: logs/
+          if-no-files-found: warn
+          retention-days: 90

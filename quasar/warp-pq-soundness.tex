@@ -1,0 +1,49 @@
+%% ============================================================
+%% quasar/warp-pq-soundness.tex
+%% ============================================================
+%%
+%% Canonical Warp 2.0 cross-chain message PQ soundness theorem.
+%% ============================================================
+
+\subsection*{Warp 2.0 PQ soundness}
+
+\begin{theorem}[Warp 2.0 envelope unforgeability]
+\label{thm:warp-v2-soundness}
+Let $\mathsf{env}_2$ be a Warp 2.0 envelope
+(Definition~\ref{def:warp-v2-envelope}) with successful verification
+under $\mathsf{Verify}_{V2}$. Then forging an alternative $\mathsf{env}'_2$
+on the same $(\mathsf{sourceChainID}, \mathsf{sourceNebulaRoot},
+\mathsf{sourceKeyEraID}, \mathsf{sourceGeneration})$ tuple with a
+different $\mathsf{payload}$ requires breaking either:
+\begin{enumerate}[nosep]
+  \item BLS12-381 co-CDH (forging the Beam component); OR
+  \item Module-LWE / Module-SIS (forging the Pulsar Pulse,
+        Theorem~\ref{thm:pulsar-suf-cma}).
+\end{enumerate}
+A quantum adversary breaking only co-CDH (and not MLWE/MSIS) succeeds
+against the Beam alone; the Pulse remains unforgeable, so the v2
+envelope as a whole remains sound under $\mathsf{Verify}_{V2}$.
+
+\textbf{PQ finality lives in the Pulse, not in any optional Groth16
+wrapper.} If the envelope additionally carries a Z-Chain Groth16 proof
+of the ML-DSA cert set, that proof is a classical compatibility /
+compression artifact and does not contribute to the PQ reduction
+(Remark~\ref{rem:groth16-wrapper}).
+\end{theorem}
+
+\begin{remark}[Warp Private orthogonality]
+$\mathsf{Warp\,Private}$ (FHE-encrypted payload, optionally
+Pulse-signed) is orthogonal to $\mathsf{Warp\,2.0}$. Warp Private
+provides confidentiality; Warp 2.0 provides PQ finality. They compose:
+a Warp Private envelope MAY carry a Pulse, in which case Theorem
+\ref{thm:warp-v2-soundness} applies unchanged to the encrypted-payload
+binding.
+\end{remark}
+
+\begin{remark}[Future PQ-friendly proof system]
+The current Z-Chain rollup uses Groth16 for ML-DSA cert-set
+compression; a future $\mathsf{Warp\,Private\,PQ}$ replaces the
+pairing-based SNARK with a STARK or lattice-based transparent proof
+system. Until that lands, do not classify the Groth16-wrapped lane as
+post-quantum.
+\end{remark}

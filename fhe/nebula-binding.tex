@@ -1,0 +1,84 @@
+%% ============================================================
+%% fhe/nebula-binding.tex
+%% ============================================================
+%%
+%% Canonical Lux FHE result-root binding into Nebula/Quasar
+%% transcripts. Papers cite this; do not redefine.
+%% ============================================================
+
+\subsection*{Lux FHE result roots bind into Nebula/Quasar transcripts}
+
+\begin{theorem}[Nebula-FHE binding soundness]
+\label{thm:fhe-nebula-binding}
+Let $\mathsf{nebula\_fhe\_root}$ denote the canonical FHE evaluation
+commitment (LP-167 \S\,Binding into Quasar finality):
+\[
+  \mathsf{nebula\_fhe\_root}
+  \;=\;
+  H\!\bigl(
+    \mathsf{bootstrap\_key\_root}
+    \;\|\;
+    \mathsf{key\_switch\_key\_root}
+    \;\|\;
+    \mathsf{public\_param\_root}
+    \;\|\;
+    \mathsf{active\_circuit\_dag\_root}
+    \;\|\;
+    \mathsf{finalized\_evaluations\_root} \bigr)
+\]
+where $H$ is the Lux FHE hash suite (SHA-256 on rc1; SHA-3-256 on
+production builds; suite identifier carried in the round descriptor per
+LP-105 hash-suite invariance). Let $\mathsf{QuasarRoundDescriptor}$ bind
+$\mathsf{nebula\_fhe\_root}$ alongside $\mathsf{NebulaRoot}$, $\mathsf{epoch}$,
+$\mathsf{KeyEraID}$, $\mathsf{Generation}$, and $\mathsf{HashSuiteID}$
+(LP-073, LP-105). Then for any PPT adversary $\mathcal{A}$ that produces a
+\texttt{HorizonCertificate} accepting the descriptor, the probability that
+$\mathcal{A}$ binds an FHE result not produced by an honest evaluation under
+the keys committed by $\mathsf{bootstrap\_key\_root}$ and
+$\mathsf{key\_switch\_key\_root}$ is bounded by
+\[
+  \mathrm{Adv}^{\mathsf{Nebula\text{-}FHE\text{-}bind}}_{\mathcal{A}}
+  \;\leq\;
+  \mathrm{Adv}^{\mathsf{coll}}_{H}(\mathcal{B}_1)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{SUF\text{-}CMA}}_{\mathsf{Pulsar}}(\mathcal{B}_2)
+  \;+\;
+  \mathrm{negl}(\lambda)
+\]
+where $\mathcal{B}_1$ reduces to the collision resistance of $H$ and
+$\mathcal{B}_2$ reduces to Pulsar SUF-CMA
+(\texttt{proofs/pulsar/unforgeability.tex},
+Theorem~\ref{thm:pulsar-suf-cma}).
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+A successful binding break either (i) collides $H$ on two distinct input
+tuples to the same $\mathsf{nebula\_fhe\_root}$ --- reducing to the
+collision-resistance assumption on the hash suite --- or (ii) forges a
+Pulsar Pulse over the QuasarRoundDescriptor that contains the dishonest
+$\mathsf{nebula\_fhe\_root}$, reducing to Pulsar SUF-CMA. The remaining
+contribution is the negligible chance that the validator-set hash, the
+KeyEra binding, or the Nebula transcript binding admit a parallel break;
+each reduces by Prism's transcript-equality check (LP-105 \S Prism).
+\end{proof}
+
+\begin{remark}[F-Chain alias]
+\label{rem:fchain-alias}
+In F-Chain deployments (LP-013) the field $\mathsf{nebula\_fhe\_root}$
+and $\mathsf{fchain\_fhe\_root}$ are the same 32-byte commitment; LP-013
+names it from inside the F-Chain frame, LP-167 names it from the dual-
+runtime perspective. The binding theorem applies unchanged; the
+F-Chain cert lanes (\texttt{FChainTFHE}, \texttt{FChainBootstrap}) verify
+against the same root.
+\end{remark}
+
+\begin{remark}[Replay protection]
+\label{rem:fhe-replay-protection}
+Cross-epoch replay of an FHE result is rejected because every contributing
+sub-root ($\mathsf{bootstrap\_key\_root}$, $\mathsf{key\_switch\_key\_root}$,
+$\mathsf{public\_param\_root}$, $\mathsf{active\_circuit\_dag\_root}$) is
+keyed by $\mathsf{KeyEraID} + \mathsf{Generation}$, and the
+$\mathsf{HashSuiteID}$ is bound into the transcript per LP-105
+hash-suite separation. A descriptor referencing a stale
+$\mathsf{nebula\_fhe\_root}$ fails Prism's transcript-equality check.
+\end{remark}

@@ -163,6 +163,12 @@ lean_lib GPU where
     `GPU.DEXScaling
   ]
 
+lean_lib Quasar where
+  srcDir := "."
+  roots := #[
+    `Quasar.LayeredDefense
+  ]
+
 lean_lib Vault where
   srcDir := "."
   roots := #[

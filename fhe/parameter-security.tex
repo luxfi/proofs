@@ -1,0 +1,59 @@
+%% ============================================================
+%% fhe/parameter-security.tex
+%% ============================================================
+%%
+%% Canonical Lux FHE LWE-parameter security theorem. Papers cite
+%% this; do not redefine.
+%% ============================================================
+
+\subsection*{Lux FHE concrete LWE-parameter security}
+
+\begin{theorem}[Concrete LWE security under the Albrecht estimator]
+\label{thm:lwe-parameter-security}
+Let $\mathsf{ps} \in \{\mathsf{PN10QP27}, \mathsf{PN11QP54},
+\mathsf{PN9QP28\_STD128}\}$ denote a Lux FHE production parameter set with
+LWE dimension $n = 2^{\log_2 n_{\mathrm{LWE}}(\mathsf{ps})}$, modulus
+$q = q_{\mathrm{LWE}}(\mathsf{ps})$, and noise standard deviation
+$\sigma_e(\mathsf{ps})$ (the latter resolved by the parameter-set keygen
+schedule). Then under the Albrecht-Player-Scott LWE estimator with the
+BKZ block-size cost model and the BDGL sieving cost,
+\[
+  \mathrm{Adv}^{\mathsf{LWE}}_{n, q, \sigma_e}(\mathcal{A})
+  \;\leq\;
+  2^{-\lambda(\mathsf{ps})}
+\]
+with $\lambda(\mathsf{ps}) \geq 128$ classical bits and $\lambda(\mathsf{ps})
+\geq 128$ quantum bits (under Grover speedup) for every shipped
+$\mathsf{ps}$.
+\end{theorem}
+
+\begin{remark}[Estimator citation]
+\label{rem:albrecht-cite}
+The estimator is Albrecht, Player, and Scott, "On the concrete hardness
+of Learning with Errors", J.\ Math.\ Cryptology 9(3):169--203, 2015,
+together with Albrecht's open-source \texttt{lwe-estimator} updates as of
+2026-Q1. Concrete numbers per parameter set are reported in
+\texttt{papers/lux-fhe-runtime/07-benchmarks.tex} alongside the
+benchmark hardware.
+\end{remark}
+
+\begin{remark}[NIST IR 8214C alignment]
+\label{rem:nist-8214c-alignment}
+The threshold-FHE keygen path (LP-019, LP-076, LP-167 \S Key custody)
+tracks the NIST Threshold Cryptography Project's evaluation framing
+(NIST IR 8214C). Lux FHE parameter-set lambda targets are chosen to
+exceed NIST's category-1 floor under both classical and quantum
+adversaries.
+\end{remark}
+
+\begin{remark}[No PQ rollback]
+\label{rem:no-pq-rollback}
+LWE / RLWE security is the post-quantum security ground truth for the
+Lux FHE stack; Lux does not weaken parameters for performance. The CPU
+fallback (\texttt{luxcpp/crypto/fhe/cpp/backends/cpu/}) uses identical
+parameters to the GPU backends. The dual-runtime equivalence theorem
+(\texttt{proofs/fhe/dual-runtime-equivalence.tex},
+Theorem~\ref{thm:fhe-dual-runtime-equivalence}) ensures that whichever
+backend the operator selects, the underlying LWE-hardness assumption
+applies unchanged.
+\end{remark}

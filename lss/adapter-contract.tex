@@ -1,0 +1,48 @@
+%% ============================================================
+%% lss/adapter-contract.tex
+%% ============================================================
+%%
+%% Canonical LSS adapter contract — what every LSS-X.go file must
+%% guarantee.
+%% ============================================================
+
+\subsection*{LSS adapter contract}
+
+\begin{definition}[LSS adapter contract]
+\label{def:lss-adapter-contract}
+An LSS adapter (e.g.\ $\mathsf{lss\_pulsar.go}$, $\mathsf{lss\_lens.go}$)
+MUST satisfy:
+\begin{enumerate}[nosep]
+  \item \textbf{Lifecycle delegation.} The adapter does not implement
+        share-secret arithmetic; it calls into the kernel
+        ($\mathsf{Pulsar.Reshare}$, $\mathsf{Lens.Reshare}$, etc.) and
+        wraps the output.
+  \item \textbf{Generation increment.} On every successful
+        $\mathsf{DynamicReshare}$, $g \mapsto g+1$ exactly. On
+        $\mathsf{Rollback}$, $g \mapsto g_{\text{current}}+1$ with
+        $\mathsf{rb} = g_{\text{current}}$.
+  \item \textbf{KeyEraID preservation.} $\eta$ is read-only across
+        $\mathsf{DynamicReshare}$. $\eta$ increments only on a separate
+        $\mathsf{Reanchor}$ entry point.
+  \item \textbf{GroupKey identity.} The kernel's $\mathsf{GroupKey}$
+        pointer flows through unmodified.
+  \item \textbf{Failure-mode containment.} On any verification failure
+        (commit mismatch, activation rejection), return an error and
+        retain the previous state. Do not silently fall back.
+  \item \textbf{No ECDSA-specific assumptions.} Adapters for non-ECDSA
+        kernels (Pulsar, Lens) MUST NOT inherit auxiliary secrets
+        $w$, $q$ from the LSS-CMP path; the underlying kernel handles
+        nonce blinding internally.
+\end{enumerate}
+\end{definition}
+
+\begin{remark}[Adapter test contract]
+The 10 acceptance tests in $\mathsf{lss\_pulsar\_test.go}$ and
+$\mathsf{lss\_lens\_test.go}$ — GroupKey preservation, KeyEraID
+preservation, Generation $+1$, RollbackFrom $= 0$ on forward, $t_{\text{old}}
+\neq t_{\text{new}}$, disjoint set rotation, valid signature under
+unchanged GroupKey, pairwise material regenerated, Rollback restores
+prior state, malformed input rejected — collectively enforce
+Definition~\ref{def:lss-adapter-contract} for the corresponding
+adapter.
+\end{remark}
