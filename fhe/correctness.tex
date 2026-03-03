@@ -1,0 +1,53 @@
+%% ============================================================
+%% fhe/correctness.tex
+%% ============================================================
+%%
+%% Canonical Lux FHE encrypt -> evaluate -> decrypt correctness
+%% theorem. Papers cite this; do not redefine.
+%% ============================================================
+
+\subsection*{Lux FHE encrypt-evaluate-decrypt correctness}
+
+\begin{theorem}[FHE encrypt-evaluate-decrypt correctness]
+\label{thm:fhe-correctness}
+Let $\mathsf{Lux\text{-}FHE} = (\mathsf{KeyGen}, \mathsf{Enc}, \mathsf{Dec}, \mathsf{Eval})$
+denote the Lux FHE-Go reference scheme over the LWE-modulus pair $(q_{\mathrm{LWE}}, q_{\mathrm{BR}})$
+with security parameter $\lambda$ (resolved through $\mathsf{ParameterSetID} \in
+\{\mathsf{PN10QP27}, \mathsf{PN11QP54}, \mathsf{PN9QP28\_STD128}\}$). For any honestly-generated
+key $\mathsf{sk}$, any plaintext bit $b \in \{0, 1\}$, and any boolean circuit
+$C : \{0, 1\}^k \to \{0, 1\}$ of multiplicative depth bounded by the parameter set's
+bootstrapping schedule:
+\[
+  \Pr\!\left[
+    \mathsf{Dec}\bigl(\mathsf{sk},
+      \mathsf{Eval}\bigl(\mathsf{ek}, C, \mathsf{Enc}(\mathsf{sk}, b_1), \ldots,
+                          \mathsf{Enc}(\mathsf{sk}, b_k)\bigr)\bigr)
+    = C(b_1, \ldots, b_k)
+  \right]
+  \;\geq\; 1 - \mathsf{negl}(\lambda).
+\]
+The negligible failure probability bounds the chance that the LWE noise envelope
+exceeds the decoding threshold $q_{\mathrm{LWE}} / 4$ at any gate; the bound is
+tight under the Albrecht parameter selection
+(\texttt{proofs/fhe/parameter-security.tex}, Theorem~\ref{thm:lwe-parameter-security}).
+\end{theorem}
+
+\begin{remark}[Per-gate bootstrap]
+\label{rem:per-gate-bootstrap}
+Lux FHE evaluates one programmable bootstrap per non-XOR gate (XOR is
+linear in the LWE secret and noise-additive without bootstrap). The
+correctness budget therefore decomposes per-gate; the full circuit
+correctness reduces to the per-gate bound by union over $|C|$ gates.
+\end{remark}
+
+\begin{remark}[Reference implementations]
+\label{rem:fhe-reference-impls}
+The canonical Go body is \texttt{github.com/luxfi/fhe.Evaluator.bootstrap}
+(file \texttt{lux/fhe/evaluator.go}). The C++ realisation in
+\texttt{luxcpp/crypto/fhe/cpp/backends/cpu/bootstrap\_cpu.cpp} is byte-equal
+on the production parameter sets; the GPU realisations
+(\texttt{cuda/cuda\_ntt\_kernel.cpp}, \texttt{cuda/cuda\_keyswitch\_kernel.cpp})
+remain byte-equal under the LP-167 dual-runtime equivalence theorem
+(\texttt{proofs/fhe/dual-runtime-equivalence.tex},
+Theorem~\ref{thm:fhe-dual-runtime-equivalence}).
+\end{remark}

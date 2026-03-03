@@ -1,0 +1,48 @@
+%% ============================================================
+%% pulsar/reshare-preservation.tex
+%% ============================================================
+%%
+%% Canonical Pulsar reshare/refresh master-secret-preservation theorem.
+%% ============================================================
+
+\subsection*{Reshare preserves master secret}
+
+\begin{theorem}[Reshare preserves master secret]
+\label{thm:pulsar-reshare-preserves-s}
+Let $Q \subseteq V_{\text{old}}$ with $|Q| = t_{\text{old}}$ be a
+qualified subset, and let $\{g_i(X)\}_{i \in Q}$ be the
+$\mathsf{Pulsar.Reshare}$ contribution polynomials
+(Definition~\ref{def:pulsar-reshare}). Define
+\[
+  G(X) \;:=\; \sum_{i \in Q} \lambda^Q_i \cdot g_i(X) \in R_q^{N_{\textrm{vec}}}[X].
+\]
+Then $\deg G \leq t_{\text{new}} - 1$ and
+\begin{equation}\label{eq:pulsar-lagrange}
+  G(0) \;=\; \sum_{i \in Q} \lambda^Q_i \cdot g_i(0)
+        \;=\; \sum_{i \in Q} \lambda^Q_i \cdot \mathbf{s}_i
+        \;=\; \mathbf{s}.
+\end{equation}
+Therefore the new shares
+$\{\mathsf{Share}'_j = G(\beta_j)\}_{j \in V_{\text{new}}}$ are valid
+$(t_{\text{new}}, |V_{\text{new}}|)$-Shamir shares of the same master
+secret $\mathbf{s}$. The persistent group public key
+$(\mathbf{A}, \tilde{\mathbf{b}})$ is unchanged.
+
+\textbf{Lean mechanization:}
+\texttt{Crypto.Threshold.Reshare.reshare\_same\_secret} and
+\texttt{reshare\_preserves\_public\_key} in
+\texttt{lean/Crypto/Threshold/Reshare.lean}.
+\end{theorem}
+
+\begin{theorem}[Refresh preserves master secret]
+\label{thm:pulsar-refresh-preserves-s}
+Let $\{z_i(X)\}_{i \in V}$ be the $\mathsf{Pulsar.Refresh}$
+zero-polynomials (Definition~\ref{def:pulsar-refresh}). Define
+$Z(X) := \sum_{i \in V} z_i(X)$. Then $\deg Z \leq t-1$, $Z(0) = 0$,
+and the refreshed shares
+$\{\mathsf{Share}'_j = \mathsf{Share}_j + Z(\alpha_j)\}_{j \in V}$
+satisfy the same Shamir-recombination identity as the original shares.
+The distribution of refreshed shares is independent of the original
+shares, conditional on $\mathsf{Share}'_j(0) = \mathbf{s}$ for all
+threshold subsets.
+\end{theorem}
