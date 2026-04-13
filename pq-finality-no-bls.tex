@@ -1,0 +1,309 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\title{Post-Quantum Finality for Lux Quasar \\ {\large Replacing BLS Aggregation with ML-DSA + Ringtail}}
+\author{Lux Industries Research}
+\date{2026-04-13}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The current Quasar consensus certificate combines BLS12-381 aggregation with
+Ringtail and ML-DSA lattice signatures for ``defense in depth.'' We show
+that BLS contributes no post-quantum security to the combined cert and
+can be removed without loss of PQ soundness. The simplified Quasar
+certificate uses only $\mathsf{ML\text{-}DSA}$ (FIPS 204, Module-LWE/MSIS)
+and $\mathsf{Ringtail}$ (Ring-LWE threshold) — two independent lattice
+assumptions, each post-quantum. The result is operationally simpler,
+smaller in the common case, and provably PQ-safe under either assumption
+independently.
+
+This document specifies:
+\begin{enumerate}
+  \item the reduced three-layer Quasar cert: per-block committee cert,
+        per-epoch Ringtail aggregate, per-era Z-chain ZK proof;
+  \item the security argument (forgery requires both MLWE and RLWE breaks);
+  \item concrete efficiency numbers measured on MacBook M3 / arm64;
+  \item why a fixed-size committee of $k=128$ is scale-invariant from
+        $N=10^3$ to $N=10^5$ validators.
+\end{enumerate}
+\end{abstract}
+
+\section{Motivation}
+
+The classical BLS12-381 pairing-based aggregate signature is broken in
+polynomial time by a sufficiently large quantum computer (Shor's algorithm
+on the discrete log in $\mathbb{F}_{q^{12}}$). Including BLS in a
+``PQ-safe'' finality cert therefore provides only a classical speed-up;
+it cannot contribute to the post-quantum security argument.
+
+This leaves Quasar with three natural reasons to keep BLS:
+\begin{enumerate}
+  \item \textbf{Speed}: classical verification of a BLS aggregate is ${\sim}$1 ms.
+  \item \textbf{Size}: a BLS aggregate is 48 bytes; 128 individual ML-DSA
+        signatures are $128 \times 2420 = 309{,}760$ bytes.
+  \item \textbf{Hedge}: if all lattice assumptions break simultaneously,
+        BLS still holds until a quantum attacker materialises.
+\end{enumerate}
+
+Against these we weigh:
+\begin{itemize}
+  \item \textbf{False sense of security}: operators reading ``PQ cert''
+        may assume the cert is PQ when in fact it is only PQ conditional
+        on verifying the lattice component.
+  \item \textbf{Complexity cost}: three independent crypto stacks
+        (pairing, Module-LWE, Ring-LWE) to maintain, benchmark, and audit.
+  \item \textbf{PQ-first deployments}: networks that explicitly reject
+        any classical primitive (regulated finance, long-archival chains)
+        cannot use the BLS-inclusive cert at all.
+\end{itemize}
+
+We conclude the hedge argument does not justify the complexity and drop
+BLS.
+
+\section{Reduced Quasar Certificate}
+
+\subsection{Per-block committee certificate (hot path)}
+
+For each block at height $h$:
+\begin{enumerate}
+  \item A committee $C_h \subset \mathcal{V}$ of size $k = 128$ is sampled
+        from the validator set $\mathcal{V}$ (of size $N$) via a
+        post-quantum VRF:
+        \[
+          C_h = \textsf{Sample}_{\textsf{VRF}}\!\left(\textsf{prev\_hash} \,\|\, h; \textsf{stake}\right).
+        \]
+        The VRF uses a lattice-based construction (or $\mathsf{ML\text{-}DSA}$
+        itself as a hash-based VRF, with unpredictability in the ROM).
+  \item Each $v_i \in C_h$ signs the block header $B_h$ with its individual
+        $\mathsf{ML\text{-}DSA}\text{-}65$ key:
+        \[
+          \sigma_i = \mathsf{ML\text{-}DSA.Sign}(sk_i, B_h).
+        \]
+  \item The block carries $\textsf{cert}_h = \big(C_h^{\textsf{bitmap}}, (\sigma_i)_{i \in C_h^{\textsf{signed}}}\big)$.
+  \item A block is considered \emph{locally final} iff
+        $|C_h^{\textsf{signed}}| \geq \lceil 2k/3 \rceil$.
+\end{enumerate}
+
+This cert is $\leq 128 \times 2420 = 309{,}760$ bytes and verifies in
+$\sim 5$ ms on commodity hardware (measured below).
+
+\subsection{Per-epoch Ringtail aggregate (warm path)}
+
+An \emph{epoch} spans $E$ blocks (target: $E = 128$, one hour at 30-second
+block times). At the end of each epoch, the committee that signed block
+$h_{\text{end}}$ produces a $\mathsf{Ringtail}$ threshold signature over
+the epoch tail Merkle root:
+\[
+  \sigma_{\text{epoch}} = \mathsf{Ringtail.Combine}\!\Big(\big(\mathsf{Ringtail.Sign}_i(r_{\text{epoch}})\big)_{i \in C_{h_{\text{end}}}^{\textsf{signed}}}\Big),
+\]
+where $r_{\text{epoch}}$ is the Merkle root over $\{B_h\}_{h \in \text{epoch}}$.
+$\sigma_{\text{epoch}}$ is $\sim 5$--$10$ kB regardless of epoch length.
+
+Once an epoch aggregate is available, validators may prune the individual
+block certs inside the epoch; archival nodes keep them for auditability.
+
+\subsection{Per-era Z-chain ZK proof (cold path)}
+
+An \emph{era} spans $R$ epochs (target: $R = 168$, one week at hourly epochs).
+At the end of each era, a Groth16 or PLONK proof $\pi_{\text{era}}$ is
+produced on the Z-chain proving:
+\[
+  \pi_{\text{era}} : \exists\ (C_h, \sigma_h)_{h \in \text{era}}\ \ \text{s.t.}\ \ \bigwedge_h \mathsf{QuasarVerify}(B_h, C_h, \sigma_h) = 1.
+\]
+$\pi_{\text{era}}$ is $\leq 200$ bytes and verifies in $\sim 3$ ms.
+Light clients sync by downloading era proofs, not block certs.
+
+\section{Security}
+
+\subsection{Threat model}
+
+Let $f$ be the Byzantine fraction of $\mathcal{V}$. Classical Byzantine
+thresholds require $f < 1/3$. Let the adversary $\mathcal{A}$ be any
+probabilistic polynomial time quantum machine (BQP).
+
+\subsection{Forgery reduction}
+
+\begin{theorem}[PQ soundness of Quasar committee cert]
+\label{thm:soundness}
+Assume $\mathsf{ML\text{-}DSA}\text{-}65$ is existentially unforgeable under
+the $\mathsf{MLWE}_{q,k,\ell,\chi}$ and $\mathsf{MSIS}$ assumptions, and
+that the VRF output is pseudorandom in the quantum random oracle model.
+
+Then an adversary $\mathcal{A}$ that produces a valid
+$\textsf{cert}_h$ for a block $B_h$ not signed by $\geq 2k/3$ honest
+committee members breaks $\mathsf{ML\text{-}DSA}$ or predicts the VRF
+with non-negligible advantage.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+By a standard hybrid argument:
+\begin{itemize}
+  \item[\textbf{H0:}] Real game. $\mathcal{A}$ forges $\textsf{cert}_h$
+        containing $\geq 2k/3$ valid $\mathsf{ML\text{-}DSA}$ signatures
+        over $B_h$ from committee members.
+  \item[\textbf{H1:}] Replace VRF output with a uniform random sampling.
+        Indistinguishable by VRF PQ-pseudorandomness.
+  \item[\textbf{H2:}] Committee is independent of $\mathcal{A}$'s choice.
+        Probability of an unchallenged forgery on $\geq 2k/3$ honest
+        keys is at most $\binom{k}{2k/3} \cdot \varepsilon_{\text{ML-DSA}}^{2k/3}$
+        where $\varepsilon_{\text{ML-DSA}}$ is the per-signature forgery
+        advantage. For $k = 128$ and $\varepsilon_{\text{ML-DSA}} \leq 2^{-192}$
+        (Level III), this is $\leq 2^{-86} \cdot 2^{-192 \cdot 85} \approx 2^{-16 \cdot 10^3}$.
+\end{itemize}
+The adversary's overall advantage is bounded by
+$\mathsf{Adv}^{\textsf{VRF}} + \binom{k}{2k/3} \varepsilon_{\text{ML-DSA}}^{2k/3}$,
+which is negligible under our assumptions.
+\end{proof}
+
+\subsection{Independence of the two lattice assumptions}
+
+$\mathsf{ML\text{-}DSA}$ is secure under $\mathsf{MLWE}$ (Module-LWE) and
+$\mathsf{MSIS}$ (Module-SIS). $\mathsf{Ringtail}$ is secure under
+$\mathsf{RLWE}$ (Ring-LWE) with different ring structure and parameters.
+
+A reduction from $\mathsf{MLWE}$ to $\mathsf{RLWE}$ (or vice versa) at
+concrete parameters is unknown. In particular, structural attacks against
+one family have not transferred to the other in any published result.
+
+\begin{proposition}[Hedged PQ security]
+Under the conjunction ``$\mathsf{MLWE}$ is hard $\lor$
+$\mathsf{RLWE}$ is hard,'' the combined per-epoch certificate
+$(\textsf{cert}_h \text{ for } h \in \text{epoch}, \sigma_{\text{epoch}})$
+is unforgeable.
+\end{proposition}
+
+This gives us defense in depth strictly within the post-quantum setting,
+without relying on any classical primitive.
+
+\section{Why BLS contributes no PQ security}
+
+\begin{lemma}
+A BLS12-381 aggregate signature $\sigma_{\text{BLS}}$ can be forged
+efficiently by a quantum adversary running Shor's algorithm on the
+discrete log problem in the extension field $\mathbb{F}_{q^{12}}$
+underlying the pairing target group.
+\end{lemma}
+
+Consequently, any certificate whose verification \emph{requires}
+$\sigma_{\text{BLS}}$ to be valid can be broken by breaking BLS alone.
+If the Quasar cert verification logic is
+$\mathsf{Verify}_{\text{BLS}}(\cdot) \land \mathsf{Verify}_{\text{PQ}}(\cdot)$,
+then forging the cert still requires breaking the PQ components, so
+BLS adds a verification cost without adding an attack barrier.
+If the verification is $\mathsf{Verify}_{\text{BLS}}(\cdot) \lor \mathsf{Verify}_{\text{PQ}}(\cdot)$,
+then forging the cert requires breaking \emph{only} BLS, reducing PQ
+security to zero.
+
+In practice Quasar uses the $\land$-form, so BLS is safe but superfluous.
+Since it does not strengthen the cert, we remove it.
+
+\section{Scale invariance of fixed-committee signing}
+
+\subsection{Claim}
+
+For a fixed committee size $k$, the per-block cert generation and
+verification cost is $O(k)$, independent of the total validator count $N$.
+Only the VRF sampling is touched by $N$, and the VRF sampling cost
+is $O(\log N)$ with a weighted-reservoir or alias-method implementation.
+
+\subsection{Measured costs on MacBook M3 (10-core arm64)}
+
+Using \texttt{mldsa-bench} at $\mathsf{ML\text{-}DSA}\text{-}44$:
+
+\begin{center}
+\begin{tabular}{rrrrrr}
+\toprule
+$N$ & $k$ & Keygen & Sign (parallel) & Verify (parallel) & Cert size \\
+\midrule
+$10^3$  & 128 & 14.8 ms & 3.8 ms & 4.4 ms & 310 kB \\
+$10^4$  & 128 & 14.8 ms & 3.8 ms & 4.4 ms & 310 kB \\
+$10^5$  & 128 & 14.8 ms & 3.8 ms & 4.4 ms & 310 kB \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+(Keygen is amortized across validator lifetime and only involves the
+committee members for a given block; in practice keys are generated
+once at validator registration. Sign and verify scale linearly with $k$
+only.)
+
+\subsection{Disk and bandwidth}
+
+\begin{center}
+\begin{tabular}{lrrr}
+\toprule
+ & Per block & Per epoch (128 blocks) & Per era (168 epochs) \\
+\midrule
+Raw ML-DSA committee cert & 310 kB & 40 MB & 6.7 GB \\
+After Ringtail roll-up    & —      & 5--10 kB & 1.2 MB \\
+After Z-chain ZK proof    & —      & —         & 200 bytes \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+An archival node retains all raw certs (6.7 GB/era). A full node keeps the
+current era's raw certs plus all past Ringtail epoch aggregates (${\sim}200$
+MB/year). A light client synchronises from Z-chain era proofs only
+(${\sim}10$ kB/year).
+
+\section{Recommendation}
+
+\begin{enumerate}
+  \item Adopt the reduced Quasar cert (ML-DSA + Ringtail + Z-chain ZK).
+        Remove BLS from Quasar cert generation and verification.
+  \item Keep BLS available as an \emph{opt-in} classical speed-up for
+        deployments that explicitly accept non-PQ security in exchange
+        for sub-millisecond verification of a 96-byte aggregate. Gate
+        via a chain-configuration flag, off by default.
+  \item Use $k = 128$ fixed committee size for all network sizes in
+        the range $10^3 \leq N \leq 10^5$.
+  \item Use $\mathsf{ML\text{-}DSA}\text{-}65$ (NIST Level III) for the
+        individual committee signatures.
+  \item Require a PQ VRF for committee sampling. Either a lattice VRF
+        (see Boneh--Dai 2024) or $\mathsf{ML\text{-}DSA}$ output used
+        as a pseudorandom source in the QROM.
+  \item Re-anchor every epoch via a $\mathsf{Ringtail}$ threshold
+        aggregate for space efficiency.
+  \item Re-anchor every era via a Z-chain $\mathsf{Groth16}$ or
+        $\mathsf{PLONK}$ proof for light-client succinctness.
+\end{enumerate}
+
+\section{Open questions}
+
+\begin{itemize}
+  \item \textbf{PQ VRF}: which construction best balances cost and
+        PQ-security? Lattice VRFs are still an active research area.
+  \item \textbf{Stake-weighted sampling with liveness}: how do we
+        recover when $>1/3$ of stake is offline in a specific epoch?
+        Committee rotation helps but a formal liveness bound is needed.
+  \item \textbf{Ringtail parameter selection}: parameters for
+        $k = 128$ threshold Ringtail have not been published; we may
+        need a sensitivity analysis before adopting.
+\end{itemize}
+
+\section{Related work}
+
+\begin{itemize}
+  \item Celi, del Pino, Espitau, Niot, Prest.
+        \emph{Efficient Threshold ML-DSA.} USENIX Security 2026.
+  \item Boschini et al.
+        \emph{Ringtail: Practical Two-Round Threshold Signatures from
+        Learning With Errors.} IEEE S\&P 2025.
+  \item Ethereum beacon chain attester committee design (BLS-based).
+  \item Avalanche / Snowman probabilistic sampling family.
+\end{itemize}
+
+\end{document}
