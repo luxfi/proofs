@@ -1,0 +1,542 @@
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}{Definition}
+\newtheorem{remark}{Remark}
+\newtheorem{proposition}[theorem]{Proposition}
+
+\newcommand{\amt}{\mathrm{amt}}
+\newcommand{\spread}{\sigma}
+\newcommand{\bal}{\mathrm{bal}}
+
+\title{Lux Adopts the Liquidity Protocol\\
+{\large Composition of Quasar 3.0 PQ Finality with the Oracle-Mirrored
+AMM Settlement Layer}}
+\author{Zach Kelling\\
+\textit{Lux Industries, Inc.}\\
+\texttt{research@lux.network}}
+\date{Adoption: 2026-04-20}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+On 2026-04-20, the Lux Network formally adopts the
+\emph{Liquidity Protocol} (Liquidity.io, launched 2026-04-01) as a
+canonical regulated digital-securities settlement layer over the Lux
+C-Chain (EVM). This note proves three results: (i)~every
+Liquidity-Protocol-compliant transaction settled on a Lux execution
+chain inherits Quasar~3.0 post-quantum finality;
+(ii)~the Liquidity Protocol's per-trade atomicity invariant composes
+with QuasarSTM 4.0 serialisability (LP-135) without weakening either;
+(iii)~the cross-chain replay protection of the Liquidity Protocol's
+oracle-mirrored AMM (OMA) is implied by QuasarCert subject-binding
+(Theorem~7.8 of \cite{quasar-cert}).  We rely only on results that are
+already machine-checked in \texttt{luxfi/proofs} and on the published
+Liquidity Protocol specification.  Adoption is forward-only:
+2026-04-21 onwards is reserved for QuasarSTM~4.0 production
+activation~(LP-135) and for D-Chain landing per LP-134.
+\end{abstract}
+
+\tableofcontents
+
+%% ==================================================================
+\section{Background and adoption boundary}
+\label{sec:background}
+%% ==================================================================
+
+The Lux Network operates a multi-chain topology specified in
+LP-134~\cite{lp134}: P-, C-, X-, Q-, Z-, A-, B-, M-, F-Chain
+(the activation set) plus a forthcoming D-Chain reserved for the
+Liquidity stack. Consensus across all chains is Quasar~3.0
+(LP-020, LP-105). The Liquidity Protocol~\cite{lp-paper} is a
+self-contained settlement protocol designed for any EVM-compatible
+chain. It pairs an Oracle-Mirrored AMM (OMA) contract with an
+Alpaca-backed Liquidity ATS brokerage account, settles atomically, and
+reverts on insufficient inventory.
+
+Until 2026-04-20 the Lux Network referenced the Liquidity Protocol as a
+counterparty integration only.  This document upgrades that status to
+\emph{adoption}: the protocol is recognised as a canonical
+digital-securities lane on Lux and its proofs become an extension of
+the Lux proof corpus.
+
+\begin{definition}[Adoption boundary]
+\label{def:boundary}
+``Lux adopts the Liquidity Protocol'' means:
+\begin{enumerate}[nosep]
+  \item Lux acknowledges Liquidity.io as the canonical regulated DEX,
+        ATS, broker--dealer (BD), and transfer agent (TA) counterparty
+        for the digital-securities market.
+  \item The Liquidity Protocol's OMA contract may be deployed as a
+        first-class precompile-aware contract on Lux C-Chain (today)
+        and on Lux D-Chain (when LP-134's D-Chain lands).
+  \item Lux validators verify Liquidity-Protocol-compliant transaction
+        envelopes as part of normal block validation; no special-case
+        VM, no privileged signer.
+  \item Liquidity-Protocol-compliant transactions inherit the same
+        Quasar 3.0 finality predicate as native EVM transactions,
+        including post-quantum finality, parallel-lane liveness, and
+        subject-binding replay protection.
+\end{enumerate}
+This is a one-way fact about the protocol stack: Lux does not assume
+operational dependency on the Liquidity.io platform; the protocol
+remains an external service governed by Liquidity.io.
+\end{definition}
+
+\begin{remark}[Trade-name overlap]
+The phrase ``liquidity protocol'' has prior usage in Zoo's NFT
+liquidity literature (2021).  In Lux documents we always write
+\emph{the Liquidity Protocol} (capitalised) for the 2026-04-01
+Liquidity.io launch and \emph{NFT-LP} or \emph{Zoo NFT Liquidity
+Protocol} for the 2021 Zoo construction.  Section~\ref{sec:no-collide}
+formally separates the two.
+\end{remark}
+
+%% ==================================================================
+\section{Threat and execution model}
+\label{sec:model}
+%% ==================================================================
+
+The execution model is unchanged from Quasar 3.0:
+\begin{itemize}[nosep]
+  \item validator set $\mathcal{V}$ with stake $S$ and Byzantine
+        fraction $f < 1/3$;
+  \item three-lane finality certificate
+        $\mathcal{C} = (\sigma_{\mathrm{BLS}}, \sigma_{\mathrm{RT}},
+        \pi_{\mathrm{ZK}})$ over the certificate subject
+        $\mathsf{subj}$ defined in~\cite{quasar-cert};
+  \item parallel-execution layer QuasarSTM (LP-010, LP-135) with
+        Block-STM serialisability and GPU residency~(LP-137).
+\end{itemize}
+
+The additional protocol surface is the Liquidity Protocol contract set
+$\Pi_{\mathrm{LP}} = \{ \texttt{OMA}, \texttt{ATS}_\$,
+\texttt{Oracle}, \texttt{ComplianceModule} \}$.  We treat
+$\Pi_{\mathrm{LP}}$ as a closed sub-system whose behaviour is defined
+by~\cite{lp-paper}.  A Liquidity-Protocol-compliant transaction is a
+transaction whose call graph terminates in a successful invocation of
+\texttt{OMA.swap} or \texttt{OMA.settle} after passing the protocol's
+own pre-conditions (NBBO bound, inventory check, compliance gate).
+
+\begin{definition}[LP-compliant transaction]
+\label{def:lp-compliant}
+A transaction $\mathsf{tx}$ is \emph{LP-compliant} on a Lux execution
+chain $\mathcal{X} \in \{\text{C-Chain},\text{D-Chain}\}$ iff:
+(a)~$\mathsf{tx}$ is a valid EVM transaction on $\mathcal{X}$;
+(b)~$\mathsf{tx}$'s top-level call targets a contract in
+$\Pi_{\mathrm{LP}}$;
+(c)~the protocol-internal pre-conditions of~\cite{lp-paper} are met
+(verified by the contract code itself);
+(d)~the resulting state delta is recorded in the block whose subject
+$\mathsf{subj}$ is finalised by a valid QuasarCert.
+\end{definition}
+
+%% ==================================================================
+\section{Inheritance of Quasar 3.0 PQ finality}
+\label{sec:inherit}
+%% ==================================================================
+
+The first adoption result is a direct corollary of QuasarCert
+soundness.
+
+\begin{theorem}[Inherited PQ finality]
+\label{thm:inherited-finality}
+Let $\mathsf{tx}$ be an LP-compliant transaction included in block $b$
+of a Lux execution chain $\mathcal{X}$, and let $\mathcal{C}_b$ be a
+valid QuasarCert over the subject $\mathsf{subj}_b$ of $b$.  Then for
+every quantum PPT adversary $\mathcal{A}_Q$ controlling stake fraction
+$<\tau$,
+\[
+  \Pr[\,\mathsf{tx} \text{ is reorged out of }
+       \mathcal{X}\;|\;\mathcal{C}_b\text{ verifies}\,]
+  \;\leq\;
+  \mathsf{Adv}^{\mathrm{PQ\text{-}forge}}_{\mathcal{A}_Q}
+  \;=\; \mathsf{negl}(\lambda).
+\]
+\end{theorem}
+
+\begin{proof}
+By Theorem~7.7 of~\cite{quasar-cert} (post-quantum safety of
+QuasarCert), a forgery of the PQ predicate
+$\mathsf{VerifyPQ} = \mathsf{RT.Verify} \land \mathsf{ZK.Verify}$
+reduces to one of MLWE or MSIS.  Both are NIST-Level-3 PQ assumptions
+under~\cite{nistpq}.  An LP-compliant $\mathsf{tx}$ is, by
+Def.~\ref{def:lp-compliant}(a), a normal EVM transaction --- there is
+no privileged path.  Reorging $\mathsf{tx}$ requires forging an
+alternative $\mathcal{C}_b'$ on a competing subject
+$\mathsf{subj}_b' \neq \mathsf{subj}_b$, which by Theorem~7.7
+of~\cite{quasar-cert} is bounded by
+$\mathsf{Adv}^{\mathrm{PQ\text{-}forge}}_{\mathcal{A}_Q} = \mathsf{negl}(\lambda)$.
+The Liquidity Protocol contract layer adds new \emph{state},
+not new \emph{certificates}; the cert lane is unchanged.
+\end{proof}
+
+\begin{corollary}[Settlement irrevocability]
+\label{cor:settlement-irrevocable}
+Once an OMA settlement is included in a Lux block whose QuasarCert
+verifies, the settlement is irrevocable except with negligible
+probability under PQ assumptions, even against quantum adversaries
+running Shor and Grover on classical signing components.
+\end{corollary}
+
+%% ==================================================================
+\section{Atomicity composes with QuasarSTM serialisability}
+\label{sec:compose}
+%% ==================================================================
+
+QuasarSTM (LP-010, LP-135) provides Block-STM-style optimistic
+concurrency control with serialisability as the safety
+property~\cite{lp135}.  The Liquidity Protocol's settlement contract
+guarantees \emph{trade atomicity}: a swap either fully executes
+(token in / token out / inventory updated) or fully reverts.  We
+prove the two compose.
+
+\begin{definition}[Trade atomicity, LP \S5.2]
+\label{def:lp-atomic}
+A Liquidity-Protocol swap from token $T_a$ for token $T_b$ at
+oracle price $P_o$ on chain $\mathcal{X}$ either executes the joint
+state update
+\[
+  s' = s
+       \oplus (\Delta T_a := -\amt,\;
+               \Delta T_b := +\amt \cdot P_o \cdot (1-\spread),\;
+               \Delta\bal_{\mathrm{ATS}} := -\amt \cdot P_o)
+\]
+atomically inside a single EVM transaction, or it reverts and
+$s' = s$.
+\end{definition}
+
+\begin{lemma}[Block-STM commutes with single-tx atomicity]
+\label{lem:bstm-atomic}
+Let $\mathsf{tx}_{\mathrm{LP}}$ be an LP-compliant transaction with
+trade atomicity (Def.~\ref{def:lp-atomic}).  Block-STM execution of
+$\mathsf{tx}_{\mathrm{LP}}$ inside a Lux block produces the same
+output state as a serial execution of the same block.
+\end{lemma}
+
+\begin{proof}
+Block-STM~\cite{blockstm} executes transactions optimistically and
+re-executes any whose read--write set conflicts with a higher-priority
+sibling.  A re-execution simply re-runs the EVM call graph from
+scratch; the Liquidity Protocol contract's state machine is
+deterministic given block-level inputs (oracle round, ATS balance,
+compliance gate).  Therefore re-executions converge.  Atomicity is a
+\emph{single-transaction} property; Block-STM never partially commits
+a transaction (\cite[Lemma 4.3]{blockstm}).  Hence the trade-atomicity
+invariant is preserved under Block-STM scheduling, and the final
+serialised order is some valid total order over the block's transactions.
+\end{proof}
+
+\begin{theorem}[Composition of LP atomicity and QuasarSTM serialisability]
+\label{thm:compose}
+For any Lux block $b$ on a QuasarSTM-enabled execution chain
+$\mathcal{X}$ containing LP-compliant transactions
+$T_{\mathrm{LP}} = \{\mathsf{tx}_1, \ldots, \mathsf{tx}_m\}$
+interleaved with arbitrary EVM transactions $T_{\mathrm{EVM}}$, the
+final state $s_b'$ satisfies:
+\begin{enumerate}[nosep]
+  \item every $\mathsf{tx}_i \in T_{\mathrm{LP}}$ is either fully
+        committed (atomic) or fully reverted in $s_b'$;
+  \item there exists a serial schedule $\pi$ of
+        $T_{\mathrm{LP}} \cup T_{\mathrm{EVM}}$ such that running
+        $\pi$ over the pre-state $s_{b-1}$ produces $s_b'$;
+  \item $s_b'$ is unique, deterministic, and finalised by the
+        QuasarCert $\mathcal{C}_b$.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+(1) is Lemma~\ref{lem:bstm-atomic}.  (2) is Block-STM serialisability
+(LP-135 \S6, machine-checked in
+\texttt{lean/Consensus/DAGEVM.lean}~\cite{dagevm-lean}).
+(3)~combines (2) with QuasarCert subject-binding: the unique post-state
+$s_b'$ commits to the C-Chain (or D-Chain) state root inside
+$\mathsf{subj}_b$, which the QuasarCert finalises by
+Theorem~7.7 of~\cite{quasar-cert}.
+\end{proof}
+
+\begin{corollary}[No LP-induced contention with QuasarSTM]
+\label{cor:no-contention}
+Adoption of the Liquidity Protocol does not weaken QuasarSTM 4.0
+(LP-135) properties: serialisability still holds; throughput bounds
+in LP-135 \S8 are unchanged; the only contention is intra-OMA
+between concurrent swaps on the same token pair, which Block-STM
+handles by re-execution.
+\end{corollary}
+
+%% ==================================================================
+\section{Cross-chain replay protection}
+\label{sec:replay}
+%% ==================================================================
+
+The Liquidity Protocol may deploy on multiple EVM chains
+simultaneously (Liquid EVM, Lux C-Chain, partner L1s).  An adversary
+could attempt to replay a Lux-finalised OMA settlement on a different
+chain.  We show this is precluded by QuasarCert subject-binding.
+
+\begin{theorem}[Cross-chain replay is hard]
+\label{thm:replay}
+Let $\mathsf{tx}$ be an LP-compliant transaction finalised on Lux
+execution chain $\mathcal{X}_1$ with QuasarCert $\mathcal{C}_1$ over
+subject $\mathsf{subj}_1$, and let $\mathcal{X}_2 \neq \mathcal{X}_1$
+be any other Lux execution chain.  An adversary $\mathcal{A}_Q$ that
+constructs a valid QuasarCert $\mathcal{C}_2$ over a subject
+$\mathsf{subj}_2$ that re-executes $\mathsf{tx}$ on $\mathcal{X}_2$
+must have advantage at most
+$\mathsf{Adv}^{\mathrm{PQ\text{-}forge}}_{\mathcal{A}_Q} =
+\mathsf{negl}(\lambda)$.
+\end{theorem}
+
+\begin{proof}
+By Def.~6.1 of LP-105~\cite{quasar-cert} the certificate subject
+$\mathsf{subj}$ commits to \texttt{chain\_id}.  Therefore
+$\mathsf{subj}_1 \neq \mathsf{subj}_2$ as soon as
+$\mathcal{X}_1 \neq \mathcal{X}_2$.  Any adversary forging
+$\mathcal{C}_2$ violates Theorem~7.8 of~\cite{quasar-cert}
+(subject-binding replay protection).  By Theorem~7.7 the bound is
+$\mathsf{negl}(\lambda)$ even against quantum adversaries.
+\end{proof}
+
+\begin{remark}[Liquid EVM]
+The Liquidity Network's Liquid EVM (chain id 8675309 / 8675310 /
+8675311) is operationally distinct from Lux C-Chain.  This theorem
+addresses replay between two \emph{Lux} execution chains
+(C-Chain and the forthcoming D-Chain).  Replay between Liquid EVM
+and Lux is a separate cross-network concern handled by
+\cite{lp-paper} \S7.
+\end{remark}
+
+%% ==================================================================
+\section{No collision with Zoo NFT-LP}
+\label{sec:no-collide}
+%% ==================================================================
+
+The 2021 Zoo whitepaper~\cite{zoo-2021} coined the term
+\emph{NFT Liquidity Protocol} for collateral-backed NFT lending and
+sustainability-funded yield.  The 2026 Liquidity.io launch uses the
+same English noun phrase for a securities-collateralised
+oracle-mirrored AMM.  The two are mathematically distinct.
+
+\begin{proposition}[Disjoint asset classes]
+\label{prop:disjoint}
+The state spaces $\mathcal{S}_{\mathrm{Zoo\text{-}NFT\text{-}LP}}$
+and $\mathcal{S}_{\mathrm{Liquidity\text{-}LP}}$ are disjoint:
+\[
+  \mathcal{S}_{\mathrm{Zoo\text{-}NFT\text{-}LP}}
+  \subseteq \{\,\text{ERC-721}\,\}^* \times
+            \{\,\text{ERC-20 collateral}\,\}^*,
+  \qquad
+  \mathcal{S}_{\mathrm{Liquidity\text{-}LP}}
+  \subseteq \{\,\text{ERC-3643 securities}\,\}^* \times
+            \{\,\text{USDL stable}\,\}^*.
+\]
+A Zoo NFT-LP transaction can never be mistaken for a Liquidity
+Protocol transaction (different ABI selectors, different contract
+addresses, different token standards) at the EVM dispatch layer.
+\end{proposition}
+
+\begin{proof}
+By inspection of contract bytecode: Zoo NFT-LP collateralises
+\texttt{ERC-721}; Liquidity Protocol settles \texttt{ERC-3643}.  The
+EVM call selector is a fixed 4-byte function discriminator; the
+selectors differ.  The disjointness is structural, not nominal.
+\end{proof}
+
+Composition between the two systems is therefore safe: a single Lux
+execution chain can host both.  Zoo's ZIP-0206 NFT-LP proofs are not
+affected by Liquidity Protocol adoption, and vice versa.  See
+\cite{zoo-nft-lp} for the formal Zoo proof.
+
+%% ==================================================================
+\section{Adoption record}
+\label{sec:record}
+%% ==================================================================
+
+\begin{table}[h]
+\centering
+\caption{Lux Network protocol-stack chronology, 2025--2026}
+\begin{tabular}{lll}
+\toprule
+Date & Event & Reference \\
+\midrule
+2025-12-25 & Quasar 3.0 chain activation
+           & LP-020, \cite{quasar-cert} \\
+2026-02-14 & QuasarSTM 4.0 production activation
+           & LP-135 \\
+2026-04-01 & Liquidity Protocol launch (Liquidity.io)
+           & \cite{lp-paper} \\
+2026-04-20 & \textbf{Lux adopts the Liquidity Protocol}
+           & \emph{this paper} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\paragraph{Future work (post 2026-04-20).}
+LP-134 reserves D-Chain for the Liquidity stack; D-Chain bring-up,
+GPU-residency invariants for the OMA contract under LP-137, and
+extended cross-chain composition with M-Chain MPC are deferred.
+
+%% ==================================================================
+\section{Worked example: a regulated swap}
+\label{sec:example}
+%% ==================================================================
+
+To make Theorem~\ref{thm:compose} concrete, consider a user $U$
+holding 100 USDL on Lux C-Chain who wishes to acquire AAPL
+(NYSE security mirrored as ERC-3643 on Liquidity infrastructure)
+via the Liquidity Protocol's OMA. The transaction proceeds:
+
+\begin{enumerate}[nosep]
+  \item $U$ submits $\mathsf{tx} = \texttt{OMA.swap(USDL, AAPL, 100)}$
+        to a Lux validator.
+  \item The validator executes $\mathsf{tx}$ inside the C-Chain EVM
+        under QuasarSTM 4.0:
+        \begin{itemize}[nosep]
+          \item read oracle: $P_o(\text{AAPL}) = \$237.41$
+                (LP \S5.1 oracle interface);
+          \item read ATS account inventory:
+                $\bal_{\mathrm{ATS}}(\text{AAPL}) = 50{,}000$ shares;
+          \item compliance gate: ERC-3643 modules check
+                $U$'s KYC / accreditation status (BD service);
+          \item if pass, transfer $100$ USDL out, mint
+                $0.421$ AAPL ERC-3643 tokens to $U$, debit ATS
+                inventory.
+        \end{itemize}
+  \item Block $b$ commits with all such transactions; QuasarCert
+        $\mathcal{C}_b$ over $\mathsf{subj}_b$ is signed by the
+        validator quorum.
+  \item Quasar 3.0 finalises $b$.
+\end{enumerate}
+
+By Theorem~\ref{thm:inherited-finality}, after $\mathcal{C}_b$
+verifies, $U$'s 0.421 AAPL position is finalised under PQ
+guarantees: even a quantum adversary running Shor on the BLS lane
+cannot revert the swap, because revert requires forging the PQ lanes
+$\sigma_{\mathrm{RT}} \land \pi_{\mathrm{ZK}}$
+(Theorem~7.7 of \cite{quasar-cert}).
+
+By Theorem~\ref{thm:compose}, the swap commits atomically: $U$
+either has 0.421 AAPL (and $-100$ USDL), or has full original
+balance --- never partial.
+
+By Theorem~\ref{thm:replay}, the swap cannot be replayed on
+D-Chain (or any other Lux execution chain) without forging a fresh
+QuasarCert with the alternative chain id, which is equally hard.
+
+%% ==================================================================
+\section{Concrete parameter analysis}
+\label{sec:params}
+%% ==================================================================
+
+\begin{table}[h]
+\centering
+\caption{Cryptographic parameters and security levels (NIST PQ
+classification).}
+\begin{tabular}{llll}
+\toprule
+Component & Standard & Hardness & NIST Level \\
+\midrule
+BLS12-381 aggregate & RFC 9380     & co-CDH (classical)  & --- (no PQ)\\
+Ringtail              & LP-105       & MLWE + MSIS         & 3 \\
+ML-DSA-65             & FIPS 204     & MLWE + MSIS         & 3 \\
+ML-KEM-768            & FIPS 203     & MLWE                & 3 \\
+SLH-DSA-256           & FIPS 205     & second-preimage     & 5 \\
+Groth16 (Z-Chain)     & --           & KEA / AGM           & --- \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The PQ-only bound (Theorem 7.7 of \cite{quasar-cert}) requires
+$\mathsf{VerifyPQ} = \mathsf{RT.Verify} \land \mathsf{ZK.Verify}$.
+Both lanes operate at NIST Level 3 (Ringtail Module-LWE) and are
+auxiliary-bound (Groth16 KEA + per-signature ML-DSA).
+Concrete bit-security $\geq 192$ bits classical, $\geq 100$ bits
+quantum (Grover-corrected).
+
+%% ==================================================================
+\section{Implementation footprint on Lux}
+\label{sec:impl}
+%% ==================================================================
+
+\begin{itemize}[nosep]
+  \item No new VM: the Liquidity Protocol contracts compile to
+        standard EVM bytecode and deploy on C-Chain.
+  \item No special-case validator code: validators verify
+        Liquidity-Protocol transactions identically to any other
+        EVM transaction.
+  \item Oracle / OMA / Compliance contracts are deployed at
+        published addresses; their ABI is part of the
+        Liquidity.io spec (\cite{lp-paper} \S4).
+  \item Gas: per-swap gas budget $\leq 250{,}000$ gas
+        (\cite{lp-paper} \S8); fits comfortably in a 30M-gas Lux
+        block.
+\end{itemize}
+
+The adoption is therefore a contract-layer fact about deployment
+practice, not a protocol fork or hard-fork. No Lux node software
+needs to update for adoption to take effect.
+
+%% ==================================================================
+\begin{thebibliography}{9}
+
+\bibitem{quasar-cert}
+Z.~Kelling.
+\newblock QuasarCert Soundness: Canonical Formal Specification, Quasar 3.0.
+\newblock \texttt{luxfi/proofs/quasar-cert-soundness.tex}, 2025-12-15.
+
+\bibitem{lp-paper}
+Liquidity.io.
+\newblock The Liquidity Protocol: Oracle-Mirrored AMM for Universal
+         Cross-Chain Liquidity, v1.0.
+\newblock \texttt{liquidityio/proofs/liquidity-protocol/}, April~2026.
+
+\bibitem{lp134}
+Lux Industries.
+\newblock LP-134 Lux Chain Topology.
+\newblock \texttt{luxfi/lps/LP-134-lux-chain-topology.md}, 2025-12-15.
+
+\bibitem{lp135}
+Lux Industries.
+\newblock LP-135 QuasarSTM 4.0 Production Spec.
+\newblock \texttt{luxfi/lps/LP-135-quasarstm-4-research.md}, 2025-12-25.
+
+\bibitem{nistpq}
+NIST.
+\newblock FIPS 203 / 204 / 205: Module-Lattice and Hash-Based Standards.
+\newblock 2024.
+
+\bibitem{blockstm}
+R.~Gelashvili et al.
+\newblock Block-STM: Scaling Blockchain Execution by Turning Ordering
+         Curse to a Performance Blessing.
+\newblock PPoPP 2023.
+
+\bibitem{dagevm-lean}
+Lux Industries.
+\newblock \texttt{lean/Consensus/DAGEVM.lean}: machine-checked
+         Block-STM-as-consensus serialisability.
+\newblock \texttt{luxfi/proofs/lean/}.
+
+\bibitem{zoo-2021}
+A.~Worring, Z.~Kelling.
+\newblock Zoo: NFT-Driven Conservation, October 2021.
+\newblock \texttt{zooai/papers/zoo-2021-original-whitepaper/}.
+
+\bibitem{zoo-nft-lp}
+Zoo Labs Foundation.
+\newblock Zoo NFT Liquidity Protocol: Soundness.
+\newblock \texttt{zooai/proofs/zoo-nft-liquidity-protocol-soundness.tex}, 2026.
+
+\end{thebibliography}
+
+\end{document}
