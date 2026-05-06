@@ -1,7 +1,6 @@
-# Master Chronology — Lux / Hanzo / Zoo / Pars / Liquidity
+# Master Chronology — Lux / Hanzo / Zoo / Pars
 
-Authoritative cross-repo timeline for the Quasar 3.0 / 4.0 chain stack
-and the Liquidity Protocol launch and adoption events.
+Authoritative cross-repo timeline for the Quasar 3.0 / 4.0 chain stack.
 
 | Date | Event | Repo / Paper |
 |---|---|---|
@@ -10,17 +9,6 @@ and the Liquidity Protocol launch and adoption events.
 | 2025-12-15 | QuasarCert spec freeze | `~/work/lux/proofs/quasar-cert-soundness.tex` |
 | **2025-12-25** | **Lux Quasar 3.0 chain activation** | LP-020, LP-105 |
 | **2026-02-14** | **Lux Quasar 4.0 / QuasarSTM 4.0 production activation** | LP-135 |
-| **2026-04-01** | **Liquidity Protocol formal launch** by Liquidity.io | `~/work/liquidity/proofs/LAUNCH-2026-04-01.md` |
-| **2026-04-20** | **Lux, Hanzo, Zoo, Pars formally adopt Liquidity Protocol** | (see below) |
-
-## Adoption documents (all dated 2026-04-20)
-
-| Repo | File |
-|---|---|
-| Lux | `~/work/lux/proofs/lux-adopts-liquidity-protocol.tex` |
-| Hanzo | `~/work/hanzo/proofs/hanzo-adopts-liquidity-protocol.tex` |
-| Zoo | `~/work/zoo/proofs/zoo-adopts-liquidity-protocol.tex` |
-| Pars | `~/work/pars/proofs/pars-adopts-liquidity-protocol.tex` |
 
 ## Per-repo chronologies
 
@@ -49,16 +37,12 @@ The legacy "T-Chain" name is retained only for `teleportvm` (LP-6332,
 LP-9110) — unified bridge + relay + oracle. Its prior MPC + FHE +
 Groth16 + PQ-consensus duties are split across M-/F-/Z-/Q-Chain.
 
-## Future work (post 2026-04-20)
+## Future work
 
-- D-Chain bring-up per LP-134 (Liquidity stack execution chain on Lux)
 - E-Chain finalisation
-- GPU-residency invariants for OMA contracts (LP-137)
 - Cross-chain composition with M-Chain MPC ceremonies for external
   custody, F-Chain TFHE bootstrap-key rotation, Z-Chain Groth16
   cert aggregation
-- Closing the 5 open Lean `sorry` cases in
-  `~/work/liquidity/proofs/lean/` (TA conservation, ATS net antisymmetry)
 
 ## Forbidden operational taxonomy reminder
 
