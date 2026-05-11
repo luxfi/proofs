@@ -1,0 +1,204 @@
+%% ============================================================
+%% pulsar-m/lux-round-metastable.tex
+%% ============================================================
+%%
+%% Wave-driven metastable signing of N > 256 validator pools.
+%% Composition of Pulsar-M (3, 2) per Lux round with the Lux Wave
+%% protocol's K-sample / alpha-of-K / beta-confidence loop, rolled
+%% up by P3Q. Fully post-quantum end-to-end.
+%%
+%% Naming: this protocol uses Lux's own vernacular -- Wave, Focus,
+%% Prism, Photon, Lux round -- from luxfi/consensus/protocol/.
+%% ============================================================
+
+\subsection*{Lux round metastable signing}
+
+This file pins the composition theorem for the canonical Lux
+deployment at validator pool sizes $N > 256$: Pulsar-M (3, 2) at the
+per-Lux-round committee level, driven by the Lux Wave protocol's
+K-sample, with beta-confidence amplification and a P3Q STARK rollup.
+
+\paragraph{Lux primitives.}
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item \textbf{Prism.Cut}
+(\texttt{consensus/protocol/prism/cut.go}). Stake-weighted or
+uniform $K$-sampler over the validator pool.
+\item \textbf{Wave} (\texttt{consensus/protocol/wave/wave.go}).
+Threshold voting primitive driven by Prism.Cut. Each Wave Tick is
+one Lux round.
+\item \textbf{Focus} (\texttt{consensus/protocol/focus/focus.go}).
+Beta-consecutive-success tracker. After $\beta$ successful Lux
+rounds with alpha-of-K agreement on the same item, Focus fires
+"decided".
+\item \textbf{Photon} (\texttt{consensus/protocol/wave/wave.go:14}).
+The per-round wire message Wave validators emit. Carries the
+validator's preference vote and -- in the metastable-signing
+deployment -- a Pulsar-M Round-1 commit on the preferred item.
+\item \textbf{Quasar} (\texttt{consensus/protocol/quasar/}).
+The composite signing layer that runs BLS + Pulsar-M + ML-DSA
+under one cert envelope.
+\end{itemize}
+
+\paragraph{Lux round.}
+A \emph{Lux round} is one Wave Tick:
+
+\begin{enumerate}[leftmargin=*, itemsep=0pt]
+\item Prism.Cut samples $K$ validators from the pool ($K = 21$ is
+the default Wave config; $K = 3$ is the minimum for $(3, 2)$
+Pulsar-M).
+\item Each sampled validator emits a Photon carrying its current
+preference $\hat v$ on the item under vote, plus a Pulsar-M
+Round-1 commit $D_i = \cSHAKE(\bar{\mathbf{w}}_i\,\|\,\tau_1)$ where
+$\tau_1$ binds the Lux round context $(\mathit{epoch}, \mathit{round},
+\mathit{item}, \mathit{committee root})$.
+\item The aggregator collects Photons. If $\ge \alpha$ of the $K$
+agree on $\hat v$, the round is \emph{successful} and Pulsar-M
+Round-2 reveals are collected from those $\alpha$ validators.
+\item Focus increments its counter for $\hat v$ by $1$. If the
+counter reaches $\beta$, Wave fires "decided" -- the item is
+finalised.
+\end{enumerate}
+
+The Pulsar-M Round-1 commits and Round-2 reveals from successful
+Lux rounds accumulate at the Quasar layer. After $\beta$ successful
+rounds, the accumulator has $\beta \cdot \alpha$ Pulsar-M sig
+contributions across distinct $K$-samples. The P3Q rollup attests
+that each per-round Pulsar-M (3, 2) signature verifies under
+unmodified FIPS~204 \texttt{ML-DSA.Verify}.
+
+\paragraph{Per-Lux-round binding.}
+The per-round Pulsar-M session ID is derived deterministically from
+the Lux round context:
+\[
+  \mathit{sid}_r \;=\; \cSHAKE(\text{Encode}(\mathit{ctx}_r), 16, \text{`PULSAR-M-SIGN-PRNG-V1'}).
+\]
+Each Wave Tick increments $\mathit{round}$, producing a fresh
+$\mathit{sid}_r$ and forcing the per-round PRNG to re-seed. This
+closes the CRIT-1 cross-round replay vector from del Pino-Niot.
+
+\begin{theorem}[Lux round metastable composition]
+\label{thm:lux-round-metastable}
+For every $\PPT$ adversary $\mathcal{A}$ corrupting at most a
+$\rho$-fraction of the validator pool, the probability that
+$\mathcal{A}$ forges a Lux-round-finalised certificate on a message
+$\mu_*$ not honestly signed is bounded by
+\[
+  \mathrm{Adv}^{\mathsf{cert\text{-}forge}}_{\mathsf{Lux}}(\mathcal{A})
+  \;\le\;
+  \tau(K, \alpha, \rho)^\beta
+  \cdot \mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}(\mathcal{B}_1)
+  \;+\;
+  \beta \cdot \mathrm{Adv}^{\mathsf{soundness}}_{\mathsf{P3Q}}(\mathcal{B}_2)
+  \;+\;
+  \beta \cdot \mathrm{Adv}^{\mathsf{beacon\text{-}unbias}}_{\mathsf{Quasar}}(\mathcal{B}_3),
+\]
+where $\tau(K, \alpha, \rho) = \Pr[X \ge \alpha \mid X \sim
+\operatorname{Bin}(K, \rho)]$ is the per-Lux-round adversary
+agreement probability.
+\end{theorem}
+
+\begin{proof}[Sketch]
+Hybrid sequence:
+
+\textbf{H0} -- real game. $\mathcal{A}$ outputs a forged cert.
+
+\textbf{H1} -- replace P3Q by direct per-round
+\texttt{ML-DSA.Verify} on each accumulated Pulsar-M signature.
+Distinguishing advantage is bounded by
+$\beta \cdot \mathrm{Adv}^{\mathsf{soundness}}_{\mathsf{P3Q}}$ (one
+per accumulated round).
+
+\textbf{H2} -- replace Wave's Prism.Cut sample by uniform random
+$K$-subsets. Beacon-unbiasability bounds the distinguishing advantage
+by $\beta \cdot \mathrm{Adv}^{\mathsf{beacon\text{-}unbias}}_{\mathsf{Quasar}}$.
+
+\textbf{H3} -- the probability that $\mathcal{A}$ controls at least
+$\alpha$ of $K$ in a uniformly random sample from a pool with
+$\rho$-fraction corruptions is exactly $\tau(K, \alpha, \rho)$ (the
+binomial tail). Over $\beta$ rounds, the probability of agreement
+in every round is at most $\tau(K, \alpha, \rho)^\beta$.
+
+\textbf{H4} -- conditioned on the adversary holding at most
+$\alpha - 1$ in every round, any per-round Pulsar-M forgery
+contradicts the $(K, \alpha-1)$-corruption-bounded TS-UF of
+Pulsar-M at level $L$ (\Cref{thm:pulsar-m-tsuf}). Per-round
+advantage is bounded by
+$\mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}$.
+
+Summing the hybrid bounds gives the theorem. \qed
+\end{proof}
+
+\paragraph{Numerical instantiation at $N = 1\,111\,111$, $K = 21$,
+$\alpha = 15$, $\beta = 12$.}
+
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item At $\rho = 1/3$ (standard Byzantine bound),
+$\tau(21, 15, 1/3) \approx 2^{-11.3}$ (reference implementation
+\texttt{ApproxRoundSecurity} confirms numerically).
+\item Beta-amplified: $\tau^{\beta} = 2^{-11.3 \cdot 12} \approx 2^{-135}$.
+\item Per-round Pulsar-M TS-UF advantage (level 65, NIST PQ
+category 3): $\le 2^{-180}$.
+\item P3Q soundness: $\le 2^{-100}$.
+\item Beacon unbiasability: $\le 2^{-128}$.
+\end{itemize}
+
+\noindent Total cert-forge advantage at $K = 21$, $\alpha = 15$,
+$\beta = 12$:
+$\le 2^{-135} \cdot 2^{-180} + 12 \cdot 2^{-100} + 12 \cdot 2^{-128}
+\approx 2^{-96}$. The dominant term is the P3Q soundness; the
+metastable layer contributes a $2^{-315}$ tail that is essentially
+free.
+
+For the $(K, \alpha) = (3, 2)$ minimum-cost profile at $\rho = 1/3$:
+$\tau(3, 2, 1/3) \approx 0.26$ per round; $\beta = 60$ rounds give
+$\tau^\beta \approx 2^{-117}$. The $(3, 2) \times \beta = 60$ profile
+trades wire bandwidth (3 sigs per round) for round count.
+
+\paragraph{Per-round cost.}
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item Compute: $K \times$ (Pulsar-M Round-1 commit $\sim 0.5$~ms +
+Round-2 reveal $\sim 0.5$~ms) $\approx 21$~ms at $K = 21$.
+\item Wire: $K$ Photons each carrying one 32-byte commit + one
+MAC bundle $\approx 1$~KB per Photon = 21~KB / round.
+\item Storage: one Pulsar-M share + per-round PRNG state $\approx$ 4~KB
+per validator across the epoch.
+\end{itemize}
+
+Total per-block ($\beta$ rounds): $\sim 250$~KB wire, $\sim 250$~ms
+compute, single $\sim$700-byte P3Q proof emitted at finality.
+
+\paragraph{Liveness piggy-backs on consensus.}
+The Lux round metastable signing inherits Wave's liveness:
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item If Wave terminates (Focus reaches $\beta$ on some item),
+the metastable signature exists by construction.
+\item If Wave does not terminate, the metastable signature does not
+either -- which is the correct behaviour: the consensus has not yet
+decided what to sign.
+\end{itemize}
+
+\paragraph{Adaptive corruption resistance.}
+Because each Lux round samples a fresh $K$-committee from
+Prism.Cut, the adversary must control a fresh $\alpha$-of-$K$
+sample every round to maintain a per-round bias. This is the same
+"moving target" property that the Lux Wave protocol exploits for
+consensus safety, repurposed here for threshold signing. The
+binomial-tail bound $\tau(K, \alpha, \rho)^\beta$ captures this
+amplification.
+
+\paragraph{Files in the production stack.}
+\begin{center}\small
+\begin{tabular}{l l}
+\toprule
+file & role \\
+\midrule
+\texttt{consensus/protocol/prism/cut.go} & $K$-sample primitive \\
+\texttt{consensus/protocol/wave/wave.go} & Lux round driver \\
+\texttt{consensus/protocol/focus/focus.go} & beta-confidence tracker \\
+\texttt{consensus/protocol/quasar/wave\_signer.go} (planned) & Aggregator + P3Q rollup driver \\
+\texttt{pulsar-m/ref/go/pkg/pulsarm/luxround.go} & Per-Lux-round Pulsar-M helpers \\
+\texttt{pulsar-m/ref/go/pkg/pulsarm/threshold.go} & Per-round $(K, \alpha)$ Pulsar-M signer \\
+\texttt{p3q/crates/p3q-stark/} & STARK + FRI rollup prover \\
+\bottomrule
+\end{tabular}
+\end{center}
