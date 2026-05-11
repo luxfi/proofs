@@ -1,0 +1,70 @@
+%% ============================================================
+%% pulsar-m/output-interchangeability.tex
+%% ============================================================
+%%
+%% The Class N1 manifesto in proof form.
+%% ============================================================
+
+\subsection*{Pulsar-M output interchangeability with FIPS~204}
+
+\begin{theorem}[Pulsar-M signatures verify under unmodified FIPS~204]
+\label{thm:pulsar-m-output-interchange}
+Let $\sigma = (\tilde c, \mathbf{z}, \mathbf{h})$ be the output of a
+Pulsar-M $\Sign$ ceremony over a quorum $T$ with $|T| = t$, against a
+public key $\mathit{pk}$ produced by Pulsar-M $\DKG$ (or by a
+posteriori key sharing of an existing FIPS~204 key), on a message
+$\mu$. Then
+\[
+  \mathtt{ML\text{-}DSA.Verify}(\mathit{pk}, \mu, \sigma) \;=\; \mathit{accept}
+\]
+under the FIPS~204~\cite{nist-fips204} \S6.3 verifier, with no
+threshold-specific extension fields and no Pulsar-M envelope.
+\end{theorem}
+
+\begin{proof}
+By \Cref{thm:sign-correct} (\texttt{pulsar-m/spec/pulsar-m.tex}
+\S "Threshold signing"), the aggregated $\sigma$ is byte-identical
+to what a single-party FIPS~204 signer would output on the
+reconstructed seed. The reconstruction step is exact over GF($q$)
+(\Cref{prop:pulsar-m-correct-at-N-star}), and the byte-encoding step
+follows FIPS~204 \S7.2 \texttt{sigEncode} verbatim. Therefore
+$\mathtt{ML\text{-}DSA.Verify}$ accepts $\sigma$ for the same reason
+it accepts any honestly-generated FIPS~204 signature. \qed
+\end{proof}
+
+\paragraph{Implementation requirement.}
+\Cref{thm:pulsar-m-output-interchange} states a cryptographic
+equivalence; for byte-equality of any concrete signature, the
+Pulsar-M implementation MUST emit exactly the FIPS~204 byte
+encoding of $(\tilde c, \mathbf{z}, \mathbf{h})$ with the same
+canonicalisation (coefficient lifting, sign convention, packing).
+The reference implementation
+(\texttt{ref/go/pkg/pulsarm/threshold.go:Combine}) routes through
+\texttt{cloudflare/circl/sign/mldsa\{44,65,87\}.SignTo} on the
+reconstructed seed, which produces the FIPS~204 byte string verbatim.
+
+\paragraph{Cross-implementation conformance.}
+The KAT replay test
+(\texttt{ref/go/pkg/pulsarm/kat\_test.go:TestKAT\_ThresholdSign\_Replay})
+threshold-signs every KAT entry and re-verifies the output under
+\texttt{cloudflare/circl/sign/mldsa\{44,65,87\}.Verify}. A
+cross-implementation conformance gate against any other
+FIPS-validated ML-DSA verifier (BoringSSL FIPS, AWS-LC, OpenSSL~3,
+liboqs) is on the round-2 roadmap and uses the same KAT vectors.
+The theorem above is what guarantees these cross-implementation
+verifications succeed without any code change in the relying
+party's verifier.
+
+\paragraph{Why this is load-bearing for Pulsar-M.}
+Class~N1 in NIST IR~8214C \S4.5 distinguishes \emph{output-
+interchangeable} threshold implementations of a specified primitive
+from \emph{special} threshold-friendly primitives that produce a
+non-NIST-standard signature. \Cref{thm:pulsar-m-output-interchange}
+is the load-bearing property of the entire Pulsar-M family: anything
+that changes \texttt{Verify} -- a Pulsar-M-specific envelope, an
+extension field, a re-canonicalisation of the byte layout -- breaks
+Class~N1 and demotes the submission to Class~S1. The reference
+implementation enforces this discipline structurally: every export
+of the package routes signature verification through
+\texttt{pulsarm.Verify}, which is itself a thin dispatch over the
+FIPS~204 verifier in \texttt{cloudflare/circl}.
