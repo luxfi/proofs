@@ -43,7 +43,7 @@ Under `LUX_STRICT_E2E_PQ`:
 1. Every signed transaction is verified under ML-DSA-65 (FIPS 204).
 2. `tx_auth_root` inclusion is sound under SHA3-384 Merkle.
 3. `ComputeRoundDigest` is collision-resistant under SHA3-384.
-4. Pulsar-M finality signatures verify under M-LWE soundness.
+4. Pulsar finality signatures verify under M-LWE soundness.
 5. Profile-bumps are the only mechanism that can relax the posture; the
    pinned digest is the operator-visible barrier.
 

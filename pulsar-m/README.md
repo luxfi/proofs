@@ -1,18 +1,18 @@
-# Pulsar-M proofs
+# Pulsar proofs
 
-LaTeX theorem statements + proofs for Pulsar-M (Module-LWE),
+LaTeX theorem statements + proofs for Pulsar (Module-LWE),
 the FIPS 204-compatible sibling of Pulsar (R-LWE). Each file is
-included from `~/work/lux/pulsar-m/spec/pulsar-m.tex` or from a
+included from `~/work/lux/pulsar/spec/pulsar.tex` or from a
 paper.
 
 | file | claim |
 |---|---|
 | `unforgeability.tex` | TS-UF reduction to MLWE + MSIS + ML-DSA EUF-CMA |
 | `scaling.tex` | Concrete claims at the extreme committee size N* = 1,111,111 |
-| `output-interchangeability.tex` | Class N1 manifesto: Pulsar-M signatures verify under unmodified FIPS 204 |
+| `output-interchangeability.tex` | Class N1 manifesto: Pulsar signatures verify under unmodified FIPS 204 |
 | `dkg-soundness.tex` | DKG soundness + share privacy |
 | `reshare-preservation.tex` | Reshare preserves pk, soundness, privacy under beacon-randomised quorum |
-| `grouped-sortition.tex` | Pulsar-M (3,2) × Quasar sortition × P3Q rollup composition (the production 1.1M-validator stack); fully PQ end-to-end |
+| `grouped-sortition.tex` | Pulsar (3,2) × Quasar sortition × P3Q rollup composition (the production 1.1M-validator stack); fully PQ end-to-end |
 
 The R-LWE Pulsar proofs live in the parent `proofs/pulsar/`
 directory and target the Pulsar (Class S1+S4) submission. Do not
@@ -35,9 +35,9 @@ and verifies under the FIPS 204 verifier verbatim.
 
 | theorem | reference implementation gate |
 |---|---|
-| `thm:pulsar-m-tsuf` | `ref/go/pkg/pulsarm/threshold_test.go` |
-| `thm:pulsar-m-scales-n` | `ref/go/pkg/pulsarm/shamir_gfq_test.go` (boundary committees) |
-| `prop:pulsar-m-correct-at-N-star` | `ref/go/pkg/pulsarm/largeshamir_test.go:TestLargeShamir_EvalAtTargetCommitteeSize` |
-| `thm:pulsar-m-output-interchange` | `ref/go/pkg/pulsarm/kat_test.go:TestKAT_ThresholdSign_Replay` |
-| `thm:pulsar-m-dkg-sound` | `ref/go/pkg/pulsarm/dkg_test.go` |
-| `thm:pulsar-m-reshare-pkinv` | `ref/go/pkg/pulsarm/reshare_test.go` |
+| `thm:pulsar-tsuf` | `ref/go/pkg/pulsar/threshold_test.go` |
+| `thm:pulsar-scales-n` | `ref/go/pkg/pulsar/shamir_gfq_test.go` (boundary committees) |
+| `prop:pulsar-correct-at-N-star` | `ref/go/pkg/pulsar/largeshamir_test.go:TestLargeShamir_EvalAtTargetCommitteeSize` |
+| `thm:pulsar-output-interchange` | `ref/go/pkg/pulsar/kat_test.go:TestKAT_ThresholdSign_Replay` |
+| `thm:pulsar-dkg-sound` | `ref/go/pkg/pulsar/dkg_test.go` |
+| `thm:pulsar-reshare-pkinv` | `ref/go/pkg/pulsar/reshare_test.go` |
