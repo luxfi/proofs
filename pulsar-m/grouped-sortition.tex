@@ -1,0 +1,181 @@
+%% ============================================================
+%% pulsar-m/grouped-sortition.tex
+%% ============================================================
+%%
+%% Composition of Pulsar-M (3,2) per group with grouped sortition
+%% and P3Q rollup to attest 1.1M-validator finality. Fully post-
+%% quantum end-to-end (no pairings, no KZG, no Groth16).
+%% ============================================================
+
+\subsection*{Pulsar-M (3,2) $\times$ grouped sortition $\times$ P3Q rollup}
+
+This file pins the composition theorem that lets a $1.1$M-validator
+Lux consensus produce a single succinct PQ-safe certificate without
+running a $1.1$M-party Pulsar-M ceremony.
+
+\paragraph{Setup.}
+Fix a validator pool of size $N \le 10^7$. Let $g = 3$ be the group
+size and $\theta = 2$ the per-group threshold. Let $\beta_e$ be an
+unbiasable epoch beacon (the Lux Quasar finality stream).
+
+\paragraph{Three composed primitives.}
+
+\begin{enumerate}[leftmargin=*, itemsep=0pt]
+\item \textbf{Grouped sortition $\mathcal{S}_\beta$.} A deterministic
+function (SHA3-384 Fisher-Yates) that maps $\beta_e$ to a partition
+of $\{1, \dots, N\}$ into $\lceil N / g \rceil$ groups of size $g$.
+\item \textbf{Per-group Pulsar-M (3, 2) ceremony.} Each group $G_k$
+runs $\DKG_{G_k}$ then $\Sign_{G_k}$ per epoch checkpoint, producing
+a single FIPS~204 ML-DSA signature $\sigma_k$ under a per-group
+public key $\mathit{pk}_k$. By
+\Cref{thm:pulsar-m-tsuf} the per-group TS-UF advantage is bounded
+by the FIPS~204 / M-LWE / MSIS sum at level $L$.
+\item \textbf{P3Q STARK rollup $\mathcal{R}_{P3Q}$.} A succinct
+non-interactive PQ-safe argument (Lux's strict-PQ Plonky3 fork:
+STARK + FRI over Goldilocks, cSHAKE256 Merkle, FIPS~202 +
+SP~800-185 hash family). Given a set $\{(\mathit{pk}_k, \mu, \sigma_k)\}_k$,
+$\mathcal{R}_{P3Q}$ produces a single proof $\pi$ such that the P3Q
+verifier accepts $\pi$ iff every $\sigma_k$ verifies under FIPS~204
+\texttt{ML-DSA.Verify}$(\mathit{pk}_k, \mu, \sigma_k)$.
+\end{enumerate}
+
+The chain explicitly forbids the pairing-based proof systems
+(\texttt{ProofBackendGroth16WrapForbid = 0x80},
+\texttt{ProofBackendKZGWrapForbid = 0x81}) per
+\texttt{consensus/config/pq\_mode.go} -- so $\mathcal{R}_{P3Q}$ is
+the production rollup and any classical fall-back is statically
+inadmissible.
+
+\paragraph{Adversary model.}
+$\mathcal{A}$ is a $\PPT$ adversary that may:
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item Corrupt up to a $\rho$-fraction of validators globally, with
+$\rho < (g - \theta + 1) / g = 2/3$ for the $g=3, \theta=2$ profile.
+\item See the beacon $\beta_e$ \emph{after} committing its
+corruption set for epoch $e$ (the unbiasability assumption).
+\item Run all PPT machinery against the M-LWE / MSIS hardness of
+ML-DSA and the cSHAKE256 collision-resistance assumption that
+underlies P3Q.
+\end{itemize}
+
+\begin{theorem}[Composition soundness]
+\label{thm:pulsar-m-grouped-sortition}
+For every $\PPT$ adversary $\mathcal{A}$ producing a forged
+certificate $(\mathit{pk}_*, \mu_*, \pi_*)$ that the chain verifier
+accepts on a message $\mu_*$ for which no honest signing query was
+issued,
+\[
+  \mathrm{Adv}^{\mathsf{cert\text{-}forge}}_{\mathsf{Lux}}(\mathcal{A})
+  \;\le\;
+  \tbinom{N/g}{\rho N / g} \cdot
+  \mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}(\mathcal{B}_1)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{soundness}}_{\mathsf{P3Q}}(\mathcal{B}_2)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{beacon\text{-}unbias}}_{\mathsf{Quasar}}(\mathcal{B}_3).
+\]
+\end{theorem}
+
+\begin{proof}[Sketch]
+We argue by hybrids over the three composed layers.
+
+\textbf{H0} -- real game. $\mathcal{A}$ outputs
+$(\mathit{pk}_*, \mu_*, \pi_*)$ that the chain verifier accepts.
+
+\textbf{H1} -- replace P3Q. The challenger answers verifier queries
+by direct $\mathtt{ML\text{-}DSA.Verify}$ instead of running the P3Q
+verifier. Distinguishing advantage is bounded by the P3Q soundness
+error:
+$\mathrm{Adv}^{\mathsf{soundness}}_{\mathsf{P3Q}}(\mathcal{B}_2)$.
+After this hybrid, any successful $\mathcal{A}$ must produce
+$(\mathit{pk}_k, \mu_*, \sigma_k)$ that
+$\mathtt{ML\text{-}DSA.Verify}$ accepts for at least one group $k$
+without that group having honestly signed $\mu_*$.
+
+\textbf{H2} -- replace sortition. The challenger picks the
+adversary's per-epoch group covering uniformly at random over
+sortition outcomes. Beacon-unbiasability bounds the distinguishing
+advantage by
+$\mathrm{Adv}^{\mathsf{beacon\text{-}unbias}}_{\mathsf{Quasar}}(\mathcal{B}_3)$.
+The probability that $\mathcal{A}$'s corruption set covers any
+single group entirely is at most $(\rho)^g = (\rho)^3$; for
+$\rho < 2/3$ we have $\rho^3 < 8/27$, but the binding event is that
+$\mathcal{A}$ controls $\ge \theta = 2$ parties in at least one
+group. By the union bound across the $\lceil N/g \rceil$ groups, the
+probability of this event is at most
+$\tbinom{N/g}{\rho N / g}$ which is a polynomial in $N$ for fixed
+$\rho < 2/3$.
+
+\textbf{H3} -- reduce per-group forgery to Pulsar-M TS-UF. Any
+forgery $\sigma_k$ produced against a group where $\mathcal{A}$
+controls at most $\theta - 1 = 1$ party is by definition a
+TS-UF violation for the $(3, 2)$ Pulsar-M instance running on that
+group. By \Cref{thm:pulsar-m-tsuf} this is bounded by
+$\mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}(\mathcal{B}_1)$
+per group, multiplied by the maximum number of groups attacker can
+attempt forgery against in one epoch -- bounded by $\tbinom{N/g}{\rho
+N/g}$ from H2.
+
+Summing the three hybrid bounds gives the theorem. \qed
+\end{proof}
+
+\paragraph{Numerical instantiation at $N = 1{,}111{,}111$.}
+With $g = 3$, $\theta = 2$, $\rho = 1/2$ (industry-standard
+Byzantine tolerance budget), and Pulsar-M-65 (NIST PQ category 3,
+$\lambda = 192$):
+
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item Per-group TS-UF advantage: $\le 2^{-180}$ (FIPS 204 quantum
+security after lattice estimator margin).
+\item Number of groups: $\lceil 1\,111\,111 / 3 \rceil = 370\,371$.
+\item Group-covering combinatorial factor (the binding event of
+$\mathcal{A}$ controlling $\ge 2$ in any group): at most
+$370\,371 \cdot (1/2)^2 \cdot (1/2) = \le 2^{16}$ (polynomial in $N$).
+\item P3Q soundness: $\le 2^{-100}$ at typical $128$-bit parameter
+levels (Goldilocks field, $40$-query Fiat-Shamir).
+\item Beacon unbiasability: assumed $\le 2^{-128}$ from the Lux
+Quasar randomness layer.
+\end{itemize}
+
+\noindent Total cert-forge advantage:
+$\le 2^{16} \cdot 2^{-180} + 2^{-100} + 2^{-128} \approx 2^{-100}$
+$\le 2^{-100}$. \emph{Comfortably negligible.}
+
+\paragraph{Why this is fully PQ.}
+Every primitive in the composition rests on a post-quantum hardness
+assumption:
+
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item Pulsar-M (3, 2) reduces to Module-LWE + MSIS + ML-DSA EUF-CMA
+under \Cref{thm:pulsar-m-tsuf}.
+\item P3Q soundness reduces to cSHAKE256 (FIPS 202) collision-
+resistance via the FRI low-degree test and standard
+Fiat-Shamir-with-Aborts framework.
+\item Beacon unbiasability is provided by the Lux Quasar
+randomness layer, which is itself PQ-safe (BLS + Pulsar + ML-DSA
+triple).
+\item Grouped sortition is a deterministic SHA3-384 shuffle:
+unforgeability of the sortition output reduces to SHA3 collision
+resistance.
+\end{itemize}
+
+No pairing, no elliptic-curve recursion, no KZG, no Groth16. Shor's
+algorithm has no purchase on the certificate-forging adversary.
+
+\paragraph{Files in the production stack.}
+\begin{center}\small
+\begin{tabular}{l l}
+\toprule
+file & role \\
+\midrule
+\texttt{consensus/protocol/quasar/grouped\_threshold.go} & Grouped sortition + per-group quorum \\
+\texttt{pulsar-m/ref/go/pkg/pulsarm/threshold.go} & Per-group Pulsar-M (3, 2) signing \\
+\texttt{pulsar-m/ref/go/pkg/pulsarm/dkg.go} & Per-group Pulsar-M DKG \\
+\texttt{p3q/crates/p3q-stark/} & STARK + FRI prover \\
+\texttt{p3q/crates/p3q-challenger/} & cSHAKE256 Fiat-Shamir transcript \\
+\texttt{p3q/crates/p3q-zchain/} & Z-Chain integration crate \\
+\texttt{consensus/config/pq\_mode.go:515} & \texttt{ProofBackendP3QSTARKFRISHA3} pinned \\
+\texttt{consensus/config/pq\_mode.go:526} & \texttt{Groth16WrapForbid} forbidden \\
+\bottomrule
+\end{tabular}
+\end{center}

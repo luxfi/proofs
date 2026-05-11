@@ -1,0 +1,107 @@
+%% ============================================================
+%% pulsar-m/unforgeability.tex
+%% ============================================================
+%%
+%% Canonical Pulsar-M TS-UF (threshold strong unforgeability)
+%% theorem. Papers cite this; do not redefine.
+%%
+%% This is the Module-LWE / FIPS 204-target sibling of
+%% pulsar/unforgeability.tex (which targets Ring-LWE Pulsar).
+%% ============================================================
+
+\subsection*{Pulsar-M threshold signature unforgeability}
+
+\begin{theorem}[Pulsar-M TS-UF under MLWE / MSIS / ML-DSA EUF-CMA]
+\label{thm:pulsar-m-tsuf}
+Let $\mathcal{A}$ be a probabilistic polynomial-time adversary against
+Pulsar-M with at most $q_S$ signing queries, $q_H$ random-oracle
+queries, and at most $t-1$ corrupted parties out of a committee of
+$n$. Fix the parameter level $L \in \{44, 65, 87\}$. Then
+\[
+  \mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}(\mathcal{A})
+  \;\leq\;
+  \mathrm{Adv}^{\mathsf{MLWE}}_{q, k_L, \ell_L, \eta_L}(\mathcal{B}_1)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{MSIS}}_{q, k_L, 2\ell_L, \beta_{\mathrm{bind}, L}}(\mathcal{B}_2)
+  \;+\;
+  \mathrm{Adv}^{\mathsf{EUF\text{-}CMA}}_{\mathsf{ML\text{-}DSA}\text{-}L}(\mathcal{B}_3)
+  \;+\;
+  \frac{q_S \cdot q_H}{2^{\lambda_L}}.
+\]
+The reduction algorithms $\mathcal{B}_1$ (MLWE distinguisher),
+$\mathcal{B}_2$ (MSIS solver), and $\mathcal{B}_3$ (ML-DSA forger)
+run in time polynomial in $\mathcal{A}$'s running time. The parameter
+levels $(k_L, \ell_L, \eta_L, \lambda_L)$ are the FIPS~204 ML-DSA-$L$
+constants reproduced in \texttt{pulsar-m/spec/parameters.tex} -- the
+Pulsar-M lattice instance is byte-equal to the FIPS~204 instance, so
+the underlying advantages transfer.
+
+The bound is \emph{independent of the committee size $n$} (once
+$\lambda$ is fixed). See \Cref{thm:pulsar-m-scales-n} below.
+\end{theorem}
+
+\textbf{Lean mechanization (in flight):}
+\texttt{Crypto.Pulsar\_M.tsuf} in
+\texttt{lean/Crypto/Pulsar\_M/Unforgeability.lean}; the proof
+imports the FIPS~204 ML-DSA EUF-CMA axiom from
+\texttt{lean/Crypto/MLDSA.lean} and the M-LWE / MSIS hardness axioms
+from \texttt{lean/Crypto/Pulsar/dkg2.lean}.
+
+\begin{remark}[Output interchangeability]
+\label{rem:pulsar-m-output-interchange}
+\Cref{thm:pulsar-m-tsuf} reduces to ML-DSA's own EUF-CMA bound
+because Pulsar-M's \texttt{Verify} is literally \texttt{ML-DSA.Verify}.
+This is the Class~N1 manifesto in proof form: a forgery against
+Pulsar-M's TS-UF \emph{is} a forgery against single-party FIPS~204
+ML-DSA, modulo the Pedersen-binding side condition.
+\end{remark}
+
+\begin{theorem}[Pulsar-M scales information-theoretically in $n$]
+\label{thm:pulsar-m-scales-n}
+For every $(n, t)$ with $1 \le t \le n$ and $n \le q - 1 =
+8\,380\,416$, the TS-UF advantage of \Cref{thm:pulsar-m-tsuf} is
+bounded by the same M-LWE / MSIS / ML-DSA EUF-CMA sum plus an
+$n$-independent random-oracle term.
+\end{theorem}
+
+\begin{proof}
+Inspect the hybrid sequence of \Cref{thm:pulsar-m-tsuf}. The
+RO-programming penalty $q_S q_H / 2^\lambda$ counts the probability
+of a $\tilde c$ collision in the random oracle and is per-call, not
+per-party. The M-LWE / MSIS / ML-DSA EUF-CMA advantages are
+properties of the underlying lattice instance and do not depend on
+$n$. Shamir secret sharing is information-theoretic for $(t-1)$
+corruptions over any finite field of order strictly greater than
+$n$; both GF($257$) (for $n \le 256$) and GF($q$) (for $n \le q-1$)
+satisfy this. Therefore the bound is independent of $n$. \qed
+\end{proof}
+
+\begin{corollary}[Pulsar-M at $N^* = 1\,111\,111$ is as secure as Pulsar-M at $(n, t) = (3, 2)$]
+\label{cor:pulsar-m-extreme-committee}
+Instantiate \Cref{thm:pulsar-m-tsuf} at $(n, t) = (1\,111\,111, t)$
+for any $1 \le t \le 1\,111\,111$. The resulting bound is identical
+to the bound at $(n, t) = (3, 2)$ for the same parameter level.
+\end{corollary}
+
+\begin{proof}
+Apply \Cref{thm:pulsar-m-scales-n}: the bound is $n$-independent.
+\qed
+\end{proof}
+
+\begin{remark}[Hash-suite invariance]
+\label{rem:pulsar-m-hash-suite-invariance}
+The reduction is parameterised by the SHA-3 / cSHAKE / KMAC / TupleHash
+family fixed in DD-002 (\texttt{docs/design-decisions.md}). Pulsar-M
+explicitly forbids the BLAKE3 variants of the Pulsar (R-LWE) family
+to keep the NIST hash-family compliance unambiguous; \Cref{thm:pulsar-m-tsuf}
+holds verbatim for the SHA-3-only profile and would require an
+independent re-proof for any alternative suite.
+\end{remark}
+
+\begin{remark}[Adaptive corruption is round-2 work]
+\Cref{thm:pulsar-m-tsuf} is stated against the static-corruption
+model (Game~TS-UF in \texttt{pulsar-m/spec/security-games.tex}). The
+adaptive-corruption variant (Game~ADAPT) is open and is the only
+deferred theorem in the Pulsar-M security analysis; see
+\texttt{pulsar-m/spec/pulsar-m.tex} \S "Known limitations".
+\end{remark}

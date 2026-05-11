@@ -1,0 +1,103 @@
+%% ============================================================
+%% pulsar-m/dkg-soundness.tex
+%% ============================================================
+%%
+%% DKG soundness + privacy theorems for Pulsar-M (Module-LWE).
+%% Targets the Pedersen-DKG over R_q^k described in
+%% pulsar-m/spec/pulsar-m.tex section "Distributed key generation".
+%% ============================================================
+
+\subsection*{Pulsar-M DKG soundness}
+
+\begin{theorem}[Pulsar-M DKG soundness]
+\label{thm:pulsar-m-dkg-sound}
+For every $\PPT$ adversary $\mathcal{A}$ against the DKG-SOUND game
+of \texttt{pulsar-m/spec/security-games.tex},
+\[
+  \mathrm{Adv}^{\mathsf{DKG\text{-}SOUND}}_{\mathsf{Pulsar\text{-}M}}(\mathcal{A})
+  \;\le\;
+  \mathrm{Adv}^{\mathsf{MSIS}}_{q, k, 2\ell, \beta_{\mathrm{bind}}}(\mathcal{B})
+  \;+\;
+  \frac{q_H}{2^{256}}.
+\]
+Concretely: a successful DKG-SOUND adversary either breaks the
+Pedersen-commit binding (an MSIS instance over $[\mathbf{A} | \mathbf{B}]$)
+or finds a $\cSHAKE256$ pre-image (an RO term bounded by $q_H /
+2^{256}$). Both terms are negligible at every Pulsar-M parameter
+level.
+\end{theorem}
+
+\begin{proof}
+Honest parties verify Pedersen identities at Round~2
+(\Cref{sec:dkg}). A corrupted dealer that contributes a malformed
+share fails the $A \cdot f_i(j) + B \cdot g_i(j) \stackrel{?}{=}
+\sum_k j^k C_{i,k}$ check; failing this check yields a
+\textsc{ComplaintBadDelivery} carrying the (share, blind, commits)
+tuple as evidence, which is publicly verifiable by any third party.
+The Pedersen binding bound prevents the adversary from substituting
+a different $\mathbf{c}_{i,0}$ between commit and reveal -- a binding
+violation is by construction an MSIS solution over $[\mathbf{A} |
+\mathbf{B}]$.
+
+The remaining $q_H / 2^{256}$ term bounds the probability of a
+$\cSHAKE256$ commit-digest collision at the Round-1.5 equivocation
+gate: a successful equivocation requires the adversary to produce
+two distinct commit vectors with the same 256-bit digest, which
+is by construction a collision in the random oracle. \qed
+\end{proof}
+
+\paragraph{Identifiable abort.}
+By construction every failure mode in the DKG produces a signed
+\textsc{Complaint} record naming the deviator
+(\Cref{sec:abort}):
+
+\begin{itemize}[leftmargin=*, itemsep=0pt]
+\item Equivocation $\Rightarrow$ \textsc{ComplaintEquivocation} (two
+distinct commit broadcasts from one sender);
+\item Bad delivery $\Rightarrow$ \textsc{ComplaintBadDelivery} (a
+private share that fails the Pedersen identity check at the
+recipient).
+\end{itemize}
+
+Both complaints are publicly verifiable from the transcript alone
+(the Pedersen check is determined by the public $(\mathbf{A},
+\mathbf{B})$). The chain governance layer consumes the complaints
+and slashes the disqualified party.
+
+\subsection*{Pulsar-M DKG share privacy}
+
+\begin{theorem}[Pulsar-M DKG share privacy]
+\label{thm:pulsar-m-dkg-priv}
+For every $\PPT$ adversary $\mathcal{A}$ against the DKG-PRIV game
+of \texttt{pulsar-m/spec/security-games.tex} with up to $t-1$
+corrupted parties,
+\[
+  \mathrm{Adv}^{\mathsf{DKG\text{-}PRIV}}_{\mathsf{Pulsar\text{-}M}}(\mathcal{A})
+  \;\le\;
+  \mathrm{Adv}^{\mathsf{MLWE}}_{q, k, \ell, \eta}(\mathcal{B}).
+\]
+The reduction loses a constant factor independent of the committee
+size $n$.
+\end{theorem}
+
+\begin{proof}
+Pedersen commitments are computationally hiding under M-LWE on
+$\mathbf{B}$ (\Cref{thm:pedersen-hiding}). The simulator chooses
+corrupted-party shares uniformly from the simulation distribution
+induced by $\mathit{pk}$, then programs the commits via the
+M-LWE-based hiding simulator. Distinguishing real from simulated
+commits reduces to M-LWE in $\mathbf{B}$.
+
+The corrupted-party share leakage is information-theoretically zero
+for $|\mathcal{C}| \le t - 1$ by Shamir secret sharing over any
+field of order $> n$. The Pulsar-M reference implementation uses
+GF($257$) for $n \le 256$ and GF($q$) for $n \le q - 1$; both
+satisfy the field-order condition for every committee size in
+scope. \qed
+\end{proof}
+
+\paragraph{Scaling.}
+\Cref{thm:pulsar-m-dkg-priv}'s bound is independent of the
+committee size $n$. The DKG share-privacy guarantee therefore
+extends verbatim to the extreme committee size $N^\star =
+1\,111\,111$.
