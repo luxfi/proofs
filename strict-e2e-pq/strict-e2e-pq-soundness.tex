@@ -1,0 +1,294 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsfonts,amsthm}
+\usepackage{geometry}
+\geometry{margin=1in}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{enumitem}
+\usepackage{booktabs}
+
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=blue,urlcolor=blue}
+
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  showstringspaces=false
+}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{definition}{Definition}
+\newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{remark}{Remark}
+
+\title{LUX\_STRICT\_E2E\_PQ Soundness:\\
+Formal Statement of the End-to-End Post-Quantum Profile}
+\author{Lux Industries, Inc.\\\texttt{research@lux.network}}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+This note carries the formal soundness statement for the
+\texttt{LUX\_STRICT\_E2E\_PQ} profile defined in
+\texttt{luxfi/papers/lp-stricte2epq}. We state the four soundness claims (1)
+ML-DSA-65 transaction authorisation, (2) SHA3-384 Merkle inclusion in the
+Z-Chain registry, (3) collision-resistance of the Q-Chain
+\texttt{ComputeRoundDigest}, and (4) Pulsar-M finality under Module-LWE. The
+machine-checked counterparts live in Lean 4 (\texttt{StrictE2EPQ/}), TLA+
+(\texttt{tla/StrictPQProfile.tla}), and Go property tests
+(\texttt{property/strict\_pq\_test.go}).
+\end{abstract}
+
+\section{Profile pinning}
+
+\begin{definition}[Locked profile]
+\label{def:locked}
+A \emph{locked profile} is a \texttt{ChainSecurityProfile} (the Go struct
+at \texttt{luxfi/consensus/config/security\_profile.go:244}) such that:
+\begin{enumerate}[leftmargin=2em,nosep]
+  \item Every enum field is non-zero (zero-value-invalid).
+  \item \texttt{Validate} accepts it.
+  \item \texttt{ComputeHash} returns a stable 48-byte digest under
+    customization \texttt{LUX\_CHAIN\_SECURITY\_V1} (cSHAKE256 / SHA3-384,
+    SP 800-185).
+\end{enumerate}
+\end{definition}
+
+\begin{definition}[Strict-PQ profile]
+\label{def:strict-pq}
+A locked profile $P$ is \emph{strict-PQ} iff:
+\begin{align*}
+& P.\texttt{HashSuiteID}            && = \texttt{SHA3-384/cSHAKE256}, \\
+& P.\texttt{IdentitySchemeID}       && = \texttt{ML-DSA-65}, \\
+& P.\texttt{FinalitySchemeID}       && = \texttt{Pulsar-M-65}, \\
+& P.\texttt{HighValueSchemeID}      && \in \{\texttt{Pulsar-M-65}, \texttt{Pulsar-M-87}\}, \\
+& P.\texttt{ProofPolicyID}          && = \texttt{ProofPolicy128bitPQ}, \\
+& P.\texttt{AllowedProofBackends}   && \subseteq \{\texttt{p3q}, \texttt{Plonky3-SHA3}\}, \\
+& P.\texttt{MinSoundnessBits}       && \ge 128, \\
+& P.\texttt{MinHashOutputBits}      && \ge 384, \\
+& P.\texttt{RequireTransparent}     && = \texttt{true}, \\
+& P.\texttt{ForbidPairings}         && = \texttt{true}, \\
+& P.\texttt{ForbidKZG}              && = \texttt{true}, \\
+& P.\texttt{ForbidTrustedSetup}     && = \texttt{true}, \\
+& P.\texttt{ForbidClassicalSNARKs}  && = \texttt{true}, \\
+& P.\texttt{ForbidDevProofs}        && = \texttt{true}, \\
+& P.\texttt{ForbidFallbacks}        && = \texttt{true}, \\
+& P.\texttt{RequireTypedTxAuth}     && = \texttt{true}, \\
+& P.\texttt{WalletSchemeID}         && = \texttt{ML-DSA-65}, \\
+& P.\texttt{ContractAuthSchemeID}   && = \texttt{ML-DSA-65}, \\
+& P.\texttt{BridgeProfileID}        && = \texttt{BridgeProfileStrictPQ}, \\
+& P.\texttt{DRBGSchemeID}           && = \texttt{Hash\_DRBG-SHA3-384}.
+\end{align*}
+\end{definition}
+
+\begin{remark}
+The strict-PQ profile is unique up to the choice of
+\texttt{HighValueSchemeID} ($65$ or $87$). The production canonical at
+\texttt{luxfi/consensus@12097034} pins
+\texttt{ProfileLuxStrictPQ} with \texttt{HighValueSchemeID = Pulsar-M-87}
+and golden digest \texttt{93efd103\ldots323bfcd0}.
+\end{remark}
+
+\section{Soundness claims}
+
+\subsection{TX-AUTH-SOUND: transaction authorisation soundness}
+
+\begin{theorem}[TX-AUTH-SOUND]
+\label{thm:tx-auth-sound}
+Let $P$ be a strict-PQ profile (Def.~\ref{def:strict-pq}). Let $E$ be a
+\texttt{TxAuthEnvelope} accepted by \texttt{VerifyTxAuthEnvelope}$(P, E)$.
+Then there exists a private key $\textsc{sk}$ such that the public key
+$\textsc{pk}$ corresponding to $\textsc{sk}$ is:
+\begin{enumerate}[leftmargin=2em,nosep]
+  \item Registered as \texttt{KeyStatusActive} in
+    \texttt{ZRegistryRoots.IdentityRoot} at the epoch when $E$ was
+    submitted.
+  \item Hashes to $E.\texttt{PublicKeyRef}$ under cSHAKE256.
+  \item Owned by $E.\texttt{AccountID}$ (per the Z-Chain account
+    binding).
+  \item $\textsc{sk}$ produced $E.\texttt{Signature}$ via the FIPS 204
+    \texttt{ML-DSA-65.Sign} algorithm applied to
+    $E.\texttt{SigningDigest}()$, under the FIPS 204 \S 5.2
+    \texttt{ctx} value \texttt{LUX\_ZCHAIN\_REGISTRY\_V1}.
+\end{enumerate}
+The reduction is to: (i) the EUF-CMA security of ML-DSA-65 under
+Module-LWE \cite{fips204,dilithium}; (ii) collision-resistance of cSHAKE256
+on the 17-field TupleHash256 transcript under customization
+\texttt{LUX\_TX\_AUTH\_V1}; (iii) collision-resistance of cSHAKE256 on the
+Z-Chain leaf and node customizations.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+\texttt{VerifyTxAuthEnvelope} checks structural validity, profile
+identity, suite, scheme, gate, Z-Chain binding, account / pubkey
+binding, expiry, nonce, and finally signature. The signature step is
+ML-DSA-65 verify against the resolved pubkey on the
+\texttt{SigningDigest()}; by EUF-CMA, an accepting verifier implies
+either a forgery (which contradicts the assumption that ML-DSA-65 is
+EUF-CMA-secure) or the existence of $\textsc{sk}$.
+
+Collision-resistance of cSHAKE256 on the transcript closes the
+``two envelopes one digest'' attack: a verifier accepting $E$ under the
+17-field transcript implies no $E' \ne E$ with
+\texttt{SigningDigest}$(E') = \texttt{SigningDigest}(E)$.
+
+The Z-Chain binding step rejects $E$ if $E.\texttt{ZIdentityRoot}$
+disagrees with the consensus-bound \texttt{IdentityRoot}. The reduction
+to Merkle collision-resistance is standard.
+\end{proof}
+
+\subsection{ZCHAIN-INCLUSION-SOUND: registry inclusion proof soundness}
+
+\begin{theorem}[ZCHAIN-INCLUSION-SOUND]
+\label{thm:zchain-inclusion}
+Let $P$ be a strict-PQ profile. Let $\rho$ be a \texttt{MerkleProof}
+accepted by \texttt{VerifyAuthPassed}$(P, \texttt{root}, \texttt{leaf},
+\rho)$ (\texttt{luxfi/consensus/protocol/zchain/registry/auth\_proof.go:118}).
+Then the \texttt{leaf} hash was committed in the Merkle tree
+identified by \texttt{root} via the path $\rho$.
+
+The reduction is to collision-resistance of cSHAKE256 on the leaf
+customization \texttt{LUX\_MERKLE\_LEAF\_V1} and the node customization
+\texttt{LUX\_MERKLE\_NODE\_V1}.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+The verifier walks the proof reconstructing the root via the leaf
+customization at the bottom and the node customization at each internal
+level. Distinct leaf and node customizations prevent the
+``second preimage on Merkle trees'' attack where a leaf hash is
+reinterpreted as an internal-node hash. Reconstructed root equality to
+\texttt{root} implies (under cSHAKE256 collision-resistance) that the
+\texttt{leaf} was committed via $\rho$. Conversely, any verifier-accepting
+proof either witnesses true inclusion or breaks cSHAKE256
+collision-resistance.
+\end{proof}
+
+\subsection{ROUND-DIGEST-CR: Q-Chain digest collision-resistance}
+
+\begin{theorem}[ROUND-DIGEST-CR]
+\label{thm:round-digest-cr}
+The function \texttt{ComputeRoundDigest} on \texttt{QBlock} is
+collision-resistant: for two distinct \texttt{QBlock} values $q_1 \ne
+q_2$, \texttt{ComputeRoundDigest}$(q_1) \ne$
+\texttt{ComputeRoundDigest}$(q_2)$ with probability $\ge 1 - 2^{-192}$
+against a polynomially-bounded quantum adversary.
+
+The reduction is to collision-resistance of cSHAKE256 on the 23-axis
+TupleHash256 transcript under customization \texttt{LUX\_QBLOCK\_V1}.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+\texttt{ComputeRoundDigest} is TupleHash256 over the 23-axis canonical
+byte serialisation under the customization. A collision in
+\texttt{ComputeRoundDigest} produces a collision in TupleHash256 in the
+$\textsc{cSHAKE256}$ domain. Quantum security of $\textsc{cSHAKE256}$ at
+output length 48 bytes (384 bits) is Grover-bounded at $2^{-192}$.
+\end{proof}
+
+\subsection{PULSAR-M-SOUND: finality signature soundness}
+
+\begin{theorem}[PULSAR-M-SOUND]
+\label{thm:pulsar-m-sound}
+Let $P$ be a strict-PQ profile. Let $\Sigma$ be a Pulsar-M-65 aggregate
+signature accepted by \texttt{Pulsar-M.Verify}$(\textsc{gpk}, m, \Sigma)$
+where \textsc{gpk} is the group public key for the committee bound in
+$\texttt{QBlock.ValidatorSetRoot}$ and $m$ is
+$\texttt{QBlock.ComputeRoundDigest}()$. Then either (i) at least 43 of
+the 64 committee parties contributed an honest partial signature, or
+(ii) the protocol identifies the misbehaving party via
+\texttt{abort}\cite{lp073}.
+
+The reduction is to the M-LWE assumption \cite{mlwe,regev2009} for
+soundness, the rejection-sampling slack
+$\eta_\varepsilon = 2.65$ for completeness, and BLAKE3-keyed MAC
+unforgeability for Round 1 authentication.
+\end{theorem}
+
+\begin{proof}[Proof sketch]
+Pulsar-M aggregates linearly: a verifier-accepting aggregate signature
+reconstructs $\mathbf{A} z - \tilde{\mathbf{b}} c$ in $R_\nu$ under the
+hint bound. By the two-round threshold ML-DSA argument
+\cite{dttf2024,thresholdraccoon}, soundness reduces to M-LWE.
+Identifiable abort \cite{lp073,corona2025} closes the ``one bad
+party blocks the round'' attack.
+\end{proof}
+
+\section{Conjunction: E2E PQ}
+
+\begin{theorem}[E2E-PQ-COVERAGE]
+\label{thm:e2e-coverage}
+Let $P$ be a strict-PQ profile. Let $\tau$ be a transaction that
+successfully closes a Q-Chain epoch under $P$. Then $\tau$ is bound, end
+to end, to FIPS 203 / 204 / 205 primitives and the SHA3 family, via:
+\begin{enumerate}[leftmargin=2em,nosep]
+  \item TX-AUTH-SOUND (Thm.~\ref{thm:tx-auth-sound}) for the
+    submission gate.
+  \item ZCHAIN-INCLUSION-SOUND (Thm.~\ref{thm:zchain-inclusion}) for
+    the registry lookup.
+  \item ROUND-DIGEST-CR (Thm.~\ref{thm:round-digest-cr}) for the
+    QBlock binding.
+  \item PULSAR-M-SOUND (Thm.~\ref{thm:pulsar-m-sound}) for the
+    finality cert.
+\end{enumerate}
+A Shor-capable adversary against the stack reduces to breaking one of:
+ML-DSA-65 (EUF-CMA / M-LWE), Pulsar-M-65 (M-LWE), cSHAKE256
+(collision-resistance), or the SHA3 family at $\ge 384$-bit output.
+\end{theorem}
+
+\section{Companion artefacts}
+
+\begin{itemize}[leftmargin=2em,nosep]
+  \item \texttt{StrictE2EPQ/Profile.lean} carries the Lean 4 statement of
+    Definition~\ref{def:strict-pq} and the
+    \texttt{strict\_pq\_implies\_e2e\_pq} proof.
+  \item \texttt{StrictE2EPQ/Coverage.lean} carries the 14-path coverage
+    theorem (Section~\ref{thm:e2e-coverage}).
+  \item \texttt{tla/StrictPQProfile.tla} carries the TLA+ state machine.
+  \item \texttt{property/strict\_pq\_test.go} carries the Go property
+    tests against \texttt{luxfi/consensus}.
+\end{itemize}
+
+\bibliographystyle{plain}
+\begin{thebibliography}{9}
+\bibitem{fips204}
+  NIST. \emph{FIPS 204: Module-Lattice-Based Digital Signature Standard}, 2024.
+
+\bibitem{dilithium}
+  Ducas et al. \emph{CRYSTALS-Dilithium: A Lattice-Based Digital Signature Scheme},
+  IACR TCHES, 2018.
+
+\bibitem{mlwe}
+  Lyubashevsky, Peikert, Regev. \emph{On Ideal Lattices and Learning with Errors
+  over Rings}, JACM, 2013.
+
+\bibitem{regev2009}
+  Regev. \emph{On Lattices, Learning with Errors, Random Linear Codes, and
+  Cryptography}, JACM, 2009.
+
+\bibitem{dttf2024}
+  Anonymous. \emph{Two-Round Threshold Signature from Algebraic One-More
+  Learning with Errors}, EUROCRYPT 2024.
+
+\bibitem{thresholdraccoon}
+  del Pino, Katsumata, Maller, Mouhartem, Prest, Servera. \emph{Threshold
+  Raccoon: Practical Threshold Signatures from Standard Lattice Assumptions},
+  EUROCRYPT 2024.
+
+\bibitem{corona2025}
+  \emph{Corona: A Lattice-Based Threshold Signature for Post-Quantum
+  Consensus}, IEEE S\&P 2025.
+
+\bibitem{lp073}
+  Lux Core Team. \emph{LP-073: Pulsar Lattice-Based Threshold Signatures}, 2026.
+\end{thebibliography}
+
+\end{document}
