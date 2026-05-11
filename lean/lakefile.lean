@@ -175,5 +175,12 @@ lean_lib Vault where
     `Vault.KeyIsolation
   ]
 
+lean_lib StrictE2EPQ where
+  srcDir := "."
+  roots := #[
+    `StrictE2EPQ.Profile,
+    `StrictE2EPQ.Coverage
+  ]
+
 require mathlib from git
   "https://github.com/leanprover-community/mathlib4" @ "v4.14.0"
