@@ -10,12 +10,13 @@ Machine-checked proofs, protocol specifications, and property tests for the Lux 
 
 | Tool | Files | Path |
 |------|------:|------|
-| Lean 4 | 72 | `lean/` |
-| TLA+ | 22 | `tla/` |
+| Lean 4 | 74 | `lean/` |
+| TLA+ | 24 | `tla/` |
 | Halmos | 10 | `halmos/` |
 | Tamarin | 6 | `tamarin/` |
-| Go property tests | 4 | `property/` |
-| **Total** | **114** | |
+| Go property tests | 5 | `property/` |
+| LaTeX soundness | 1 | `strict-e2e-pq/strict-e2e-pq-soundness.tex` |
+| **Total** | **120** | |
 
 ## Build and Run
 
@@ -164,6 +165,13 @@ cd property && GOWORK=off go test ./...
 | `Vault/KeyIsolation.lean` | Key isolation |
 | `Main.lean` | Entry point |
 
+### Strict-E2E-PQ (2)
+
+| File | Property |
+|------|----------|
+| `StrictE2EPQ/Profile.lean` | `IsE2EPQ profile` proposition; production strict-PQ instance satisfies it |
+| `StrictE2EPQ/Coverage.lean` | 14-path surface coverage theorem; bridge invariant; Forbid* relaxations break IsE2EPQ |
+
 ## TLA+ Specifications (22 files)
 
 12 specs + 10 model checker configs (`MC_*.tla`):
@@ -172,6 +180,7 @@ cd property && GOWORK=off go test ./...
 |------|-----------|--------|
 | `Wave.tla` | `MC_Wave.tla` | Wave consensus |
 | `Quasar.tla` | `MC_Quasar.tla` | Quasar hybrid consensus |
+| `StrictPQProfile.tla` | `MC_StrictPQProfile.tla` | LUX_STRICT_E2E_PQ profile lifecycle |
 | `Teleport.tla` | `MC_Teleport.tla` | Cross-chain teleport |
 | `AMM.tla` | `MC_AMM.tla` | AMM invariants |
 | `Orderbook.tla` | `MC_Orderbook.tla` | Order book matching |
@@ -208,7 +217,7 @@ cd property && GOWORK=off go test ./...
 | `RNSHybridHandshake.spthy` | RNS hybrid handshake |
 | `ZKVerification.spthy` | Zero-knowledge verification |
 
-## Go Property Tests (4 files)
+## Go Property Tests (5 files)
 
 | File | Target |
 |------|--------|
@@ -216,6 +225,7 @@ cd property && GOWORK=off go test ./...
 | `fhe_noise_test.go` | FHE noise budget |
 | `quasar_test.go` | Quasar consensus |
 | `replication_test.go` | Replication correctness |
+| `strict_pq_test.go` | LUX_STRICT_E2E_PQ IsE2EPQ + relaxation breakage + bridge invariant |
 
 ## Methodology
 
