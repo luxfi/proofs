@@ -28,7 +28,7 @@ import Mathlib.Tactic
 namespace Crypto.PulsarM.Shamir
 
 /-- The FIPS 204 prime q = 2^23 - 2^13 + 1. -/
-def q : Nat := 8_380_417
+def q : Nat := 8380417
 
 /-- The seed size in bytes (FIPS 204 fixes this at 32 for every
     parameter level). -/
@@ -89,15 +89,27 @@ axiom shamir_it_resilience :
     the denominator (i - j) mod q is non-zero. This is what
     enables the Lagrange basis computation to use a single modular
     inverse per Lagrange coefficient (Fermat's little theorem
-    over the prime q). -/
+    over the prime q).
+
+    Proof: the wrap-around form `(q + i) - j` lives in `[1, 2q-1]`
+    because `i ∈ [1, q)` and `j ∈ [1, q)` give `q + i - j ∈ [1, 2q-1]`.
+    Modulo `q`, the only way to hit zero is if `q + i - j` is exactly
+    `q` (the only multiple of `q` in that range), which forces
+    `i = j` -- contradicting `hne`. -/
 theorem lagrange_denom_nonzero (i j : Nat) (hi : 1 ≤ i ∧ i < q)
     (hj : 1 ≤ j ∧ j < q) (hne : i ≠ j) :
     ((q + i) - j) % q ≠ 0 := by
-  -- A formal proof would discharge the modular arithmetic here.
-  -- The statement is mechanically true because q is prime, i and j
-  -- both lie in [1, q), and they are distinct -- so |i - j| ∈ [1, q)
-  -- and (i - j) mod q is non-zero.
-  sorry
+  -- Plan: (q + i) - j is a Nat in [1, 2q-1] under the bounds on i, j.
+  -- Any multiple of q in that range must equal q exactly, which forces
+  -- i = j and contradicts hne. omega closes the linear arithmetic once
+  -- we expose the divisor witness and unfold q to a concrete numeral.
+  obtain ⟨_, hi_hi⟩ := hi
+  obtain ⟨_, hj_hi⟩ := hj
+  intro hzero
+  have hdvd : q ∣ ((q + i) - j) := Nat.dvd_of_mod_eq_zero hzero
+  rcases hdvd with ⟨k, hk⟩
+  unfold q at hi_hi hj_hi hk
+  omega
 
 -- ===========================================================================
 -- Scale guarantees
@@ -110,12 +122,12 @@ theorem max_committee_is_q_minus_one : maxCommittee = q - 1 := by
   rfl
 
 /-- **The canonical extreme committee size is well below the cap.** -/
-theorem target_within_cap : 1_111_111 ≤ maxCommittee := by
+theorem target_within_cap : 1111111 ≤ maxCommittee := by
   unfold maxCommittee q
   decide
 
 /-- **86.7% of GF(q)'s capacity remains beyond N* = 1 111 111.** -/
-theorem headroom_above_target : maxCommittee - 1_111_111 = 7_269_305 := by
+theorem headroom_above_target : maxCommittee - 1111111 = 7269305 := by
   unfold maxCommittee q
   decide
 
