@@ -4,7 +4,7 @@
 // Property-based tests for Quasar Consensus invariants.
 //
 // These tests verify core safety and correctness properties of the
-// three-layer (BLS + Ringtail + ML-DSA) consensus without importing
+// three-layer (BLS + Corona + ML-DSA) consensus without importing
 // the full consensus package. We re-derive the critical invariants
 // from first principles using only the standard library.
 //
@@ -181,7 +181,7 @@ func TestBLSPlusMLDSA_DualSafety(t *testing.T) {
 // ===========================================================================
 
 // TestQuantum_AllThreeRequired verifies that quantum mode requires BLS AND
-// Ringtail AND ML-DSA to all independently reach quorum. Missing any one
+// Corona AND ML-DSA to all independently reach quorum. Missing any one
 // layer blocks finalization.
 func TestQuantum_AllThreeRequired(t *testing.T) {
 	layers := layerSet{bls: true, rt: true, mldsa: true}
@@ -230,7 +230,7 @@ func TestQuantum_SingleCompromiseInsufficient(t *testing.T) {
 			t.Fatalf("n=%d: BLS compromised but forgery succeeded", n)
 		}
 
-		// Scenario 2: Ringtail compromised
+		// Scenario 2: Corona compromised
 		if allLayersQuorum(layerSet{bls: true, rt: true, mldsa: true},
 			f, n, f, n, 2, 3) {
 			t.Fatalf("n=%d: RT compromised but forgery succeeded", n)
