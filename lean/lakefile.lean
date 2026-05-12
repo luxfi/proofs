@@ -45,7 +45,7 @@ lean_lib Crypto where
     `Crypto.BLS,
     `Crypto.DEKDerivation,
     `Crypto.FROST,
-    `Crypto.Ringtail,
+    `Crypto.Corona,
     `Crypto.MLDSA,
     `Crypto.Hybrid,
     `Crypto.SLHDSA,

@@ -10,7 +10,7 @@
   - luxcpp/crypto/pulsar/dkg2/ — C++ surface (ffi-go), KAT replay
   - papers/lp-073-pulsar/sections/07-pedersen-dkg.tex — Hiding/Binding proofs
 
-  Replaces upstream Ringtail's pseudoinverse-recoverable Feldman commit
+  Replaces upstream Corona's pseudoinverse-recoverable Feldman commit
   C_k = A · NTT(c_k) with the Pedersen commit
     C_{i,k} = A · NTT(c_{i,k}) + B · NTT(r_{i,k}).
 
@@ -78,7 +78,7 @@ structure Round1Output (rp : RingParams) (tp : ThresholdParams) where
 def CommitDigest := Fin 32 → Fin 256
 
 -- ===========================================================================
--- Hardness assumptions (axioms, modeled as in Crypto/Ringtail.lean)
+-- Hardness assumptions (axioms, modeled as in Crypto/Corona.lean)
 -- ===========================================================================
 
 /-- Decisional Module Learning-With-Errors on the matrix B with secret
@@ -186,7 +186,7 @@ theorem disqualification_at_least_one (t : Nat) :
     `constTimePolyEqual` helper in pulsar/dkg2/dkg2.go.
 
     This addresses Findings 5/6 in
-    luxcpp/crypto/ringtail/RED-DKG-REVIEW.md (the upstream verifier
+    luxcpp/crypto/corona/RED-DKG-REVIEW.md (the upstream verifier
     short-circuits on first mismatch and so leaks the location of any
     planted divergence). -/
 axiom verifier_constant_time :

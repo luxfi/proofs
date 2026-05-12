@@ -6,7 +6,7 @@
 
   Maps to:
   - lux/threshold/protocols/lss: LSS implementation
-  - Used by: CMP, FROST, TFHE threshold, Ringtail threshold
+  - Used by: CMP, FROST, TFHE threshold, Corona threshold
 
   Properties:
   - Correctness: t shares reconstruct the secret

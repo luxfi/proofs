@@ -4,7 +4,7 @@
   Quasar is the post-quantum consensus engine combining three independent
   cryptographic hardness assumptions:
   - BLS12-381 signature aggregation (ECDL hardness, classical)
-  - Ringtail Ring-LWE threshold signatures (Module-LWE hardness, PQ)
+  - Corona Ring-LWE threshold signatures (Module-LWE hardness, PQ)
   - ML-DSA-65 identity signatures (Module-LWE + Module-SIS hardness, PQ, FIPS 204)
 
   This file proves the composition is sound: the Quasar signature scheme
@@ -16,8 +16,8 @@
   Modes (each layer independently toggleable):
   - BLS-only: classical consensus
   - BLS + ML-DSA: dual PQ (single-round PQ sigs)
-  - BLS + Ringtail: dual PQ (2-round threshold)
-  - BLS + Ringtail + ML-DSA: Quasar (maximum security)
+  - BLS + Corona: dual PQ (2-round threshold)
+  - BLS + Corona + ML-DSA: Quasar (maximum security)
 
   Maps to:
   - lux/consensus/protocol/quasar/quasar.go: TripleSignRound1, SignMessage
@@ -29,12 +29,12 @@ import Mathlib.Tactic
 
 namespace Consensus.Quasar
 
-/-- QuasarCert: Quasar-signed by BLS + Ringtail + ML-DSA -/
+/-- QuasarCert: Quasar-signed by BLS + Corona + ML-DSA -/
 structure QuasarCert where
   round : Nat
   value : Nat
   blsSigs : Nat       -- count of BLS signatures (classical)
-  ringtailSigs : Nat   -- count of Ringtail signatures (PQ lattice)
+  coronaSigs : Nat   -- count of Corona signatures (PQ lattice)
   mldsaSigs : Nat      -- count of ML-DSA signatures (PQ identity)
   quorum : Nat         -- required threshold (2f+1)
 
@@ -42,16 +42,16 @@ structure QuasarCert where
 inductive Mode
   | blsOnly        -- classical only
   | blsMldsa       -- BLS + ML-DSA (dual PQ)
-  | blsRingtail    -- BLS + Ringtail (dual PQ threshold)
-  | triple         -- BLS + Ringtail + ML-DSA (maximum security)
+  | blsCorona    -- BLS + Corona (dual PQ threshold)
+  | triple         -- BLS + Corona + ML-DSA (maximum security)
 
 /-- A certificate is valid for a given mode -/
 def isValid (c : QuasarCert) (mode : Mode) : Bool :=
   match mode with
   | .blsOnly     => c.blsSigs ≥ c.quorum
   | .blsMldsa    => c.blsSigs ≥ c.quorum && c.mldsaSigs ≥ c.quorum
-  | .blsRingtail => c.blsSigs ≥ c.quorum && c.ringtailSigs ≥ c.quorum
-  | .triple      => c.blsSigs ≥ c.quorum && c.ringtailSigs ≥ c.quorum && c.mldsaSigs ≥ c.quorum
+  | .blsCorona => c.blsSigs ≥ c.quorum && c.coronaSigs ≥ c.quorum
+  | .triple      => c.blsSigs ≥ c.quorum && c.coronaSigs ≥ c.quorum && c.mldsaSigs ≥ c.quorum
 
 /-- Finality requires valid certificate under the configured mode -/
 def isFinalized (c : QuasarCert) (mode : Mode) : Prop :=
@@ -64,7 +64,7 @@ def isFinalized (c : QuasarCert) (mode : Mode) : Prop :=
 /-- QUASAR SAFETY: All three layers must reach quorum.
     Attacker must break ECDL AND Module-LWE AND Module-SIS. -/
 theorem triple_requires_all (c : QuasarCert) (h : isValid c .triple = true) :
-    c.blsSigs ≥ c.quorum ∧ c.ringtailSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum := by
+    c.blsSigs ≥ c.quorum ∧ c.coronaSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum := by
   simp [isValid, Bool.and_eq_true, Nat.ble_eq] at h
   exact ⟨h.1.1, h.1.2, h.2⟩
 
@@ -74,32 +74,32 @@ theorem dual_mldsa_requires_both (c : QuasarCert) (h : isValid c .blsMldsa = tru
   simp [isValid, Bool.and_eq_true, Nat.ble_eq] at h
   exact h
 
-/-- DUAL BLS+RINGTAIL SAFETY: Both BLS AND Ringtail must reach quorum. -/
-theorem dual_ringtail_requires_both (c : QuasarCert) (h : isValid c .blsRingtail = true) :
-    c.blsSigs ≥ c.quorum ∧ c.ringtailSigs ≥ c.quorum := by
+/-- DUAL BLS+CORONA SAFETY: Both BLS AND Corona must reach quorum. -/
+theorem dual_corona_requires_both (c : QuasarCert) (h : isValid c .blsCorona = true) :
+    c.blsSigs ≥ c.quorum ∧ c.coronaSigs ≥ c.quorum := by
   simp [isValid, Bool.and_eq_true, Nat.ble_eq] at h
   exact h
 
 /-- QUANTUM RESISTANCE (Quasar): Even if BLS is broken (quantum computer),
-    both Ringtail AND ML-DSA certificates still hold independently.
+    both Corona AND ML-DSA certificates still hold independently.
     An attacker who can forge BLS signatures still cannot forge either PQ scheme. -/
 theorem quantum_safe_triple (c : QuasarCert)
     (h : isValid c .triple = true) :
-    c.ringtailSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum := by
+    c.coronaSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum := by
   have ⟨_, h_rt, h_mldsa⟩ := triple_requires_all c h
   exact ⟨h_rt, h_mldsa⟩
 
 /-- INDEPENDENT HARDNESS: The three assumptions are independent.
-    Breaking ECDL (quantum) does not help with Module-LWE (Ringtail)
+    Breaking ECDL (quantum) does not help with Module-LWE (Corona)
     or Module-LWE+SIS (ML-DSA). Breaking one lattice scheme does not
     help with BLS. We model this as: PQ quorum holds regardless of BLS state. -/
 theorem independent_pq_from_classical (c : QuasarCert)
-    (h_ringtail : c.ringtailSigs ≥ c.quorum)
+    (h_corona : c.coronaSigs ≥ c.quorum)
     (h_mldsa : c.mldsaSigs ≥ c.quorum)
     -- BLS may or may not hold (broken by quantum)
     (_h_bls : True) :
-    c.ringtailSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum :=
-  ⟨h_ringtail, h_mldsa⟩
+    c.coronaSigs ≥ c.quorum ∧ c.mldsaSigs ≥ c.quorum :=
+  ⟨h_corona, h_mldsa⟩
 
 /-- MODE SUBSUMPTION: Quasar mode is strictly stronger than all dual modes. -/
 theorem triple_implies_dual_mldsa (c : QuasarCert) (h : isValid c .triple = true) :
@@ -108,8 +108,8 @@ theorem triple_implies_dual_mldsa (c : QuasarCert) (h : isValid c .triple = true
   simp [isValid, Bool.and_eq_true, Nat.ble_eq]
   exact ⟨h_bls, h_mldsa⟩
 
-theorem triple_implies_dual_ringtail (c : QuasarCert) (h : isValid c .triple = true) :
-    isValid c .blsRingtail = true := by
+theorem triple_implies_dual_corona (c : QuasarCert) (h : isValid c .triple = true) :
+    isValid c .blsCorona = true := by
   have ⟨h_bls, h_rt, _⟩ := triple_requires_all c h
   simp [isValid, Bool.and_eq_true, Nat.ble_eq]
   exact ⟨h_bls, h_rt⟩

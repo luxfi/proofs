@@ -10,7 +10,7 @@
 
   1. BLS12-381 batch signature verification (10x GPU speedup)
   2. Post-quantum signature verification (ML-DSA NTT on GPU)
-  3. Hybrid finality: parallel BLS + Ringtail verification
+  3. Hybrid finality: parallel BLS + Corona verification
   4. Validator set scaling with GPU batch verification
   5. Block production pipelining with GPU precomputation
 
@@ -30,7 +30,7 @@ Consensus requires verifying signatures from validators.
 Each block contains `v` validator signatures.
 BLS allows aggregation into a single pairing check,
 but batch verification of multiple blocks still benefits from GPU.
-Hybrid (Quasar) requires BOTH BLS and Ringtail verification. -/
+Hybrid (Quasar) requires BOTH BLS and Corona verification. -/
 
 /-- BLS batch verification: verifying `n` aggregate signatures
     requires `n + 1` pairing operations (n pairings + 1 for generator).
@@ -46,12 +46,12 @@ theorem bls_batch_parallel (n p : Nat) (hp : 0 < p) :
 theorem bls_aggregation_savings (v : Nat) (hv : v ≥ 2) :
     v - 2 ≥ 0 := by omega
 
-/-- Hybrid finality (Quasar): both BLS and Ringtail must verify.
+/-- Hybrid finality (Quasar): both BLS and Corona must verify.
     GPU runs them in parallel on separate core groups.
-    Total time = max(bls_time, ringtail_time).
+    Total time = max(bls_time, corona_time).
     We prove parallel is never slower than sequential. -/
-theorem hybrid_parallel_speedup (bls_time ringtail_time : Nat) :
-    max bls_time ringtail_time ≤ bls_time + ringtail_time := by
+theorem hybrid_parallel_speedup (bls_time corona_time : Nat) :
+    max bls_time corona_time ≤ bls_time + corona_time := by
   omega
 
 /-- Validator scaling: with `v` validators, each block requires
@@ -87,7 +87,7 @@ theorem quorum_gpu_verify (n f : Nat) (hf : 3 * f < n)
     quorum ≤ n := by omega
 
 /-- GPU memory per validator: each BLS public key is 48 bytes,
-    each Ringtail public key is ~1280 bytes (ML-DSA-65).
+    each Corona public key is ~1280 bytes (ML-DSA-65).
     With `v` validators, GPU needs v * (48 + 1280) bytes.
     For 1000 validators: ~1.3 MB (fits in GPU cache). -/
 theorem validator_memory (v key_size : Nat) :

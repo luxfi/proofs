@@ -55,7 +55,7 @@ registry safety are the three active proof tracks.
 ### Quasar Consensus (`lean/Consensus/Quasar.lean`)
 Proves the composition of three independent cryptographic hardness assumptions:
 - **BLS12-381** (ECDL, classical)
-- **Ringtail Ring-LWE** (Module-LWE, post-quantum)
+- **Corona Ring-LWE** (Module-LWE, post-quantum)
 - **ML-DSA-65 FIPS 204** (Module-LWE + Module-SIS, post-quantum)
 
 Theorems:
@@ -66,12 +66,12 @@ Theorems:
 - `cert_intersection`: two valid certs share honest signers (BFT)
 - `unique_per_round`: at most one value certified per round
 
-Four modes: BLS-only, BLS+ML-DSA, BLS+Ringtail, BLS+Ringtail+ML-DSA (triple).
+Four modes: BLS-only, BLS+ML-DSA, BLS+Corona, BLS+Corona+ML-DSA (triple).
 
 ### Crypto Proofs (`lean/Crypto/`)
 - `BLS.lean` — BLS12-381 aggregate signature unforgeability
 - `MLDSA.lean` — ML-DSA-65 (FIPS 204) correctness
-- `Ringtail.lean` — Ring-LWE threshold signature security
+- `Corona.lean` — Ring-LWE threshold signature security
 - `Hybrid.lean` — Triple hybrid identity sig (Ed25519 + ML-DSA + SLH-DSA)
 - `MLKEM.lean` — ML-KEM-768 key encapsulation
 - `FROST.lean` — FROST threshold signing

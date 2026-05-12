@@ -60,9 +60,9 @@ any valid cert.  We also address the rejection of threshold ML-DSA in
 3.0 (App.~A), the GPU verifier in LP-132 (\S7), and the concrete
 post-quantum parameter analysis (App.~E).
 
-This proof establishes soundness of the QuasarCert wire format defined in LP-020, with constituent layers specified in LP-070 (ML-DSA), LP-073 (Pulsar; Ringtail-derived lattice threshold kernel with key-era lifecycle), and LP-075 (BLS aggregate).
+This proof establishes soundness of the QuasarCert wire format defined in LP-020, with constituent layers specified in LP-070 (ML-DSA), LP-073 (Pulsar; Corona-derived lattice threshold kernel with key-era lifecycle), and LP-075 (BLS aggregate).
 
-\paragraph{Naming evolution (2026-03).} LP-073 was originally titled ``Ringtail.'' It now describes \textbf{Pulsar}, the Lux production fork at \texttt{github.com/luxfi/pulsar}, which inherits Ringtail's Sign1/Sign2/Combine math byte-equal but adds a key-era lifecycle (LSS-managed generations, verifiable resharing, activation certificate, rollback) suitable for permissionless validator-set rotation. Throughout this proof, ``Ringtail'' refers to the lattice signing primitive (the Sign1/Sign2/Combine math); ``Pulsar'' refers to the systems-layer composition that wraps it for dynamic permissionless deployment. Soundness results below derive from the SUF-CMA reduction of the underlying Ringtail signing scheme; lifecycle additions (resharing, activation, rollback) are orthogonal to the per-signature unforgeability argument and are addressed separately in LP-073's lifecycle section.
+\paragraph{Naming evolution (2026-03).} LP-073 was originally titled ``Corona.'' It now describes \textbf{Pulsar}, the Lux production fork at \texttt{github.com/luxfi/pulsar}, which inherits Corona's Sign1/Sign2/Combine math byte-equal but adds a key-era lifecycle (LSS-managed generations, verifiable resharing, activation certificate, rollback) suitable for permissionless validator-set rotation. Throughout this proof, ``Corona'' refers to the lattice signing primitive (the Sign1/Sign2/Combine math); ``Pulsar'' refers to the systems-layer composition that wraps it for dynamic permissionless deployment. Soundness results below derive from the SUF-CMA reduction of the underlying Corona signing scheme; lifecycle additions (resharing, activation, rollback) are orthogonal to the per-signature unforgeability argument and are addressed separately in LP-073's lifecycle section.
 \end{abstract}
 
 %% ==================================================================
@@ -109,7 +109,7 @@ where:
   \item $\sigma_{\mathrm{BLS}}$: BLS12-381 aggregate from validators of
     stake $\geq \tau S$ on $\mathsf{subj}$, verified against
     $\mathsf{pchain\_validator\_root}$;
-  \item $\sigma_{\mathrm{RT}}$: Ringtail two-round threshold signature
+  \item $\sigma_{\mathrm{RT}}$: Corona two-round threshold signature
     aggregating shares of stake $\geq \tau S$ on $\mathsf{subj}$,
     verified against $\mathsf{qchain\_ceremony\_root}$;
   \item $\pi_{\mathrm{ZK}}$: Z-Chain Groth16 proof that $n$ ML-DSA-65
@@ -129,10 +129,10 @@ We isolate one assumption per lane.
     aggregate signatures with proof-of-possession are EUF-CMA under
     co-CDH.
   \item \textbf{Module-LWE} (post-quantum).  $\mathsf{MLWE}_{q,k,\ell,
-    \chi}$ for the Ringtail / ML-DSA-65 parameter sets in App.~E.
+    \chi}$ for the Corona / ML-DSA-65 parameter sets in App.~E.
   \item \textbf{Module-SIS} (post-quantum).  $\mathsf{MSIS}_{q,k,\beta}$
     for the same parameter sets.  Combined with MLWE, gives EUF-CMA for
-    ML-DSA-65 (FIPS~204) and SUF-CMA for Ringtail.
+    ML-DSA-65 (FIPS~204) and SUF-CMA for Corona.
   \item \textbf{KEA / AGM} (auxiliary).  Groth16 is knowledge-sound in
     the algebraic group model on BLS12-381.
 \end{enumerate}
@@ -149,7 +149,7 @@ A non-uniform polynomial-time adversary $\mathcal{A}$ controls a
 subset $F \subset \mathcal{V}$ of validators with stake share $< \tau$.
 $\mathcal{A}$ is given:
 \begin{itemize}[nosep]
-  \item the public keys of all validators (BLS, Ringtail, ML-DSA);
+  \item the public keys of all validators (BLS, Corona, ML-DSA);
   \item signing oracles for the corrupt set $F$;
   \item the public verification key $\mathsf{vk}$ for the Z-Chain
     Groth16 circuit;
@@ -174,7 +174,7 @@ The proofs in Sections~\ref{sec:soundness}--\ref{sec:replay} are stated
 under \emph{static} corruption.  Adaptive corruption is handled in
 App.~C via secure-erasure or programmable-RO hybrids, with at most an
 $O(n \cdot Q_H)$ multiplicative loss.  All Lux validators perform
-Go-side memory zeroing of Ringtail signing randomness; HSM-backed
+Go-side memory zeroing of Corona signing randomness; HSM-backed
 T-Chain signing on the live network provides hardware-enforced
 erasures, so Cor.~\ref{cor:adaptive-erasure} applies tightly.
 \end{remark}
@@ -220,10 +220,10 @@ $\mathrm{stk}(S_{\mathrm{BLS}}^\star) \geq \tau S$.  Forging without
 $\tau$ stake costs $\epsilon_{\mathrm{BLS}}^{\mathrm{coCDH}}$.
 
 \medskip\noindent
-\textbf{Lane 2 (Ringtail).}  $\sigma_{\mathrm{RT}}^\star$ is the
-output of the two-round Ringtail signing protocol bound to
+\textbf{Lane 2 (Corona).}  $\sigma_{\mathrm{RT}}^\star$ is the
+output of the two-round Corona signing protocol bound to
 $\mathsf{qchain\_ceremony\_root}$ (i.e., the verification key produced
-by the Q-Chain DKG).  By the SUF-CMA proof of Ringtail under MLWE/MSIS,
+by the Q-Chain DKG).  By the SUF-CMA proof of Corona under MLWE/MSIS,
 a valid $\sigma_{\mathrm{RT}}^\star$ on $\mathsf{subj}^\star$ implies a
 share set $S_{\mathrm{RT}}^\star$ with
 $\mathrm{stk}(S_{\mathrm{RT}}^\star) \geq \tau S$.  Forging costs at
@@ -306,7 +306,7 @@ $\mathsf{subj}$.  Once $\mathsf{subj}$ is fixed for a round (which
 requires only the chain-state roots, all available at round start),
 each lane runs a separate aggregation network:
 BLS aggregator on the P-Chain validator network;
-Ringtail two-round protocol on the Q-Chain DKG mesh;
+Corona two-round protocol on the Q-Chain DKG mesh;
 Z-Chain Groth16 prover (epoch-amortised, asynchronous to block
 production).  Honest validators contribute to all lanes they hold keys
 for; under stake $\geq \tau$ each lane independently completes within
@@ -319,7 +319,7 @@ The Z-Chain proof, in particular, is generated by the Z-Chain prover
 service over an epoch window and lands asynchronously: the epoch's
 $\pi_{\mathrm{ZK}}$ becomes part of every QuasarCert in that epoch
 once posted.  This is the LP-020 Section~6.4 ``epoch ZK landing''
-mechanism and does not block per-block finality of the BLS+Ringtail
+mechanism and does not block per-block finality of the BLS+Corona
 core.
 \end{proof}
 
@@ -354,7 +354,7 @@ that verifies against $\mathsf{zchain\_vk\_root}$.
 
 \medskip\noindent
 \textit{Forging $\sigma_{\mathrm{RT}}$ quantumly} requires breaking
-MLWE or MSIS at the Ringtail dimension $d = 2048$, modulus
+MLWE or MSIS at the Corona dimension $d = 2048$, modulus
 $\log_2 q = 48$ (App.~E).  The best known quantum cost is BDGL sieving
 with Grover speedup, giving $T_{\mathrm{quantum}} \geq 2^{130}$
 operations.
@@ -389,7 +389,7 @@ final.
 
 \begin{remark}[Combined three-lane PQ guarantee]
 The full QuasarCert remains sound against $\mathcal{A}_Q$ as long as
-\emph{at least one} of $\{$Ringtail, ML-DSA path$\}$ survives.
+\emph{at least one} of $\{$Corona, ML-DSA path$\}$ survives.
 Equivalently: the survival predicate is ``1 of 2 PQ pillars''.  This
 matches the pq-finality-no-bls.tex Proposition (Hedged PQ security)
 under the conjunction ``MLWE hard $\lor$ MSIS hard,'' and is the
@@ -437,7 +437,7 @@ $H_{\mathbb{G}_2}(\mathsf{subj}_1) = H_{\mathbb{G}_2}(\mathsf{subj}_2)$
 negligible.
 
 \medskip\noindent
-\textbf{Ringtail.}  The Ringtail challenge is
+\textbf{Corona.}  The Corona challenge is
 $c = H(\mathbf{w}, \mathsf{subj})$.  If $\sigma_{\mathrm{RT}}$ verifies
 for both subjects with the same commitment $\mathbf{w}$, then
 $H(\mathbf{w}, \mathsf{subj}_1) = H(\mathbf{w}, \mathsf{subj}_2)$,
@@ -520,7 +520,7 @@ the engineering boundary.
 %% ==================================================================
 
 This section formalises the lifecycle properties of LP-073 Pulsar that
-sit \emph{above} the per-signature SUF-CMA argument. The Ringtail kernel
+sit \emph{above} the per-signature SUF-CMA argument. The Corona kernel
 of Pulsar is treated as an oracle that produces a signature
 $\sigma_{\mathrm{RT}}$ verifying under
 $\mathsf{GK} = (\mathbf{A}, \tilde{\mathbf{b}})$ given $\geq t$ shares
@@ -738,14 +738,14 @@ identity~\eqref{eq:lagrange}.
 \begin{proof}
 Forward direction. If $\Pi'$ satisfies~\eqref{eq:lagrange}, then by
 Lemma~\ref{lem:gk-identical} the GroupKey is byte-identical, and the
-honest threshold signing protocol (Ringtail Round 1 / Round 2) on the
+honest threshold signing protocol (Corona Round 1 / Round 2) on the
 new shares produces a $\sigma$ that verifies under the same
 $(\mathbf{A}, \tilde{\mathbf{b}})$. $\mathsf{VerifyActivation}$
 accepts.
 
 Reverse direction. If $\mathsf{VerifyActivation}$ accepts, then by the
-SUF-CMA reduction of Ringtail under MLWE/MSIS (Theorem~5.1 of
-LP-073 below, i.e.\ Theorem~\ref{thm:main} restricted to the Ringtail
+SUF-CMA reduction of Corona under MLWE/MSIS (Theorem~5.1 of
+LP-073 below, i.e.\ Theorem~\ref{thm:main} restricted to the Corona
 lane), there exists a share set $\{\mathbf{s}'_v\}_{v \in V'}$ of stake
 $\geq t'$ that produced the signature, and these shares jointly
 recombine to the master secret $\mathbf{s}$ via Lagrange interpolation.
@@ -798,7 +798,7 @@ each tracked in LP-020.
 \bibitem{boneh2001short} D.~Boneh, B.~Lynn, H.~Shacham, ``Short
   Signatures from the Weil Pairing,'' \emph{ASIACRYPT}, 2001.
 
-\bibitem{ringtail} Z.~Kelling, V.~Seesahai, ``Ringtail: Lattice-Based
+\bibitem{corona} Z.~Kelling, V.~Seesahai, ``Corona: Lattice-Based
   PQ Threshold Signatures for Blockchain Consensus,''
   Lux Industries, 2024.
 
@@ -1153,11 +1153,11 @@ erased sensitive state before corruption (secure erasures).
 
 \begin{remark}
 Theorem~\ref{thm:main} holds only under static corruption.  The proofs
-of Ringtail SUF-CMA~\cite{ringtail} and BLS
+of Corona SUF-CMA~\cite{corona} and BLS
 EUF-CMA~\cite{boneh2001short} both use rewinding-based extractors
 that require the corrupted set to be fixed before the simulation
 begins.  In the adaptive model, the adversary can corrupt a validator
-\emph{after} seeing its Ringtail Round~1 commitment, learning the
+\emph{after} seeing its Corona Round~1 commitment, learning the
 signing randomness $\mathbf{y}_i$ and secret share $\mathbf{s}_i$.
 \end{remark}
 
@@ -1175,7 +1175,7 @@ We apply the Fischlin transform~\cite{fischlin2005}: the simulator
 programs the random oracle $H$ so that upon adaptive corruption of
 $v_i$, the simulated signing transcripts remain consistent with the
 adversary's view.  Per-component: BLS uses RO programming to embed a
-co-CDH challenge at the corruption point (loss $O(n)$); Ringtail
+co-CDH challenge at the corruption point (loss $O(n)$); Corona
 programs $H$ on the round-1 commitment so the adversary's view is
 extractable, then solves a linear system over $R_q$ on corruption
 (loss $O(n)$); Groth16 in the AGM is rewinding-free and adaptively
@@ -1196,7 +1196,7 @@ which is negligible for $\lambda = 128$ when $n \cdot Q_H < 2^{60}$
 \begin{corollary}[Adaptive soundness, erasure model]
 \label{cor:adaptive-erasure}
 If honest validators erase signing randomness
-($\mathbf{y}_i$, PRF state) after each Ringtail round completes,
+($\mathbf{y}_i$, PRF state) after each Corona round completes,
 then Theorem~\ref{thm:main} extends to adaptive corruption without
 the programmable RO assumption, with no additional security loss.
 \end{corollary}
@@ -1320,9 +1320,9 @@ NFS).  Quantum security is $0$ in polynomial time once a
 cryptographically relevant quantum computer exists, by Shor on the
 underlying $\mathbb{G}_1, \mathbb{G}_2$.
 
-\subsection{Lane 2: Ringtail (Module-LWE / Module-SIS)}
+\subsection{Lane 2: Corona (Module-LWE / Module-SIS)}
 
-Parameter set from~\cite{ringtail}:
+Parameter set from~\cite{corona}:
 
 \begin{center}
 \begin{tabular}{lll}
@@ -1341,7 +1341,7 @@ Challenge weight & $\kappa$    & 23 \\
 \end{tabular}
 \end{center}
 
-The Module-LWE instance underlying Ringtail has effective lattice
+The Module-LWE instance underlying Corona has effective lattice
 dimension $d = M \times N = 8 \times 256 = 2\,048$ over
 $\mathbb{Z}_q$.
 
@@ -1400,7 +1400,7 @@ ML-DSA-65   & 1280 & 23 & $\approx 360$
   & $\geq 2^{128}$ \\
 ML-KEM-768  & 768  & 12 & $\approx 340$
   & $\geq 2^{128}$ \\
-Ringtail    & 2048 & 48 & $\approx 430$
+Corona    & 2048 & 48 & $\approx 430$
   & $\geq 2^{130}$ \\
 BLS12-381   & --   & -- & --
   & $0$ (Shor) \\
@@ -1413,7 +1413,7 @@ BLS12-381   & --   & -- & --
 The full QuasarCert quantum-safe predicate is
 $\mathsf{VerifyPQ} = \mathsf{RT.Verify} \land \mathsf{ZK.Verify}$
 (Theorem~\ref{thm:pq}).  Equivalently, ``1 of 2'' PQ pillars must hold:
-either Ringtail's MLWE/MSIS, or the ML-DSA-65 path inside the Groth16
+either Corona's MLWE/MSIS, or the ML-DSA-65 path inside the Groth16
 proof.  The classical BLS lane provides classical-only defense in
 depth and contributes nothing to the PQ guarantee, in line with the
 analysis of pq-finality-no-bls.tex.
