@@ -1,12 +1,12 @@
 /-
   Zero-Knowledge Proofs of Signature Knowledge
 
-  Proves that BLS, ML-DSA, and Ringtail signatures can be verified
+  Proves that BLS, ML-DSA, and Corona signatures can be verified
   inside zero-knowledge circuits (STARK/Groth16/PLONK) while maintaining
   soundness, completeness, and zero-knowledge properties.
 
   This is the formal foundation for Z-Chain's PQZ algorithm:
-  - A prover can demonstrate they hold a valid BLS/ML-DSA/Ringtail sig
+  - A prover can demonstrate they hold a valid BLS/ML-DSA/Corona sig
   - Without revealing the signature itself
   - The verifier learns nothing beyond the statement's truth
 
@@ -76,8 +76,8 @@ def MLDSA : SigScheme := {
   verify := fun pk msg sig => (sig * 13 == pk + msg * 39)
 }
 
--- Ringtail signature scheme (simplified LWE)
-def Ringtail : SigScheme := {
+-- Corona signature scheme (simplified LWE)
+def Corona : SigScheme := {
   PK := Nat, SK := Nat, Sig := Nat, Msg := Nat,
   keygen := fun sk => sk * 17,
   sign := fun sk msg => sk + msg * 5,
@@ -98,31 +98,31 @@ theorem zk_bls_composition :
   intro ZK _ hsound _
   exact hsound
 
--- Theorem: PQZ composition — wrapping Ringtail in STARK preserves soundness
+-- Theorem: PQZ composition — wrapping Corona in STARK preserves soundness
 theorem pqz_composition :
-    ∀ (ZK_inner : ZKProofSystem Ringtail)
+    ∀ (ZK_inner : ZKProofSystem Corona)
       (ZK_outer : ZKProofSystem BLS),
-      sound Ringtail ZK_inner →
+      sound Corona ZK_inner →
       sound BLS ZK_outer →
       -- If both layers are sound, the composition is sound
       (∀ (pk : Nat) (msg : Nat) (proof : ZK_inner.Proof),
         ZK_inner.verify_proof pk msg proof = true →
-        ∃ (sig : Nat), Ringtail.verify pk msg sig = true) := by
+        ∃ (sig : Nat), Corona.verify pk msg sig = true) := by
   intro ZK_inner _ h_inner _
   exact h_inner
 
--- Theorem: Hybrid BLS + Ringtail ZK proof — both must verify
+-- Theorem: Hybrid BLS + Corona ZK proof — both must verify
 theorem hybrid_zk_both_required :
     ∀ (ZK_bls : ZKProofSystem BLS)
-      (ZK_ring : ZKProofSystem Ringtail),
+      (ZK_ring : ZKProofSystem Corona),
       sound BLS ZK_bls →
-      sound Ringtail ZK_ring →
+      sound Corona ZK_ring →
       ∀ (pk_bls pk_ring : Nat) (msg : Nat)
         (proof_bls : ZK_bls.Proof) (proof_ring : ZK_ring.Proof),
         ZK_bls.verify_proof pk_bls msg proof_bls = true →
         ZK_ring.verify_proof pk_ring msg proof_ring = true →
         (∃ s, BLS.verify pk_bls msg s = true) ∧
-        (∃ s, Ringtail.verify pk_ring msg s = true) := by
+        (∃ s, Corona.verify pk_ring msg s = true) := by
   intro ZK_bls ZK_ring h_bls h_ring pk_bls pk_ring msg pb pr hb hr
   exact ⟨h_bls pk_bls msg pb hb, h_ring pk_ring msg pr hr⟩
 

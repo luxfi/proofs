@@ -1,12 +1,12 @@
 /-
   Quasar Protocol Formal Model
 
-  Models protocol/quasar/ -- BLS+Ringtail hybrid quantum consensus.
+  Models protocol/quasar/ -- BLS+Corona hybrid quantum consensus.
 
   Quasar is the finality engine. It collects blocks from all chains
   and produces quantum-final aggregate blocks with dual signatures:
   - BLS (classical, fast): 96-byte aggregated signatures
-  - Ringtail (post-quantum, larger): ~4KB lattice-based threshold signatures
+  - Corona (post-quantum, larger): ~4KB lattice-based threshold signatures
 
   Maps to:
   - quasar/bls.go: BLS signature aggregation (quorum = 2f+1)
@@ -17,7 +17,7 @@
   Properties:
   - BLS aggregation correctness: agg_verify(agg_sig, agg_pk, msg) iff all individual sigs valid
   - Quorum threshold: 2f+1 signatures required for finality
-  - Dual signature: quantum block has both BLS and Ringtail sigs
+  - Dual signature: quantum block has both BLS and Corona sigs
   - Epoch monotonicity: quantum height only increases
 -/
 
@@ -31,14 +31,14 @@ structure BLSSig where
   bytes : List UInt8
   valid : Bool
 
-structure RingtailSig where
+structure CoronaSig where
   bytes : List UInt8
   valid : Bool
 
-/-- Quasar signature = BLS + Ringtail (models quasar.QuasarSig) -/
+/-- Quasar signature = BLS + Corona (models quasar.QuasarSig) -/
 structure QuasarSig where
   bls      : BLSSig
-  ringtail : RingtailSig
+  corona : CoronaSig
 
 /-- Quantum block (models quasar.QuantumBlock) -/
 structure QuantumBlock where
@@ -83,12 +83,12 @@ theorem bls_quorum_intersection
 
 /-- Dual signature validity: both components must be valid -/
 def isValidQuantumSig (qs : QuasarSig) : Bool :=
-  qs.bls.valid && qs.ringtail.valid
+  qs.bls.valid && qs.corona.valid
 
-/-- A finalized block has both BLS and Ringtail valid -/
+/-- A finalized block has both BLS and Corona valid -/
 theorem quantum_finality_requires_both
     (qs : QuasarSig) (h : isValidQuantumSig qs = true) :
-    qs.bls.valid = true ∧ qs.ringtail.valid = true := by
+    qs.bls.valid = true ∧ qs.corona.valid = true := by
   simp [isValidQuantumSig] at h
   exact h
 

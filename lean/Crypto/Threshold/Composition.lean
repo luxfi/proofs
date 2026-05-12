@@ -5,7 +5,7 @@
   LSS → FROST (Schnorr threshold)
   LSS → CMP (ECDSA threshold)
   LSS → TFHE (FHE threshold decryption)
-  LSS → Ringtail (PQ threshold)
+  LSS → Corona (PQ threshold)
 
   All share the same access structure (t-of-n).
   Key shares from one protocol don't leak to another.
@@ -31,7 +31,7 @@ inductive Protocol where
   | frost       -- Schnorr threshold (Bitcoin, Taproot)
   | cmp         -- ECDSA threshold (Ethereum, EVM chains)
   | tfhe        -- FHE threshold decryption
-  | ringtail    -- Post-quantum threshold (lattice-based)
+  | corona    -- Post-quantum threshold (lattice-based)
   | bls         -- BLS threshold (validator consensus)
   | lss         -- Base: linear secret sharing
   deriving DecidableEq, Repr
@@ -78,7 +78,7 @@ theorem threshold_consistent (p : UnifiedParams)
 
 /-- All protocols in the Lux stack -/
 def luxProtocols : List Protocol :=
-  [.frost, .cmp, .tfhe, .ringtail, .bls, .lss]
+  [.frost, .cmp, .tfhe, .corona, .bls, .lss]
 
 theorem six_protocols : luxProtocols.length = 6 := rfl
 
@@ -102,7 +102,7 @@ def dependsOn : Protocol → Protocol → Prop
   | .frost, .lss => True
   | .cmp, .lss => True
   | .tfhe, .lss => True
-  | .ringtail, .lss => True
+  | .corona, .lss => True
   | .bls, .lss => True
   | _, _ => False
 

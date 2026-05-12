@@ -1,16 +1,16 @@
 /-
-  Ringtail Threshold Lattice Signature Correctness
+  Corona Threshold Lattice Signature Correctness
 
-  Models the Ringtail precompile (src/precompiles/ringtail-threshold/).
+  Models the Corona precompile (src/precompiles/corona-threshold/).
 
-  Ringtail is a post-quantum threshold signature scheme based on
+  Corona is a post-quantum threshold signature scheme based on
   LWE (Learning With Errors). It provides the same t-of-n threshold
   property as FROST but with quantum resistance.
 
   Maps to:
-  - src/precompiles/ringtail-threshold/contract.go: Verify
-  - src/precompiles/ringtail-threshold/IRingtailThreshold.sol: Interface
-  - luxfi/ringtail/threshold: Package
+  - src/precompiles/corona-threshold/contract.go: Verify
+  - src/precompiles/corona-threshold/ICoronaThreshold.sol: Interface
+  - luxfi/corona/threshold: Package
 
   Key parameters (128-bit security):
   - n_lwe = 630
@@ -27,7 +27,7 @@
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
-namespace Crypto.Ringtail
+namespace Crypto.Corona
 
 /-- LWE parameters for 128-bit security -/
 structure LWEParams where
@@ -44,25 +44,25 @@ structure ThresholdParams where
   ht : t ≤ n
   ht0 : 0 < t
 
-/-- Ringtail signature (much larger than Schnorr: ~4KB vs 64 bytes) -/
-structure RingtailSig where
+/-- Corona signature (much larger than Schnorr: ~4KB vs 64 bytes) -/
+structure CoronaSig where
   size : Nat
   hsize : size ≤ 20000  -- bounded at ~20KB max
 
 /-- Correctness: honest threshold execution produces valid signature -/
-axiom ringtail_correctness :
+axiom corona_correctness :
   ∀ (lwe : LWEParams) (tp : ThresholdParams) (signers : Nat),
     signers ≥ tp.t →
-    ∃ (sig : RingtailSig), True  -- signature verifies
+    ∃ (sig : CoronaSig), True  -- signature verifies
 
 /-- PQ unforgeability: under LWE hardness assumption,
     no quantum adversary can forge with fewer than t shares. -/
-axiom ringtail_pq_unforgeability :
+axiom corona_pq_unforgeability :
   ∀ (lwe : LWEParams) (tp : ThresholdParams) (compromised : Nat),
     compromised < tp.t →
     -- LWE with parameters (n, q, sigma) is hard for quantum computers
     -- Fewer than t shares cannot produce a valid signature
-    ∀ (sig : RingtailSig), sig.size > lwe.q
+    ∀ (sig : CoronaSig), sig.size > lwe.q
 
 /-- Noise bounds: Gaussian noise must be within tolerance for correct decryption.
     This is the critical security parameter -- too small = insecure,
@@ -80,12 +80,12 @@ theorem threshold_minimum (tp : ThresholdParams) (signers : Nat)
     signers < tp.n := by omega
 
 /-- Robustness: with n signers and up to n-t failures, still have t honest -/
-theorem ringtail_robustness (tp : ThresholdParams) (failures : Nat)
+theorem corona_robustness (tp : ThresholdParams) (failures : Nat)
     (h : failures ≤ tp.n - tp.t) :
     tp.n - failures ≥ tp.t := by omega
 
 /-- Signature size is bounded -/
-theorem sig_bounded (sig : RingtailSig) : sig.size ≤ 20000 := sig.hsize
+theorem sig_bounded (sig : CoronaSig) : sig.size ≤ 20000 := sig.hsize
 
 /-- LWE dimension must be positive for security -/
 theorem dimension_positive (lwe : LWEParams) : lwe.n > 0 := lwe.hn
@@ -96,4 +96,4 @@ theorem standard_params_secure :
     630 > 0 ∧ (2^32 : Nat) > 0 := by
   constructor <;> omega
 
-end Crypto.Ringtail
+end Crypto.Corona

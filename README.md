@@ -48,7 +48,7 @@ cd property && GOWORK=off go test ./...
 | `Consensus/Liveness.lean` | Progress under partial synchrony |
 | `Consensus/BFT.lean` | Quorum intersection (2f+1 of 3f+1) |
 | `Consensus/Finality.lean` | Finalized values are permanent |
-| `Consensus/Quasar.lean` | BLS+Ringtail+ML-DSA triple hybrid composition |
+| `Consensus/Quasar.lean` | BLS+Corona+ML-DSA triple hybrid composition |
 | `Consensus/ThresholdProof.lean` | Threshold signature scheme correctness |
 | `Consensus/PreferenceStability.lean` | Preference stability under adversary |
 | `Consensus/Validator.lean` | Validator set properties |
@@ -64,7 +64,7 @@ cd property && GOWORK=off go test ./...
 | `Protocol/Flare.lean` | DAG cert/skip 2f+1 correctness |
 | `Protocol/Ray.lean` | Linear chain finality |
 | `Protocol/Field.lean` | DAG committed prefix consistency |
-| `Protocol/Quasar.lean` | BLS+Ringtail hybrid aggregation |
+| `Protocol/Quasar.lean` | BLS+Corona hybrid aggregation |
 | `Protocol/Photon.lean` | Committee selection uniformity |
 | `Protocol/Prism.lean` | Fisher-Yates unbiased k-subsets |
 | `Protocol/Handshake.lean` | Protocol handshake correctness |
@@ -77,7 +77,7 @@ cd property && GOWORK=off go test ./...
 |------|----------|
 | `Crypto/BLS.lean` | Aggregation correctness + rogue key resistance |
 | `Crypto/FROST.lean` | t-of-n threshold unforgeability |
-| `Crypto/Ringtail.lean` | LWE-based threshold unforgeability (PQ) |
+| `Crypto/Corona.lean` | LWE-based threshold unforgeability (PQ) |
 | `Crypto/MLDSA.lean` | FIPS 204 signature correctness |
 | `Crypto/MLKEM.lean` | FIPS 203 key encapsulation |
 | `Crypto/SLHDSA.lean` | SLH-DSA signature correctness |

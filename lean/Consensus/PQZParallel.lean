@@ -134,7 +134,7 @@ structure QuasarStamp (c : ChainId) where
   antichainRank : Nat
   blsSigs : Nat
   mldsaSigs : Nat
-  ringtailSigs : Nat
+  coronaSigs : Nat
   validatorsSigning : Nat
 
 /-- **Theorem (Quasar stamps parallel):** a Quasar stamp produced for

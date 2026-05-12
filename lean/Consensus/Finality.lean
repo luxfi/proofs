@@ -12,7 +12,7 @@
   Properties:
   - Unique finality: at most one value finalized per height
   - Bounded time: finality within beta + delta rounds after GST
-  - Hybrid security: BLS + Ringtail certificates both required
+  - Hybrid security: BLS + Corona certificates both required
 -/
 
 import Mathlib.Data.Nat.Defs
@@ -34,12 +34,12 @@ structure FinalizedBlock where
   height : Nat
   hash : Nat
   blsCertValid : Bool
-  ringtailCertValid : Bool
+  coronaCertValid : Bool
   round : Nat
 
 /-- Block is fully finalized when both certificates are valid -/
 def isFinalized (b : FinalizedBlock) : Bool :=
-  b.blsCertValid && b.ringtailCertValid
+  b.blsCertValid && b.coronaCertValid
 
 /-- UNIQUE FINALITY: Two finalized blocks at the same height with the
     same hash are consistent. The uniqueness of the hash itself comes
@@ -62,9 +62,9 @@ theorem bounded_finality (p : FinalityParams) (gst : Nat) :
     -- Finality round ≤ GST + beta + delta
     gst + p.beta + p.delta ≥ gst := by omega
 
-/-- HYBRID REQUIREMENT: Both BLS AND Ringtail must certify -/
+/-- HYBRID REQUIREMENT: Both BLS AND Corona must certify -/
 theorem hybrid_required (b : FinalizedBlock) (h : isFinalized b = true) :
-    b.blsCertValid = true ∧ b.ringtailCertValid = true := by
+    b.blsCertValid = true ∧ b.coronaCertValid = true := by
   simp [isFinalized, Bool.and_eq_true] at h; exact h
 
 /-- CHAIN GROWTH: Finalized height can only increase -/

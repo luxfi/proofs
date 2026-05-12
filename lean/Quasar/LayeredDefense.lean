@@ -5,7 +5,7 @@
   each protected by an independent cryptographic hardness assumption:
 
   - P-Chain: BLS12-381 aggregate signatures (discrete log over pairing groups)
-  - Q-Chain: Ringtail threshold lattice signatures (Ring-LWE / Module-SIS)
+  - Q-Chain: Corona threshold lattice signatures (Ring-LWE / Module-SIS)
   - Z-Chain: ML-DSA-65 identity signatures rolled up via Groth16 (Module-LWE)
 
   MAIN THEOREM (quasar_triple_defense):
@@ -18,7 +18,7 @@
 
   Axiom budget:
     - AdvBreak (adversary capability predicate)
-    - bls_unforgeable, ringtail_unforgeable, mldsa_rollup_unforgeable
+    - bls_unforgeable, corona_unforgeable, mldsa_rollup_unforgeable
       (each: assumption holds => forgery of that layer is impossible)
 
   All theorems proved by contradiction against the unforgeability axioms.
@@ -46,7 +46,7 @@ namespace Quasar.LayeredDefense
     efficient adversary can solve the corresponding problem. -/
 inductive Assumption where
   | DiscreteLog : Assumption   -- ECDL over BLS12-381 pairing groups
-  | ModuleSIS   : Assumption   -- Module-SIS (Ringtail, short vector)
+  | ModuleSIS   : Assumption   -- Module-SIS (Corona, short vector)
   | ModuleLWE   : Assumption   -- Module-LWE (ML-DSA-65, noisy inner product)
 
 /-- An adversary is an abstract entity that may or may not break assumptions. -/
@@ -67,13 +67,13 @@ axiom AdvBreak : Adversary → Assumption → Prop
 
     Fields model the verification result of each layer:
     - blsValid:      BLS12-381 aggregate reached quorum on P-Chain
-    - ringtailValid: Ringtail threshold lattice sig verified on Q-Chain
+    - coronaValid: Corona threshold lattice sig verified on Q-Chain
     - mldsaValid:    Groth16 proof of N ML-DSA-65 sigs verified on Z-Chain -/
 structure QuasarCert where
   round        : Nat
   blockHash    : Nat
   blsValid     : Bool   -- BLS12-381 aggregate reached quorum (P-Chain)
-  ringtailValid: Bool   -- Ringtail threshold sig verified (Q-Chain)
+  coronaValid: Bool   -- Corona threshold sig verified (Q-Chain)
   mldsaValid   : Bool   -- Groth16 rollup of ML-DSA-65 sigs verified (Z-Chain)
   quorum       : Nat    -- required threshold (2f+1 out of 3f+1)
   blsCount     : Nat    -- number of valid BLS signatures aggregated
@@ -91,7 +91,7 @@ structure QuasarCert where
     alone -- that is what the unforgeability axioms capture. -/
 def AdvForge (_adv : Adversary) (cert : QuasarCert) : Prop :=
   cert.blsValid = true ∧
-  cert.ringtailValid = true ∧
+  cert.coronaValid = true ∧
   cert.mldsaValid = true
 
 -- ============================================================================
@@ -114,17 +114,17 @@ axiom bls_unforgeable :
     ¬AdvBreak adv .DiscreteLog →
     cert.blsValid = false
 
-/-- Ringtail unforgeability: if ModuleSIS holds, the adversary cannot
-    produce a valid Ringtail threshold lattice signature.
+/-- Corona unforgeability: if ModuleSIS holds, the adversary cannot
+    produce a valid Corona threshold lattice signature.
 
-    Computational basis: Ringtail EUF-CMA reduces to finding short
+    Computational basis: Corona EUF-CMA reduces to finding short
     vectors in module lattices (Module-SIS). Under Module-SIS hardness,
     the adversary cannot find a short preimage that satisfies the
     verification equation A * z = t mod q with ||z|| < beta. -/
-axiom ringtail_unforgeable :
+axiom corona_unforgeable :
   ∀ (adv : Adversary) (cert : QuasarCert),
     ¬AdvBreak adv .ModuleSIS →
-    cert.ringtailValid = false
+    cert.coronaValid = false
 
 /-- ML-DSA Groth16 rollup unforgeability: if ModuleLWE holds, the
     adversary cannot produce a valid Groth16 proof of N ML-DSA-65 sigs.
@@ -181,10 +181,10 @@ theorem quasar_triple_defense
     rw [h_mldsa] at this
     exact absurd this (by decide)
   -- Case 3: ModuleSIS must be broken.
-  -- If not broken, ringtail_unforgeable gives cert.ringtailValid = false.
-  -- But h_rt says cert.ringtailValid = true. Contradiction.
+  -- If not broken, corona_unforgeable gives cert.coronaValid = false.
+  -- But h_rt says cert.coronaValid = true. Contradiction.
   · by_contra h_not_sis
-    have := ringtail_unforgeable adv cert h_not_sis
+    have := corona_unforgeable adv cert h_not_sis
     rw [h_rt] at this
     exact absurd this (by decide)
 
@@ -352,9 +352,9 @@ theorem bls_security_bits : 255 / 2 ≥ 127 := by omega
     Core hardness: Module-LWE_{6,5,eta} for eta in {4,4}. -/
 theorem mldsa_security_bits : (192 : Nat) > 128 := by omega
 
-/-- Ringtail (Module-SIS, n=630, q=2^32): 128-bit PQ security.
+/-- Corona (Module-SIS, n=630, q=2^32): 128-bit PQ security.
     Lattice dimension 630. Best known: sieving in 2^{0.292*630} approx 2^{184}. -/
-theorem ringtail_security_bits : (184 : Nat) > 128 := by omega
+theorem corona_security_bits : (184 : Nat) > 128 := by omega
 
 /-- Composite security floor: the system is as strong as the weakest
     layer for any single-layer attacker. But the main theorem shows

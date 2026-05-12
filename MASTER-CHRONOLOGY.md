@@ -53,7 +53,7 @@ config keys are exclusively:
 - VMs: `PVM`, `EVM`, `XVM`, `QVM`, `ZVM`, `AIVM`, `BVM`, `MVM`, `FVM`
 - Consensus family: **Quasar / Photon / Wave / Focus / Prism /
   Horizon / Flare / Ray / Field / Nova / Nebula**
-- PQ threshold: **Pulsar** (Lux variant of Ringtail with DKG2 +
+- PQ threshold: **Pulsar** (Lux variant of Corona with DKG2 +
   Pulsar-SHA3 hash suite)
 
 The metastable linear-chain consensus prior art (Team Rocket et al.
