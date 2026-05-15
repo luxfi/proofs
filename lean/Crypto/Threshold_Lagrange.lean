@@ -1,5 +1,5 @@
 /-
-  Pulsar — Lagrange interpolation identity for threshold correctness.
+  Threshold — Lagrange interpolation identity for threshold correctness.
 
   This is the algebraic heart of the threshold-to-single-party reduction
   for Pulsar (ML-DSA threshold) and Corona (R-LWE threshold).
@@ -30,7 +30,7 @@ import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Algebra.Polynomial.FieldDivision
 import Mathlib.Tactic
 
-namespace Crypto.PulsarM.Lagrange
+namespace Crypto.Threshold.Lagrange
 
 open Polynomial
 
@@ -140,4 +140,4 @@ theorem threshold_partial_response_identity
   -- Now both sides match: y-eval + c · f.eval 0
   ring
 
-end Crypto.PulsarM.Lagrange
+end Crypto.Threshold.Lagrange

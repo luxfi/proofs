@@ -19,11 +19,11 @@
 
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
-import Crypto.Pulsar_M.LagrangeIdentity
+import Crypto.Threshold_Lagrange
 
 namespace Crypto.PulsarM.Verify
 
-open Crypto.PulsarM.Lagrange
+open Crypto.Threshold.Lagrange
 
 /-- A FIPS 204 ML-DSA verifier is a predicate over (public key, message,
     signature). The reference implementation is cloudflare/circl's

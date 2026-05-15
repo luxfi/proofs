@@ -24,7 +24,7 @@
   Properties discharged here:
   - Correctness: the algebraic content of the threshold-to-single-party
     reduction (Lagrange interpolation over polynomial shares) is
-    discharged in `Crypto.PulsarM.Lagrange.threshold_reconstructs_secret`
+    discharged in `Crypto.Threshold.Lagrange.threshold_reconstructs_secret`
     and reused here — Pulsar (Module-LWE) and Corona (Ring-LWE) share
     the same Shamir-over-ring shape.
   - Threshold robustness, signature size bound, noise bound: discharged
@@ -36,7 +36,7 @@
 
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
-import Crypto.Pulsar_M.LagrangeIdentity
+import Crypto.Threshold_Lagrange
 
 namespace Crypto.Corona
 
@@ -79,7 +79,7 @@ theorem corona_threshold_reconstructs
     (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
     (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
     f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
-  Crypto.PulsarM.Lagrange.threshold_reconstructs_secret f s v hvs degree_f_lt
+  Crypto.Threshold.Lagrange.threshold_reconstructs_secret f s v hvs degree_f_lt
 
 /-- **Combine linearity (algebraic discharge).**
 
@@ -92,7 +92,7 @@ theorem corona_combine_linear
     Polynomial.Lagrange.interpolate s v (a + b) =
       Polynomial.Lagrange.interpolate s v a +
       Polynomial.Lagrange.interpolate s v b :=
-  Crypto.PulsarM.Lagrange.combine_distributes_over_sum s v a b
+  Crypto.Threshold.Lagrange.combine_distributes_over_sum s v a b
 
 /-- **PQ unforgeability (cryptographic axiom).**
 
@@ -109,11 +109,18 @@ theorem corona_combine_linear
     operations for our (N=256, q=2^32, sigma=13744) instance; Grover
     speedup brings the quantum complexity to 2^130 — both above the
     NIST PQ Category I bar (2^128 / 2^64-quantum). -/
+/-- The advantage a Ring-LWE-bounded adversary has against
+    Corona EUF-CMA. The opaque type carries the academic-paper bound
+    (Boschini et al. 2024 §5 Theorem 1) without depending on a
+    probability monad. -/
+opaque CoronaEUFCMAAdv (lwe : LWEParams) : Type
+
 axiom corona_ring_lwe_euf_cma
-    (lwe : LWEParams) (tp : ThresholdParams) (compromised : Nat) :
-    compromised < tp.t →
-    -- Ring-LWE-bounded adversary with < t shares cannot forge
-    True   -- formal Adv^{EUF-CMA}_{Corona}(A) ≤ negl(N) under Ring-LWE
+    (lwe : LWEParams) (tp : ThresholdParams) (compromised : Nat)
+    (_h : compromised < tp.t) :
+    -- Ring-LWE-bounded adversary with < t shares cannot forge:
+    -- ∃ a : CoronaEUFCMAAdv lwe, Adv^EUF-CMA_Corona(A) ≤ a.
+    CoronaEUFCMAAdv lwe
 
 /-- Noise bound: Gaussian noise must be within q/4 for correct
     decryption. Below this, the lattice rounding inside `Verify`

@@ -24,7 +24,7 @@
 
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
-import Crypto.Pulsar_M.LagrangeIdentity
+import Crypto.Threshold_Lagrange
 import Crypto.Pulsar_M.Shamir
 
 namespace Crypto.PulsarM
@@ -107,7 +107,7 @@ opaque MLDSAEUFCMAAdv (fp : FipsParams) : HardnessAdvantage
     to q - 1.**
 
     Discharged: re-uses `Crypto.PulsarM.Shamir.shamir_correct_at_target`,
-    which in turn re-uses `Crypto.PulsarM.Lagrange.threshold_reconstructs_secret`.
+    which in turn re-uses `Crypto.Threshold.Lagrange.threshold_reconstructs_secret`.
     No `True` placeholder, no admit.
 
     The reconstruction identity holds in every finite field of order
