@@ -19,11 +19,11 @@
   - LP-0120 §4: family-disjoint KEM line of LP-4200 PQCrypto block
 
   Naming: HQC stands alone at 0x012208. The X25519 ∥ ML-KEM-768 ∥ HQC
-  triple at 0x2222 is named **Y-Wing**, the code-family extension of
-  the IETF X-Wing KEM combiner. Wing prefixes are reserved for the
-  KEM and transport lanes only — the signature *certificate profiles*
-  use the astronomical names Aurora (Pulsar ∥ Corona) and Magnetar
-  (Pulsar ∥ Corona ∥ Comet).
+  triple at 0x2222 is named **X-Wing+**, a notation extension of the
+  IETF X-Wing KEM combiner (no new Wing letter introduced). Wing
+  prefixes are reserved for the KEM and transport lanes — the
+  signature *certificate profiles* use the astronomical names Aurora
+  (Pulsar ∥ Corona) and Magnetar (Pulsar ∥ Corona ∥ Comet).
 
   Properties proved here:
   - Correctness: decaps(encaps(pk)) recovers the shared secret
@@ -171,20 +171,20 @@ axiom hqc_disjoint_from_mlwe :
     -- oracle cannot solve).
     ∃ (mlwe_instance : Nat), sdp_oracle mlwe_instance ≠ mlwe_instance
 
-/-- Y-Wing: code-family extension of the IETF X-Wing KEM combiner.
+/-- X-Wing+: code-family extension of the IETF X-Wing KEM combiner.
     Construction: X25519 ∥ ML-KEM-768 ∥ HQC, exposed at precompile
-    `0x2222`. Y-Wing extends X-Wing from classical+lattice to
-    classical+lattice+code, so breaking the Y-Wing shared secret
+    `0x2222`. X-Wing+ extends X-Wing from classical+lattice to
+    classical+lattice+code, so breaking the X-Wing+ shared secret
     requires breaking ALL THREE primitives simultaneously — ECDLP,
     Module-LWE, AND Syndrome Decoding. -/
-axiom ywing_ss : Mode → Nat → Nat → Nat → Nat
+axiom xwing_plus_ss : Mode → Nat → Nat → Nat → Nat
 
-/-- Y-Wing shared secret combines all three component KEMs.
+/-- X-Wing+ shared secret combines all three component KEMs.
     No single component leak yields the hybrid SS. -/
-axiom ywing_combines_three :
+axiom xwing_plus_combines_three :
   ∀ (mode : Mode) (x25519_ss mlkem_ss hqc_ss : Nat),
-    ywing_ss mode x25519_ss mlkem_ss hqc_ss ≠ x25519_ss ∨
-    ywing_ss mode x25519_ss mlkem_ss hqc_ss ≠ mlkem_ss ∨
-    ywing_ss mode x25519_ss mlkem_ss hqc_ss ≠ hqc_ss
+    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ x25519_ss ∨
+    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ mlkem_ss ∨
+    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ hqc_ss
 
 end Crypto.HQC
