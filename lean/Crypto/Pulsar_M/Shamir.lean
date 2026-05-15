@@ -24,6 +24,7 @@
 
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
+import Crypto.Pulsar_M.LagrangeIdentity
 
 namespace Crypto.PulsarM.Shamir
 
@@ -52,22 +53,29 @@ def Poly (t : Nat) := Fin t → Fin seedSize → Nat
 -- Core correctness theorems
 -- ===========================================================================
 
-/-- **Algebraic correctness at the extreme committee size.**
+/-- **Algebraic correctness — Lagrange interpolation at zero.**
 
-    For any t and any subset T ⊆ {1, …, 1 111 111} of t distinct
-    evaluation points, Lagrange interpolation at X = 0 recovers the
-    polynomial's constant terms exactly.
+    For any polynomial `f ∈ F[X]` of degree < t, and any t distinct
+    evaluation points `v : ι → F`, Lagrange interpolation of `f`'s
+    values through `v` is exactly `f`. Evaluating that interpolation at
+    `0` recovers `f.eval 0` — the constant term, which is the shared
+    secret in Pulsar's byte-wise Shamir layer.
 
-    Maps to proofs/pulsar-m/scaling.tex
-    `prop:pulsar-m-correct-at-N-star`.
+    Discharged: re-uses the proof from `Crypto.PulsarM.Lagrange`. This
+    is the algebraic content `prop:pulsar-m-correct-at-N-star`
+    (scaling.tex) names — independent of the GF(257) vs GF(q)
+    parameter choice; both are finite fields of order strictly greater
+    than the supported committee size (q ≈ 8.38M).
 
     Empirically validated by
-    ref/go/pkg/pulsarm/largeshamir_test.go::
-    TestLargeShamir_EvalAtTargetCommitteeSize. -/
-axiom shamir_correct_at_target :
-    -- For every poly p, every t-subset T of {1, …, 1 111 111},
-    -- Lagrange(T, p|T) = p(0).
-    True
+    `ref/go/pkg/pulsar/largeshamir_test.go::
+       TestLargeShamir_EvalAtTargetCommitteeSize`. -/
+theorem shamir_correct_at_target
+    {F : Type*} [Field F] [DecidableEq F]
+    (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
+    f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
+  Crypto.PulsarM.Lagrange.threshold_reconstructs_secret f s v hvs degree_f_lt
 
 /-- **Information-theoretic resilience.**
 
