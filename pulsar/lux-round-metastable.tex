@@ -1,9 +1,9 @@
 %% ============================================================
-%% pulsar-m/lux-round-metastable.tex
+%% pulsar/lux-round-metastable.tex
 %% ============================================================
 %%
 %% Wave-driven metastable signing of N > 256 validator pools.
-%% Composition of Pulsar-M (3, 2) per Lux round with the Lux Wave
+%% Composition of Pulsar (3, 2) per Lux round with the Lux Wave
 %% protocol's K-sample / alpha-of-K / beta-confidence loop, rolled
 %% up by P3Q. Fully post-quantum end-to-end.
 %%
@@ -14,7 +14,7 @@
 \subsection*{Lux round metastable signing}
 
 This file pins the composition theorem for the canonical Lux
-deployment at validator pool sizes $N > 256$: Pulsar-M (3, 2) at the
+deployment at validator pool sizes $N > 256$: Pulsar (3, 2) at the
 per-Lux-round committee level, driven by the Lux Wave protocol's
 K-sample, with beta-confidence amplification and a P3Q STARK rollup.
 
@@ -33,9 +33,9 @@ rounds with alpha-of-K agreement on the same item, Focus fires
 \item \textbf{Photon} (\texttt{consensus/protocol/wave/wave.go:14}).
 The per-round wire message Wave validators emit. Carries the
 validator's preference vote and -- in the metastable-signing
-deployment -- a Pulsar-M Round-1 commit on the preferred item.
+deployment -- a Pulsar Round-1 commit on the preferred item.
 \item \textbf{Quasar} (\texttt{consensus/protocol/quasar/}).
-The composite signing layer that runs BLS + Pulsar-M + ML-DSA
+The composite signing layer that runs BLS + Pulsar + ML-DSA
 under one cert envelope.
 \end{itemize}
 
@@ -45,32 +45,32 @@ A \emph{Lux round} is one Wave Tick:
 \begin{enumerate}[leftmargin=*, itemsep=0pt]
 \item Prism.Cut samples $K$ validators from the pool ($K = 21$ is
 the default Wave config; $K = 3$ is the minimum for $(3, 2)$
-Pulsar-M).
+Pulsar).
 \item Each sampled validator emits a Photon carrying its current
-preference $\hat v$ on the item under vote, plus a Pulsar-M
+preference $\hat v$ on the item under vote, plus a Pulsar
 Round-1 commit $D_i = \cSHAKE(\bar{\mathbf{w}}_i\,\|\,\tau_1)$ where
 $\tau_1$ binds the Lux round context $(\mathit{epoch}, \mathit{round},
 \mathit{item}, \mathit{committee root})$.
 \item The aggregator collects Photons. If $\ge \alpha$ of the $K$
-agree on $\hat v$, the round is \emph{successful} and Pulsar-M
+agree on $\hat v$, the round is \emph{successful} and Pulsar
 Round-2 reveals are collected from those $\alpha$ validators.
 \item Focus increments its counter for $\hat v$ by $1$. If the
 counter reaches $\beta$, Wave fires "decided" -- the item is
 finalised.
 \end{enumerate}
 
-The Pulsar-M Round-1 commits and Round-2 reveals from successful
+The Pulsar Round-1 commits and Round-2 reveals from successful
 Lux rounds accumulate at the Quasar layer. After $\beta$ successful
-rounds, the accumulator has $\beta \cdot \alpha$ Pulsar-M sig
+rounds, the accumulator has $\beta \cdot \alpha$ Pulsar sig
 contributions across distinct $K$-samples. The P3Q rollup attests
-that each per-round Pulsar-M (3, 2) signature verifies under
+that each per-round Pulsar (3, 2) signature verifies under
 unmodified FIPS~204 \texttt{ML-DSA.Verify}.
 
 \paragraph{Per-Lux-round binding.}
-The per-round Pulsar-M session ID is derived deterministically from
+The per-round Pulsar session ID is derived deterministically from
 the Lux round context:
 \[
-  \mathit{sid}_r \;=\; \cSHAKE(\text{Encode}(\mathit{ctx}_r), 16, \text{`PULSAR-M-SIGN-PRNG-V1'}).
+  \mathit{sid}_r \;=\; \cSHAKE(\text{Encode}(\mathit{ctx}_r), 16, \text{`PULSAR-SIGN-PRNG-V1'}).
 \]
 Each Wave Tick increments $\mathit{round}$, producing a fresh
 $\mathit{sid}_r$ and forcing the per-round PRNG to re-seed. This
@@ -103,7 +103,7 @@ Hybrid sequence:
 \textbf{H0} -- real game. $\mathcal{A}$ outputs a forged cert.
 
 \textbf{H1} -- replace P3Q by direct per-round
-\texttt{ML-DSA.Verify} on each accumulated Pulsar-M signature.
+\texttt{ML-DSA.Verify} on each accumulated Pulsar signature.
 Distinguishing advantage is bounded by
 $\beta \cdot \mathrm{Adv}^{\mathsf{soundness}}_{\mathsf{P3Q}}$ (one
 per accumulated round).
@@ -119,9 +119,9 @@ binomial tail). Over $\beta$ rounds, the probability of agreement
 in every round is at most $\tau(K, \alpha, \rho)^\beta$.
 
 \textbf{H4} -- conditioned on the adversary holding at most
-$\alpha - 1$ in every round, any per-round Pulsar-M forgery
+$\alpha - 1$ in every round, any per-round Pulsar forgery
 contradicts the $(K, \alpha-1)$-corruption-bounded TS-UF of
-Pulsar-M at level $L$ (\Cref{thm:pulsar-m-tsuf}). Per-round
+Pulsar at level $L$ (\Cref{thm:pulsar-tsuf}). Per-round
 advantage is bounded by
 $\mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}$.
 
@@ -136,7 +136,7 @@ $\alpha = 15$, $\beta = 12$.}
 $\tau(21, 15, 1/3) \approx 2^{-11.3}$ (reference implementation
 \texttt{ApproxRoundSecurity} confirms numerically).
 \item Beta-amplified: $\tau^{\beta} = 2^{-11.3 \cdot 12} \approx 2^{-135}$.
-\item Per-round Pulsar-M TS-UF advantage (level 65, NIST PQ
+\item Per-round Pulsar TS-UF advantage (level 65, NIST PQ
 category 3): $\le 2^{-180}$.
 \item P3Q soundness: $\le 2^{-100}$.
 \item Beacon unbiasability: $\le 2^{-128}$.
@@ -156,11 +156,11 @@ trades wire bandwidth (3 sigs per round) for round count.
 
 \paragraph{Per-round cost.}
 \begin{itemize}[leftmargin=*, itemsep=0pt]
-\item Compute: $K \times$ (Pulsar-M Round-1 commit $\sim 0.5$~ms +
+\item Compute: $K \times$ (Pulsar Round-1 commit $\sim 0.5$~ms +
 Round-2 reveal $\sim 0.5$~ms) $\approx 21$~ms at $K = 21$.
 \item Wire: $K$ Photons each carrying one 32-byte commit + one
 MAC bundle $\approx 1$~KB per Photon = 21~KB / round.
-\item Storage: one Pulsar-M share + per-round PRNG state $\approx$ 4~KB
+\item Storage: one Pulsar share + per-round PRNG state $\approx$ 4~KB
 per validator across the epoch.
 \end{itemize}
 
@@ -196,8 +196,8 @@ file & role \\
 \texttt{consensus/protocol/wave/wave.go} & Lux round driver \\
 \texttt{consensus/protocol/focus/focus.go} & beta-confidence tracker \\
 \texttt{consensus/protocol/quasar/wave\_signer.go} (planned) & Aggregator + P3Q rollup driver \\
-\texttt{pulsar-m/ref/go/pkg/pulsarm/luxround.go} & Per-Lux-round Pulsar-M helpers \\
-\texttt{pulsar-m/ref/go/pkg/pulsarm/threshold.go} & Per-round $(K, \alpha)$ Pulsar-M signer \\
+\texttt{pulsar/ref/go/pkg/pulsar/luxround.go} & Per-Lux-round Pulsar helpers \\
+\texttt{pulsar/ref/go/pkg/pulsar/threshold.go} & Per-round $(K, \alpha)$ Pulsar signer \\
 \texttt{p3q/crates/p3q-stark/} & STARK + FRI rollup prover \\
 \bottomrule
 \end{tabular}

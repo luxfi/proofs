@@ -1,24 +1,24 @@
 %% ============================================================
-%% pulsar-m/scaling.tex
+%% pulsar/scaling.tex
 %% ============================================================
 %%
-%% Concrete numerical correctness + soundness claims for Pulsar-M
+%% Concrete numerical correctness + soundness claims for Pulsar
 %% at the extreme committee size N* = 1,111,111.
 %%
 %% Papers and audit reports cite the bounds here directly; the
 %% Go reference's TestShamirQ_LargeN_Extreme and
 %% TestLargeShamir_EvalAtTargetCommitteeSize empirically verify the
 %% correctness claim, while the unforgeability claim is by reduction
-%% from pulsar-m/unforgeability.tex.
+%% from pulsar/unforgeability.tex.
 %% ============================================================
 
-\subsection*{Pulsar-M at $N^\star = 1\,111\,111$ signers}
+\subsection*{Pulsar at $N^\star = 1\,111\,111$ signers}
 
 This section pins the concrete, numerical claims for the canonical
 extreme committee size. Three claims are made: (i) algebraic
 correctness, (ii) cryptographic soundness, (iii) operational
 feasibility. The first is mechanical; the second is by
-\Cref{thm:pulsar-m-tsuf}'s $n$-independence; the third is an
+\Cref{thm:pulsar-tsuf}'s $n$-independence; the third is an
 arithmetic estimate.
 
 \paragraph{Constants.}
@@ -33,13 +33,13 @@ arithmetic estimate.
 
 \paragraph{Claim 1 -- Algebraic correctness at $N^\star$.}
 
-\begin{proposition}[Pulsar-M Shamir is correct at $N^\star$]
-\label{prop:pulsar-m-correct-at-N-star}
+\begin{proposition}[Pulsar Shamir is correct at $N^\star$]
+\label{prop:pulsar-correct-at-N-star}
 Let $f(X) = s + a_1 X + \cdots + a_{t-1} X^{t-1}$ be a degree-$(t-1)$
 polynomial over GF($q$). For any subset $T \subseteq \{1, \dots, N^\star\}$
 with $|T| = t$ and distinct elements, the Lagrange interpolation
 $\sum_{i \in T} \lambda_i^T \cdot f(i)$ at $X = 0$ recovers $s$
-exactly. Equivalently: the Pulsar-M wide-field Shamir layer is
+exactly. Equivalently: the Pulsar wide-field Shamir layer is
 correct for every threshold subset of every committee with $n \le
 N^\star$.
 \end{proposition}
@@ -53,24 +53,24 @@ on $\le q - 1$ distinct evaluation points recovers any polynomial of
 degree $\le t - 1$ exactly. \qed
 \end{proof}
 
-\Cref{prop:pulsar-m-correct-at-N-star} is the propositional content
+\Cref{prop:pulsar-correct-at-N-star} is the propositional content
 verified empirically by
-\texttt{ref/go/pkg/pulsarm/largeshamir\_test.go:\\TestLargeShamir\_EvalAtTargetCommitteeSize}
+\texttt{ref/go/pkg/pulsar/largeshamir\_test.go:\\TestLargeShamir\_EvalAtTargetCommitteeSize}
 and
-\texttt{ref/go/pkg/pulsarm/shamir\_gfq\_test.go:\\TestShamirQ\_LargeN\_BoundaryCommittees}.
+\texttt{ref/go/pkg/pulsar/shamir\_gfq\_test.go:\\TestShamirQ\_LargeN\_BoundaryCommittees}.
 
 \paragraph{Claim 2 -- Cryptographic soundness at $N^\star$.}
 
-\begin{theorem}[Pulsar-M TS-UF at $N^\star$ is bounded by FIPS~204 advantages]
-\label{thm:pulsar-m-soundness-at-N-star}
-For every $\PPT$ adversary $\mathcal{A}$ against Pulsar-M at
+\begin{theorem}[Pulsar TS-UF at $N^\star$ is bounded by FIPS~204 advantages]
+\label{thm:pulsar-soundness-at-N-star}
+For every $\PPT$ adversary $\mathcal{A}$ against Pulsar at
 $(n, t) = (N^\star, t)$, $1 \le t \le N^\star$, the TS-UF advantage
-satisfies the bound of \Cref{thm:pulsar-m-tsuf} with the same
+satisfies the bound of \Cref{thm:pulsar-tsuf} with the same
 constants as the small-committee case.
 \end{theorem}
 
 \begin{proof}
-By \Cref{thm:pulsar-m-scales-n}, the TS-UF advantage is independent
+By \Cref{thm:pulsar-scales-n}, the TS-UF advantage is independent
 of $n$ once the parameter level $L$ is fixed. Instantiating at
 $n = N^\star$ does not change the M-LWE, MSIS, ML-DSA EUF-CMA, or
 RO-programming terms. The Shamir field choice (GF($q$) at this
@@ -81,7 +81,7 @@ because $q > N^\star$. \qed
 
 \paragraph{Claim 3 -- Operational feasibility at $N^\star$.}
 
-We collect the numerical operating costs of running Pulsar-M at
+We collect the numerical operating costs of running Pulsar at
 $n = N^\star$ for both the per-party (light-client / HSM) and the
 aggregator (consensus-layer) viewpoints.
 
@@ -124,16 +124,16 @@ The cap $N^\star = 1\,111\,111$ is a deployment-time soft cap, not
 a protocol-level hard cap: changing it requires only updating the
 \texttt{TargetCommitteeSize} constant and re-running the conformance
 tests, all of which are guaranteed to pass for any
-$N^\star \le q - 1$ by \Cref{prop:pulsar-m-correct-at-N-star} and
-\Cref{thm:pulsar-m-soundness-at-N-star}.
+$N^\star \le q - 1$ by \Cref{prop:pulsar-correct-at-N-star} and
+\Cref{thm:pulsar-soundness-at-N-star}.
 
 \paragraph{Arithmetic-width discipline.}
 At $n = N^\star$ no intermediate value exceeds $46$ bits. uint128 or
-uint256 widths are not needed for the Pulsar-M core; they are
+uint256 widths are not needed for the Pulsar core; they are
 reserved for the Z-Chain SNARK verifier path (which operates over
-$\approx 254$-bit prime-order fields and consumes Pulsar-M outputs
+$\approx 254$-bit prime-order fields and consumes Pulsar outputs
 as opaque byte strings rather than re-interpreting them as field
 elements). This means every modern CPU and GPU dispatch backend
-(Apple Metal, NVIDIA CUDA, AMD ROCm) runs the Pulsar-M reference
+(Apple Metal, NVIDIA CUDA, AMD ROCm) runs the Pulsar reference
 at memory-bandwidth-limited throughput; the dominant cost is the
 $\cSHAKE$ stream expansion, not modular arithmetic.

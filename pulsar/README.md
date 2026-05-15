@@ -23,7 +23,7 @@ and verifies under the FIPS 204 verifier verbatim.
 ## Mechanization status
 
 - LaTeX statements: **all five files complete**.
-- Lean 4: `lean/Crypto/Pulsar_M/` skeleton in this repository. The reductions
+- Lean 4: `lean/Crypto/Pulsar/` skeleton in this repository. The reductions
   import the FIPS 204 ML-DSA EUF-CMA axiom from
   `lean/Crypto/MLDSA.lean` and the MLWE / MSIS hardness axioms from
   `lean/Crypto/Pulsar/dkg2.lean`.

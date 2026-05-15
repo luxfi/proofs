@@ -1,5 +1,5 @@
 /-
-  Pulsar-M -- Byte-wise Shamir correctness over GF(q)
+  Pulsar -- Byte-wise Shamir correctness over GF(q)
 
   Models the wide-field Shamir layer used at committee sizes
   256 < n ≤ q-1. The narrow-field GF(257) path used at n ≤ 256
@@ -16,17 +16,17 @@
     because GF(q) has order > n for every n ≤ q-1.
 
   Maps to:
-  - pulsar-m/ref/go/pkg/pulsarm/shamir_gfq.go
-  - pulsar-m/ref/go/pkg/pulsarm/largeshamir.go
-  - proofs/pulsar-m/scaling.tex Proposition
-    `prop:pulsar-m-correct-at-N-star`
+  - pulsar/ref/go/pkg/pulsar/shamir_gfq.go
+  - pulsar/ref/go/pkg/pulsar/largeshamir.go
+  - proofs/pulsar/scaling.tex Proposition
+    `prop:pulsar-correct-at-N-star`
 -/
 
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
 
-namespace Crypto.PulsarM.Shamir
+namespace Crypto.Pulsar.Shamir
 
 /-- The FIPS 204 prime q = 2^23 - 2^13 + 1. -/
 def q : Nat := 8380417
@@ -61,8 +61,8 @@ def Poly (t : Nat) := Fin t → Fin seedSize → Nat
     `0` recovers `f.eval 0` — the constant term, which is the shared
     secret in Pulsar's byte-wise Shamir layer.
 
-    Discharged: re-uses the proof from `Crypto.PulsarM.Lagrange`. This
-    is the algebraic content `prop:pulsar-m-correct-at-N-star`
+    Discharged: re-uses the proof from `Crypto.Threshold.Lagrange`. This
+    is the algebraic content `prop:pulsar-correct-at-N-star`
     (scaling.tex) names — independent of the GF(257) vs GF(q)
     parameter choice; both are finite fields of order strictly greater
     than the supported committee size (q ≈ 8.38M).
@@ -130,7 +130,7 @@ theorem lagrange_denom_nonzero (i j : Nat) (hi : 1 ≤ i ∧ i < q)
 -- Scale guarantees
 -- ===========================================================================
 
-/-- **Pulsar-M's Shamir layer supports up to q - 1 ≈ 8.38 million
+/-- **Pulsar's Shamir layer supports up to q - 1 ≈ 8.38 million
     parties.** -/
 theorem max_committee_is_q_minus_one : maxCommittee = q - 1 := by
   unfold maxCommittee
@@ -146,4 +146,4 @@ theorem headroom_above_target : maxCommittee - 1111111 = 7269305 := by
   unfold maxCommittee q
   decide
 
-end Crypto.PulsarM.Shamir
+end Crypto.Pulsar.Shamir

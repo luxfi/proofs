@@ -10,13 +10,13 @@
   any smaller committee with the same parameter level.
 
   Maps to:
-  - pulsar-m/spec/pulsar-m.tex section "Threshold signing"
-  - pulsar-m/spec/security-games.tex Game TS-UF
-  - proofs/pulsar-m/unforgeability.tex Theorem `thm:pulsar-m-tsuf`
+  - pulsar/spec/pulsar.tex section "Threshold signing"
+  - pulsar/spec/security-games.tex Game TS-UF
+  - proofs/pulsar/unforgeability.tex Theorem `thm:pulsar-tsuf`
   - ref/go/pkg/pulsar/threshold.go (Combine path)
 
   Algebraic correctness of the underlying Shamir layer is discharged
-  in `Crypto.PulsarM.Shamir` (via `Crypto.PulsarM.Lagrange`) — this
+  in `Crypto.Pulsar.Shamir` (via `Crypto.Threshold.Lagrange`) — this
   file re-exports the headline consequence and states the named
   hardness assumptions that the cryptographic part of the proof
   reduces to.
@@ -25,9 +25,9 @@
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
-import Crypto.Pulsar_M.Shamir
+import Crypto.Pulsar.Shamir
 
-namespace Crypto.PulsarM
+namespace Crypto.Pulsar
 
 /-- The three Pulsar parameter levels mirror FIPS 204 ML-DSA. -/
 inductive ParamLevel : Type
@@ -106,7 +106,7 @@ opaque MLDSAEUFCMAAdv (fp : FipsParams) : HardnessAdvantage
 /-- **Pulsar wide-field Shamir is correct at every committee size up
     to q - 1.**
 
-    Discharged: re-uses `Crypto.PulsarM.Shamir.shamir_correct_at_target`,
+    Discharged: re-uses `Crypto.Pulsar.Shamir.shamir_correct_at_target`,
     which in turn re-uses `Crypto.Threshold.Lagrange.threshold_reconstructs_secret`.
     No `True` placeholder, no admit.
 
@@ -118,7 +118,7 @@ theorem pulsar_shamir_correct_at_target
     (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
     (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
     f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
-  Crypto.PulsarM.Shamir.shamir_correct_at_target f s v hvs degree_f_lt
+  Crypto.Pulsar.Shamir.shamir_correct_at_target f s v hvs degree_f_lt
 
 -- ===========================================================================
 -- TS-UF advantage bound.
@@ -132,8 +132,8 @@ def TSUFBound (fp : FipsParams) (_tp : ThresholdParams) : Prop :=
   ∃ (_a : HardnessAdvantage),
     -- The TS-UF advantage decomposes into MLWE + MSIS + MLDSA EUF-CMA
     -- advantages plus a negligible RO programming penalty. The
-    -- decomposition theorem `thm:pulsar-m-tsuf` of
-    -- proofs/pulsar-m/unforgeability.tex constructs this witness.
+    -- decomposition theorem `thm:pulsar-tsuf` of
+    -- proofs/pulsar/unforgeability.tex constructs this witness.
     True
 
 /-- **TS-UF security of Pulsar.**
@@ -143,7 +143,7 @@ def TSUFBound (fp : FipsParams) (_tp : ThresholdParams) : Prop :=
     advantages plus the RO programming penalty. The bound is
     n-independent.
 
-    Maps to proofs/pulsar-m/unforgeability.tex Theorem `thm:pulsar-m-tsuf`.
+    Maps to proofs/pulsar/unforgeability.tex Theorem `thm:pulsar-tsuf`.
 
     The witness is the trivial advantage; the load-bearing claim is
     `pulsar_tsuf_n_independent` below, which shows the bound at the
@@ -173,4 +173,4 @@ theorem pulsar_extreme_committee_safety
     TSUFBound fp tp_extreme :=
   pulsar_tsuf_n_independent fp tp_small tp_extreme h
 
-end Crypto.PulsarM
+end Crypto.Pulsar

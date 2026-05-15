@@ -10,10 +10,10 @@
   conformant by NIST validation of CIRCL).
 
   Maps to:
-  • pulsar-m/spec/pulsar-m.tex `Verification`
-  • pulsar-m/spec/security-games.tex `Game OUT-IND`
-  • proofs/pulsar-m/output-interchangeability.tex Theorem
-    `thm:pulsar-m-output-interchange`
+  • pulsar/spec/pulsar.tex `Verification`
+  • pulsar/spec/security-games.tex `Game OUT-IND`
+  • proofs/pulsar/output-interchangeability.tex Theorem
+    `thm:pulsar-output-interchange`
   • ref/go/pkg/pulsar/verify.go (single-line dispatch to circl)
 -/
 
@@ -21,7 +21,7 @@ import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
 
-namespace Crypto.PulsarM.Verify
+namespace Crypto.Pulsar.Verify
 
 open Crypto.Threshold.Lagrange
 
@@ -103,4 +103,4 @@ theorem pulsar_output_interchangeable
   -- identity + single-party FIPS 204 correctness in the caller)
   exact h_fips_accepts
 
-end Crypto.PulsarM.Verify
+end Crypto.Pulsar.Verify

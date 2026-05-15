@@ -1,17 +1,17 @@
 %% ============================================================
-%% pulsar-m/grouped-sortition.tex
+%% pulsar/grouped-sortition.tex
 %% ============================================================
 %%
-%% Composition of Pulsar-M (3,2) per group with grouped sortition
+%% Composition of Pulsar (3,2) per group with grouped sortition
 %% and P3Q rollup to attest 1.1M-validator finality. Fully post-
 %% quantum end-to-end (no pairings, no KZG, no Groth16).
 %% ============================================================
 
-\subsection*{Pulsar-M (3,2) $\times$ grouped sortition $\times$ P3Q rollup}
+\subsection*{Pulsar (3,2) $\times$ grouped sortition $\times$ P3Q rollup}
 
 This file pins the composition theorem that lets a $1.1$M-validator
 Lux consensus produce a single succinct PQ-safe certificate without
-running a $1.1$M-party Pulsar-M ceremony.
+running a $1.1$M-party Pulsar ceremony.
 
 \paragraph{Setup.}
 Fix a validator pool of size $N \le 10^7$. Let $g = 3$ be the group
@@ -24,11 +24,11 @@ unbiasable epoch beacon (the Lux Quasar finality stream).
 \item \textbf{Grouped sortition $\mathcal{S}_\beta$.} A deterministic
 function (SHA3-384 Fisher-Yates) that maps $\beta_e$ to a partition
 of $\{1, \dots, N\}$ into $\lceil N / g \rceil$ groups of size $g$.
-\item \textbf{Per-group Pulsar-M (3, 2) ceremony.} Each group $G_k$
+\item \textbf{Per-group Pulsar (3, 2) ceremony.} Each group $G_k$
 runs $\DKG_{G_k}$ then $\Sign_{G_k}$ per epoch checkpoint, producing
 a single FIPS~204 ML-DSA signature $\sigma_k$ under a per-group
 public key $\mathit{pk}_k$. By
-\Cref{thm:pulsar-m-tsuf} the per-group TS-UF advantage is bounded
+\Cref{thm:pulsar-tsuf} the per-group TS-UF advantage is bounded
 by the FIPS~204 / M-LWE / MSIS sum at level $L$.
 \item \textbf{P3Q STARK rollup $\mathcal{R}_{P3Q}$.} A succinct
 non-interactive PQ-safe argument (Lux's strict-PQ Plonky3 fork:
@@ -59,7 +59,7 @@ underlies P3Q.
 \end{itemize}
 
 \begin{theorem}[Composition soundness]
-\label{thm:pulsar-m-grouped-sortition}
+\label{thm:pulsar-grouped-sortition}
 For every $\PPT$ adversary $\mathcal{A}$ producing a forged
 certificate $(\mathit{pk}_*, \mu_*, \pi_*)$ that the chain verifier
 accepts on a message $\mu_*$ for which no honest signing query was
@@ -106,11 +106,11 @@ probability of this event is at most
 $\tbinom{N/g}{\rho N / g}$ which is a polynomial in $N$ for fixed
 $\rho < 2/3$.
 
-\textbf{H3} -- reduce per-group forgery to Pulsar-M TS-UF. Any
+\textbf{H3} -- reduce per-group forgery to Pulsar TS-UF. Any
 forgery $\sigma_k$ produced against a group where $\mathcal{A}$
 controls at most $\theta - 1 = 1$ party is by definition a
-TS-UF violation for the $(3, 2)$ Pulsar-M instance running on that
-group. By \Cref{thm:pulsar-m-tsuf} this is bounded by
+TS-UF violation for the $(3, 2)$ Pulsar instance running on that
+group. By \Cref{thm:pulsar-tsuf} this is bounded by
 $\mathrm{Adv}^{\mathsf{TS\text{-}UF}}_{\mathsf{Pulsar\text{-}M}\text{-}L}(\mathcal{B}_1)$
 per group, multiplied by the maximum number of groups attacker can
 attempt forgery against in one epoch -- bounded by $\tbinom{N/g}{\rho
@@ -121,7 +121,7 @@ Summing the three hybrid bounds gives the theorem. \qed
 
 \paragraph{Numerical instantiation at $N = 1{,}111{,}111$.}
 With $g = 3$, $\theta = 2$, $\rho = 1/2$ (industry-standard
-Byzantine tolerance budget), and Pulsar-M-65 (NIST PQ category 3,
+Byzantine tolerance budget), and Pulsar-65 (NIST PQ category 3,
 $\lambda = 192$):
 
 \begin{itemize}[leftmargin=*, itemsep=0pt]
@@ -146,8 +146,8 @@ Every primitive in the composition rests on a post-quantum hardness
 assumption:
 
 \begin{itemize}[leftmargin=*, itemsep=0pt]
-\item Pulsar-M (3, 2) reduces to Module-LWE + MSIS + ML-DSA EUF-CMA
-under \Cref{thm:pulsar-m-tsuf}.
+\item Pulsar (3, 2) reduces to Module-LWE + MSIS + ML-DSA EUF-CMA
+under \Cref{thm:pulsar-tsuf}.
 \item P3Q soundness reduces to cSHAKE256 (FIPS 202) collision-
 resistance via the FRI low-degree test and standard
 Fiat-Shamir-with-Aborts framework.
@@ -169,8 +169,8 @@ algorithm has no purchase on the certificate-forging adversary.
 file & role \\
 \midrule
 \texttt{consensus/protocol/quasar/grouped\_threshold.go} & Grouped sortition + per-group quorum \\
-\texttt{pulsar-m/ref/go/pkg/pulsarm/threshold.go} & Per-group Pulsar-M (3, 2) signing \\
-\texttt{pulsar-m/ref/go/pkg/pulsarm/dkg.go} & Per-group Pulsar-M DKG \\
+\texttt{pulsar/ref/go/pkg/pulsar/threshold.go} & Per-group Pulsar (3, 2) signing \\
+\texttt{pulsar/ref/go/pkg/pulsar/dkg.go} & Per-group Pulsar DKG \\
 \texttt{p3q/crates/p3q-stark/} & STARK + FRI prover \\
 \texttt{p3q/crates/p3q-challenger/} & cSHAKE256 Fiat-Shamir transcript \\
 \texttt{p3q/crates/p3q-zchain/} & Z-Chain integration crate \\

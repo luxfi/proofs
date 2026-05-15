@@ -1,18 +1,18 @@
 %% ============================================================
-%% pulsar-m/dkg-soundness.tex
+%% pulsar/dkg-soundness.tex
 %% ============================================================
 %%
-%% DKG soundness + privacy theorems for Pulsar-M (Module-LWE).
+%% DKG soundness + privacy theorems for Pulsar (Module-LWE).
 %% Targets the Pedersen-DKG over R_q^k described in
-%% pulsar-m/spec/pulsar-m.tex section "Distributed key generation".
+%% pulsar/spec/pulsar.tex section "Distributed key generation".
 %% ============================================================
 
-\subsection*{Pulsar-M DKG soundness}
+\subsection*{Pulsar DKG soundness}
 
-\begin{theorem}[Pulsar-M DKG soundness]
-\label{thm:pulsar-m-dkg-sound}
+\begin{theorem}[Pulsar DKG soundness]
+\label{thm:pulsar-dkg-sound}
 For every $\PPT$ adversary $\mathcal{A}$ against the DKG-SOUND game
-of \texttt{pulsar-m/spec/security-games.tex},
+of \texttt{pulsar/spec/security-games.tex},
 \[
   \mathrm{Adv}^{\mathsf{DKG\text{-}SOUND}}_{\mathsf{Pulsar\text{-}M}}(\mathcal{A})
   \;\le\;
@@ -23,7 +23,7 @@ of \texttt{pulsar-m/spec/security-games.tex},
 Concretely: a successful DKG-SOUND adversary either breaks the
 Pedersen-commit binding (an MSIS instance over $[\mathbf{A} | \mathbf{B}]$)
 or finds a $\cSHAKE256$ pre-image (an RO term bounded by $q_H /
-2^{256}$). Both terms are negligible at every Pulsar-M parameter
+2^{256}$). Both terms are negligible at every Pulsar parameter
 level.
 \end{theorem}
 
@@ -64,12 +64,12 @@ Both complaints are publicly verifiable from the transcript alone
 \mathbf{B})$). The chain governance layer consumes the complaints
 and slashes the disqualified party.
 
-\subsection*{Pulsar-M DKG share privacy}
+\subsection*{Pulsar DKG share privacy}
 
-\begin{theorem}[Pulsar-M DKG share privacy]
-\label{thm:pulsar-m-dkg-priv}
+\begin{theorem}[Pulsar DKG share privacy]
+\label{thm:pulsar-dkg-priv}
 For every $\PPT$ adversary $\mathcal{A}$ against the DKG-PRIV game
-of \texttt{pulsar-m/spec/security-games.tex} with up to $t-1$
+of \texttt{pulsar/spec/security-games.tex} with up to $t-1$
 corrupted parties,
 \[
   \mathrm{Adv}^{\mathsf{DKG\text{-}PRIV}}_{\mathsf{Pulsar\text{-}M}}(\mathcal{A})
@@ -90,14 +90,14 @@ commits reduces to M-LWE in $\mathbf{B}$.
 
 The corrupted-party share leakage is information-theoretically zero
 for $|\mathcal{C}| \le t - 1$ by Shamir secret sharing over any
-field of order $> n$. The Pulsar-M reference implementation uses
+field of order $> n$. The Pulsar reference implementation uses
 GF($257$) for $n \le 256$ and GF($q$) for $n \le q - 1$; both
 satisfy the field-order condition for every committee size in
 scope. \qed
 \end{proof}
 
 \paragraph{Scaling.}
-\Cref{thm:pulsar-m-dkg-priv}'s bound is independent of the
+\Cref{thm:pulsar-dkg-priv}'s bound is independent of the
 committee size $n$. The DKG share-privacy guarantee therefore
 extends verbatim to the extreme committee size $N^\star =
 1\,111\,111$.
