@@ -18,6 +18,12 @@
   - luxfi/precompile: hqc precompile at 0x012208 (Encapsulate only)
   - LP-0120 §4: family-disjoint KEM line of LP-4200 PQCrypto block
 
+  Naming: HQC stands alone at 0x012208. The X25519 ∥ ML-KEM-768 ∥ HQC
+  triple at 0x2222 is referred to as "code-hardened X-Wing", not as
+  its own Wing-prefixed brand. The astronomical names Aurora and
+  Magnetar are reserved for the signature *certificate profiles*
+  (Pulsar ∥ Corona and Pulsar ∥ Corona ∥ Comet respectively).
+
   Properties proved here:
   - Correctness: decaps(encaps(pk)) recovers the shared secret
   - Implicit-rejection ciphertext non-malleability
@@ -164,16 +170,20 @@ axiom hqc_disjoint_from_mlwe :
     -- oracle cannot solve).
     ∃ (mlwe_instance : Nat), sdp_oracle mlwe_instance ≠ mlwe_instance
 
-/-- Hybrid KEM extension (X-Wing+): X25519 ∥ ML-KEM-768 ∥ HQC.
+/-- Code-hardened X-Wing (unbranded KEM triple): X25519 ∥ ML-KEM-768 ∥ HQC.
     Breaking the hybrid SS requires breaking ALL THREE primitives
-    simultaneously — ECDLP, Module-LWE, AND Syndrome Decoding. -/
-axiom xwing_plus_ss : Mode → Nat → Nat → Nat → Nat
+    simultaneously — ECDLP, Module-LWE, AND Syndrome Decoding.
 
-/-- X-Wing+ shared secret combines all three KEMs. -/
-axiom xwing_plus_combines_three :
+    This is intentionally not a separate brand (no Wing-+ name); it's
+    a code-hardened variant of the IETF X-Wing construction, exposed
+    at precompile `0x2222`. -/
+axiom xwing_hqc_ss : Mode → Nat → Nat → Nat → Nat
+
+/-- Code-hardened X-Wing shared secret combines all three KEMs. -/
+axiom xwing_hqc_combines_three :
   ∀ (mode : Mode) (x25519_ss mlkem_ss hqc_ss : Nat),
-    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ x25519_ss ∨
-    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ mlkem_ss ∨
-    xwing_plus_ss mode x25519_ss mlkem_ss hqc_ss ≠ hqc_ss
+    xwing_hqc_ss mode x25519_ss mlkem_ss hqc_ss ≠ x25519_ss ∨
+    xwing_hqc_ss mode x25519_ss mlkem_ss hqc_ss ≠ mlkem_ss ∨
+    xwing_hqc_ss mode x25519_ss mlkem_ss hqc_ss ≠ hqc_ss
 
 end Crypto.HQC
