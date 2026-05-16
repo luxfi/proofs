@@ -80,6 +80,7 @@ lean_lib Crypto where
     `Crypto.Threshold.Reshare,
     `Crypto.ZKSignature,
     `Crypto.HQC,
+    `Crypto.Comet,
     `Crypto.Threshold_Lagrange,
     `Crypto.Pulsar.OutputInterchange,
     `Crypto.Pulsar.Shamir,
