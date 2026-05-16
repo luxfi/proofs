@@ -88,6 +88,11 @@ axiom aead_wrong_key :
   ∀ (k₁ k₂ nonce pt : List UInt8),
     k₁ ≠ k₂ → AEAD_Dec k₂ nonce (AEAD_Enc k₁ nonce pt) = none
 
+axiom aead_different_key_different_ct :
+  ∀ {k₁ k₂ : List UInt8}, k₁ ≠ k₂ →
+    ∀ (nonce plaintext : List UInt8),
+      AEAD_Enc k₁ nonce plaintext ≠ AEAD_Enc k₂ nonce plaintext
+
 -- KDF: derive file body key from file key
 axiom KDF : List UInt8 → List UInt8 → List UInt8
   -- (ikm, info) → derived key
@@ -126,7 +131,7 @@ axiom wrap_wrong_key :
 
 /-- Encrypt: generate a random file key, wrap it to each recipient,
     then AEAD-encrypt the payload under KDF(fileKey). -/
-def encrypt (seed : Nat) (nonce : List UInt8) (plaintext : List UInt8)
+noncomputable def encrypt (seed : Nat) (nonce : List UInt8) (plaintext : List UInt8)
     (recipients : List (RecipientType × Nat)) : List UInt8 × List (List UInt8) :=
   let fileKey := RandomFileKey seed
   let bodyKey := KDF fileKey "payload".toUTF8.toList
@@ -135,7 +140,7 @@ def encrypt (seed : Nat) (nonce : List UInt8) (plaintext : List UInt8)
   (body, stanzas)
 
 /-- Decrypt: unwrap file key from any stanza, then AEAD-decrypt the payload. -/
-def decrypt (rtype : RecipientType) (sk : Nat) (nonce : List UInt8)
+noncomputable def decrypt (rtype : RecipientType) (sk : Nat) (nonce : List UInt8)
     (body : List UInt8) (stanza : List UInt8) : Option (List UInt8) :=
   match UnwrapFileKey rtype sk stanza with
   | none => none
@@ -155,7 +160,7 @@ theorem age_correctness
     decrypt rtype sk nonce body (stanzas.head!) = some plaintext := by
   simp [encrypt, decrypt]
   rw [wrap_roundtrip]
-  rw [aead_roundtrip]
+  simp [aead_roundtrip]
 
 /-- Theorem 2: Hybrid security — breaking the hybrid recipient requires
     breaking both X25519 AND ML-KEM. An attacker who breaks only one
@@ -183,9 +188,6 @@ def labelsConsistent (recipients : List RecipientType) : Prop :=
 theorem label_enforcement_rejects_mixed :
     ¬ labelsConsistent [.x25519, .hybrid] := by
   simp [labelsConsistent, recipientLabel, Label]
-  intro h
-  exact absurd (h .x25519 .hybrid (List.mem_cons_self _ _)
-    (List.mem_cons_of_mem _ (List.mem_cons_self _ _))) (by simp [recipientLabel])
 
 /-- Theorem 4: Recipient anonymity — ciphertext body is independent of
     which recipient it is encrypted for. The body depends only on the
@@ -219,12 +221,6 @@ theorem cek_per_file
     "payload".toUTF8.toList hfk
   -- AEAD with different keys produces different ciphertext
   exact absurd heq (aead_different_key_different_ct hbk nonce plaintext)
-
--- Helper axiom: AEAD with different keys on same nonce+plaintext → different ciphertext
-axiom aead_different_key_different_ct :
-  ∀ {k₁ k₂ : List UInt8}, k₁ ≠ k₂ →
-    ∀ (nonce plaintext : List UInt8),
-      AEAD_Enc k₁ nonce plaintext ≠ AEAD_Enc k₂ nonce plaintext
 
 /-! ## Post-Quantum Hybrid Recipient (age1pq) -/
 
@@ -261,7 +257,7 @@ theorem pq_hybrid_correctness
     decrypt .hybrid sk nonce body (stanzas.head!) = some plaintext := by
   simp [encrypt, decrypt]
   rw [wrap_roundtrip]
-  rw [aead_roundtrip]
+  simp [aead_roundtrip]
 
 /-- Theorem 7: PQ hybrid security — an attacker who compromises only
     the X25519 component OR only the ML-KEM component cannot recover

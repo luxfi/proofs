@@ -229,11 +229,11 @@ theorem uniqueness
     · exact hdistinct
   have hg0 : lagrangeInterp shares 0 F = polyEval g 0 F := by
     apply lagrange_exact
-    · omega
+    · rw [← hdeg]; exact hcount
     · exact hg_valid
     · exact hdistinct
   rw [eval_at_zero] at hf0 hg0
-  linarith
+  exact hf0.symm.trans hg0
 
 /-- THEOREM 4: THRESHOLD IS TIGHT
     Exactly t shares suffice — no more, no fewer.
@@ -245,9 +245,9 @@ theorem uniqueness
 theorem threshold_tight (params : ShamirParams) :
     -- t-1 < t ≤ n, and t is the exact cutoff
     params.t - 1 < params.t ∧ params.t ≤ params.n := by
-  constructor
-  · omega
-  · exact params.ht
+  have := params.ht_pos
+  refine ⟨?_, params.ht⟩
+  omega
 
 /-- COROLLARY: Reconstruction works with MORE than t shares too.
     Overdetermined interpolation is still correct because the shares
@@ -264,7 +264,10 @@ theorem reconstruction_overdetermined
     lagrangeInterp all_shares 0 params.F = secret f := by
   have h1 : lagrangeInterp all_shares 0 params.F = polyEval f 0 params.F := by
     apply lagrange_exact
-    · omega
+    · -- all_shares.length = params.n ≥ params.t = f.degree + 1
+      have := params.ht
+      rw [hall_size, hfpoly]
+      omega
     · exact hall_valid
     · exact hall_distinct
   rw [h1, eval_at_zero]

@@ -78,7 +78,13 @@ lean_lib Crypto where
     `Crypto.Precompile.SR25519,
     `Crypto.Precompile.BLAKE3,
     `Crypto.Threshold.Reshare,
-    `Crypto.ZKSignature
+    `Crypto.ZKSignature,
+    `Crypto.HQC,
+    `Crypto.Threshold_Lagrange,
+    `Crypto.Pulsar.OutputInterchange,
+    `Crypto.Pulsar.Shamir,
+    `Crypto.Pulsar.Unforgeability,
+    `Crypto.Pulsar.dkg2
   ]
 
 lean_lib Storage where

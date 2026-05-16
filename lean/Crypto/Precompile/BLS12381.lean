@@ -136,8 +136,8 @@ def pairing_gas (n : Nat) : Nat := gas_pairing_base + gas_pairing_per_pair * n
 /-- Pairing gas is monotonically increasing -/
 theorem pairing_gas_monotone (n m : Nat) (h : n ≤ m) :
     pairing_gas n ≤ pairing_gas m := by
-  simp [pairing_gas]
-  omega
+  simp only [pairing_gas]
+  exact Nat.add_le_add_left (Nat.mul_le_mul_left gas_pairing_per_pair h) gas_pairing_base
 
 /-- Single pairing check fits in block gas (30M) -/
 theorem single_pairing_fits : pairing_gas 1 < 30000000 := by

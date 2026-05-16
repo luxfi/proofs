@@ -60,11 +60,11 @@ def skSize : Mode → Nat
   | .hqc192 => 4586
   | .hqc256 => 7317
 
-/-- Ciphertext sizes (bytes). -/
+/-- Ciphertext sizes (bytes) — PQClean 2023-04-30 submission. -/
 def ctSize : Mode → Nat
-  | .hqc128 => 4481
-  | .hqc192 => 9026
-  | .hqc256 => 14469
+  | .hqc128 => 4433
+  | .hqc192 => 8978
+  | .hqc256 => 14421
 
 /-- Shared secret size (constant 64 bytes across all HQC modes —
     HQC fixes a FIPS-style 64-byte SS regardless of parameter set,
@@ -122,20 +122,20 @@ axiom hqc_implicit_rejection :
 theorem ss_fixed_size (mode : Mode) : ssSize mode = 64 := by
   cases mode <;> rfl
 
-/-- HQC-128 wire sizes pinned to NIST IR 8528 §4.1. -/
+/-- HQC-128 wire sizes (PQClean 2023-04-30 submission). -/
 theorem hqc128_pk : pkSize .hqc128 = 2249 := rfl
 theorem hqc128_sk : skSize .hqc128 = 2305 := rfl
-theorem hqc128_ct : ctSize .hqc128 = 4481 := rfl
+theorem hqc128_ct : ctSize .hqc128 = 4433 := rfl
 
-/-- HQC-192 wire sizes pinned to NIST IR 8528 §4.1. -/
+/-- HQC-192 wire sizes (PQClean 2023-04-30 submission). -/
 theorem hqc192_pk : pkSize .hqc192 = 4522 := rfl
 theorem hqc192_sk : skSize .hqc192 = 4586 := rfl
-theorem hqc192_ct : ctSize .hqc192 = 9026 := rfl
+theorem hqc192_ct : ctSize .hqc192 = 8978 := rfl
 
-/-- HQC-256 wire sizes pinned to NIST IR 8528 §4.1. -/
+/-- HQC-256 wire sizes (PQClean 2023-04-30 submission). -/
 theorem hqc256_pk : pkSize .hqc256 = 7245 := rfl
 theorem hqc256_sk : skSize .hqc256 = 7317 := rfl
-theorem hqc256_ct : ctSize .hqc256 = 14469 := rfl
+theorem hqc256_ct : ctSize .hqc256 = 14421 := rfl
 
 /-- Sizes grow with security level. -/
 theorem pk_monotone_128_192 : pkSize .hqc128 < pkSize .hqc192 := by

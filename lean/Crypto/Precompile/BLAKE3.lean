@@ -113,11 +113,9 @@ theorem cheapest_per_byte : gas_per_block < 6 := by simp [gas_per_block]
 /-- 1 MB hash cost -/
 theorem one_mb_gas : gas_cost (1024 * 1024) < 50000 := by
   simp [gas_cost, gas_base, gas_per_block, block_size]
-  omega
 
 /-- 1 MB fits easily in block -/
 theorem one_mb_fits : gas_cost (1024 * 1024) < 30000000 := by
   simp [gas_cost, gas_base, gas_per_block, block_size]
-  omega
 
 end Crypto.Precompile.BLAKE3

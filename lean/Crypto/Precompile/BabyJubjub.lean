@@ -112,9 +112,9 @@ def gas_mul : Nat := 7000
 def gas_inCurve : Nat := 500
 
 /-- All operations fit in block gas -/
-theorem add_fits_block : gas_add < 30000000 := by omega
-theorem mul_fits_block : gas_mul < 30000000 := by omega
-theorem inCurve_fits_block : gas_inCurve < 30000000 := by omega
+theorem add_fits_block : gas_add < 30000000 := by simp [gas_add]
+theorem mul_fits_block : gas_mul < 30000000 := by simp [gas_mul]
+theorem inCurve_fits_block : gas_inCurve < 30000000 := by simp [gas_inCurve]
 
 /-! ## Field arithmetic bounds -/
 

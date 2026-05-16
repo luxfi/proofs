@@ -73,6 +73,7 @@ theorem update_cost (depth : Nat) (h : depth = 4) :
 theorem multiproof_sublinear (k depth : Nat) (h : k > 1) :
     -- k individual proofs: k × depth commitments
     -- Multiproof: ≤ k × depth (often much less due to sharing)
-    k * depth ≥ depth := by omega
+    k * depth ≥ depth :=
+  Nat.le_mul_of_pos_left depth (by omega : 0 < k)
 
 end Crypto.VerkleTree

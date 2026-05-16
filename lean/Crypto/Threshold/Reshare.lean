@@ -184,6 +184,8 @@ theorem reshare_byzantine_safe
 /-- Corollary: reshare can tolerate up to n-t-1 Byzantine failures -/
 theorem reshare_max_byzantine (cfg : ReshareConfig) :
     cfg.old.n - cfg.old.t - 1 < cfg.old.n := by
+  have ht := cfg.old.ht
+  have ht0 := cfg.old.ht0
   omega
 
 /-- Corollary: after reshare, the new set can immediately sign -/

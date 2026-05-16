@@ -80,7 +80,7 @@ theorem no_subgroup_attack : cofactor = 1 := rfl
 theorem solinas_prime : p = 2^256 - 2^224 + 2^192 + 2^96 - 1 := rfl
 
 /-- p > 2^255 (256-bit prime) -/
-theorem p_256_bits : p > 2^255 := by simp [p]; omega
+theorem p_256_bits : p > 2^255 := by simp [p]
 
 /-! ## Gas cost -/
 

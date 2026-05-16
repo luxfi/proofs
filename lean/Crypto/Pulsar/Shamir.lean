@@ -23,10 +23,13 @@
 -/
 
 import Mathlib.Data.Nat.Defs
+import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
 
 namespace Crypto.Pulsar.Shamir
+
+open Polynomial
 
 /-- The FIPS 204 prime q = 2^23 - 2^13 + 1. -/
 def q : Nat := 8380417
@@ -72,23 +75,23 @@ def Poly (t : Nat) := Fin t → Fin seedSize → Nat
        TestLargeShamir_EvalAtTargetCommitteeSize`. -/
 theorem shamir_correct_at_target
     {F : Type*} [Field F] [DecidableEq F]
-    (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
-    f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
+    (f : Polynomial F) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card) :
+    f = Lagrange.interpolate s v (fun i => f.eval (v i)) :=
   Crypto.Threshold.Lagrange.threshold_reconstructs_secret f s v hvs degree_f_lt
 
 /-- **Information-theoretic resilience.**
 
-    Any subset of size ≤ t-1 of Shamir shares is uniformly
-    distributed over GF(q)^seedSize given the constant term, so
-    it leaks no information about the constant term.
+    Any subset of size ≤ t-1 of Shamir shares is uniformly distributed
+    over GF(q)^seedSize given the constant term, so it leaks no
+    information about the constant term. Holds for both GF(257)
+    (small committees) and GF(q) (large committees) because both are
+    finite fields of order strictly greater than the maximum supported
+    committee size.
 
-    Holds for both GF(257) (small committees) and GF(q) (large
-    committees) because both are finite fields of order strictly
-    greater than the maximum supported committee size. -/
-/-- The information-theoretic gap between two Shamir distributions.
-    Opaque type carrying the (zero in this case, by the perfect-secrecy
-    theorem of Shamir 1979) statistical distance. -/
+    The opaque `ShamirStatDist` carries the (zero in this case, by the
+    perfect-secrecy theorem of Shamir 1979) statistical distance between
+    the secret-conditioned and unconditioned share distributions. -/
 opaque ShamirStatDist : Type
 
 axiom shamir_it_resilience

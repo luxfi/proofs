@@ -73,7 +73,9 @@ axiom identifiable_abort :
 /-- Threshold: t-1 parties learn nothing about the key -/
 theorem insufficient_parties_no_key (p : Params) (compromised : Nat)
     (h : compromised < p.t) :
-    compromised + 1 ≤ p.n := by omega
+    compromised + 1 ≤ p.n := by
+  have := p.ht
+  omega
 
 /-- Online signing is constant-round (1 round with presignatures) -/
 theorem online_constant_round : (1 : Nat) = 1 := rfl
@@ -123,7 +125,10 @@ theorem key_never_reconstructed (p : Params) (shares : List KeyShare)
 /-- ROBUSTNESS: With n parties and up to n-t failures, still have t honest -/
 theorem cggmp_robustness (p : Params) (failures : Nat)
     (h : failures ≤ p.n - p.t) :
-    p.n - failures ≥ p.t := by omega
+    p.n - failures ≥ p.t := by
+  have := p.ht
+  have := p.ht2
+  omega
 
 /-- PAILLIER ZK: Each round includes Paillier-based ZK proofs.
     These ensure honest behavior without revealing shares. -/

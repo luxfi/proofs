@@ -49,8 +49,8 @@ variable {F : Type*} [Field F] [DecidableEq F]
     relies on: combining t per-party partial values via Lagrange
     coefficients reproduces the single-party value bit-for-bit. -/
 theorem threshold_reconstructs_secret
-    (f : F[X]) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
+    (f : F[X]) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card) :
     f = Lagrange.interpolate s v (fun i => f.eval (v i)) :=
   Lagrange.eq_interpolate hvs degree_f_lt
 
@@ -60,8 +60,8 @@ theorem threshold_reconstructs_secret
     Lagrange interpolation evaluated at 0 returns the secret. This is
     the load-bearing equality for the Pulsar Class N1 reduction. -/
 theorem secret_recovery_at_zero
-    (f : F[X]) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
+    (f : F[X]) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card) :
     f.eval 0 = (Lagrange.interpolate s v (fun i => f.eval (v i))).eval 0 := by
   congr 1
   exact threshold_reconstructs_secret f s v hvs degree_f_lt
@@ -79,7 +79,7 @@ theorem secret_recovery_at_zero
     Mathlib's `LinearMap.map_add` / `interpolate` is itself an
     `F-linear map` so this is `map_add` on the `interpolate` LinearMap. -/
 theorem combine_distributes_over_sum
-    {ι : Type*} (s : Finset ι) (v : ι → F) (a b : ι → F) :
+    {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F) (a b : ι → F) :
     Lagrange.interpolate s v (a + b) =
       Lagrange.interpolate s v a + Lagrange.interpolate s v b :=
   (Lagrange.interpolate s v).map_add a b
@@ -90,7 +90,7 @@ theorem combine_distributes_over_sum
     challenge in Pulsar; the round challenge in Corona) commutes with
     the Lagrange combine. -/
 theorem combine_distributes_over_smul
-    {ι : Type*} (s : Finset ι) (v : ι → F) (c : F) (a : ι → F) :
+    {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F) (c : F) (a : ι → F) :
     Lagrange.interpolate s v (c • a) =
       c • Lagrange.interpolate s v a :=
   (Lagrange.interpolate s v).map_smul c a
@@ -119,8 +119,8 @@ theorem combine_distributes_over_smul
     algebraic identity with the FIPS 204 verifier dispatch axiom in
     OutputInterchange.lean. -/
 theorem threshold_partial_response_identity
-    (f : F[X]) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s)
+    (f : F[X]) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card)
     (y : ι → F) (c : F)
     (z : ι → F) (hz : z = y + c • fun i => f.eval (v i)) :
     (Lagrange.interpolate s v z).eval 0 =
@@ -136,8 +136,7 @@ theorem threshold_partial_response_identity
   have hshare :
       Lagrange.interpolate s v (fun i => f.eval (v i)) = f :=
     (threshold_reconstructs_secret f s v hvs degree_f_lt).symm
-  rw [hshare]
+  rw [hshare, smul_eq_mul]
   -- Now both sides match: y-eval + c · f.eval 0
-  ring
 
 end Crypto.Threshold.Lagrange

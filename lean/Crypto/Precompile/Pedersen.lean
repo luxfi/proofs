@@ -38,11 +38,11 @@ axiom H_independent :
   ∀ (i : Nat), H ≠ gen i
 
 /-- Pedersen hash: H(m_1, ..., m_k) = Σ [m_i] G_i -/
-def pedersen_hash (msgs : List Nat) : G :=
+noncomputable def pedersen_hash (msgs : List Nat) : G :=
   msgs.enum.foldl (fun acc (i, m) => G.add acc (G.smul m (gen i))) G.zero
 
 /-- Pedersen commitment: C(m; r) = [r]H + Σ [m_i] G_i -/
-def pedersen_commit (msgs : List Nat) (r : Nat) : G :=
+noncomputable def pedersen_commit (msgs : List Nat) (r : Nat) : G :=
   G.add (G.smul r H) (pedersen_hash msgs)
 
 /-- Collision resistance: finding a collision implies solving DLP -/
@@ -92,7 +92,8 @@ def gas_cost (k : Nat) : Nat := gas_base + gas_per_element * k
 /-- Gas is linear in input count -/
 theorem gas_linear (k1 k2 : Nat) (h : k1 ≤ k2) :
     gas_cost k1 ≤ gas_cost k2 := by
-  simp [gas_cost]; omega
+  simp only [gas_cost]
+  exact Nat.add_le_add_left (Nat.mul_le_mul_left gas_per_element h) gas_base
 
 /-- Max input gas fits in block -/
 theorem max_gas_fits : gas_cost max_inputs < 30000000 := by

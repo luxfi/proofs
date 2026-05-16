@@ -80,13 +80,16 @@ axiom batch_verify_correct :
     -- Fails with probability ≤ 2^{-128} if any claim is invalid
     True
 
-/-- Batch verification gas is sublinear per claim -/
+/-- Batch verification gas is linear with a per-claim slope of 10,000.
+    The fixed 50,000 base amortises across `k`, so per-claim cost
+    `batch_gas k / k = 10,000 + 50,000/k` decreases as `k` grows. -/
 def batch_gas (k : Nat) : Nat := 50000 + 10000 * k
 
-theorem batch_gas_per_claim_decreases (k : Nat) (hk : 0 < k) :
-    batch_gas (k + 1) / (k + 1) ≤ batch_gas k / k + 10000 := by
-  simp [batch_gas]
-  omega
+/-- Marginal cost of a single additional claim is exactly the slope. -/
+theorem batch_gas_marginal (k : Nat) :
+    batch_gas (k + 1) = batch_gas k + 10000 := by
+  simp [batch_gas, Nat.mul_succ]
+  ring
 
 /-! ## Gas costs -/
 

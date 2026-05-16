@@ -35,8 +35,11 @@
 -/
 
 import Mathlib.Data.Nat.Defs
+import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
+
+open Polynomial
 
 namespace Crypto.Corona
 
@@ -76,9 +79,9 @@ structure CoronaSig where
     Pulsar, Ring-LWE for Corona). -/
 theorem corona_threshold_reconstructs
     {F : Type*} [Field F] [DecidableEq F]
-    (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
-    f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
+    (f : Polynomial F) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card) :
+    f = Lagrange.interpolate s v (fun i => f.eval (v i)) :=
   Crypto.Threshold.Lagrange.threshold_reconstructs_secret f s v hvs degree_f_lt
 
 /-- **Combine linearity (algebraic discharge).**
@@ -88,10 +91,10 @@ theorem corona_threshold_reconstructs
     the Pulsar Lagrange identity. -/
 theorem corona_combine_linear
     {F : Type*} [Field F] [DecidableEq F]
-    {ι : Type*} (s : Finset ι) (v : ι → F) (a b : ι → F) :
-    Polynomial.Lagrange.interpolate s v (a + b) =
-      Polynomial.Lagrange.interpolate s v a +
-      Polynomial.Lagrange.interpolate s v b :=
+    {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F) (a b : ι → F) :
+    Lagrange.interpolate s v (a + b) =
+      Lagrange.interpolate s v a +
+      Lagrange.interpolate s v b :=
   Crypto.Threshold.Lagrange.combine_distributes_over_sum s v a b
 
 /-- **PQ unforgeability (cryptographic axiom).**
@@ -108,11 +111,10 @@ theorem corona_combine_linear
     Laarhoven 2016) sets the classical attack complexity at 2^142
     operations for our (N=256, q=2^32, sigma=13744) instance; Grover
     speedup brings the quantum complexity to 2^130 — both above the
-    NIST PQ Category I bar (2^128 / 2^64-quantum). -/
-/-- The advantage a Ring-LWE-bounded adversary has against
-    Corona EUF-CMA. The opaque type carries the academic-paper bound
-    (Boschini et al. 2024 §5 Theorem 1) without depending on a
-    probability monad. -/
+    NIST PQ Category I bar (2^128 / 2^64-quantum).
+
+    `CoronaEUFCMAAdv` carries the academic-paper bound (Boschini et
+    al. 2024 §5 Theorem 1) without depending on a probability monad. -/
 opaque CoronaEUFCMAAdv (lwe : LWEParams) : Type
 
 axiom corona_ring_lwe_euf_cma
@@ -129,18 +131,26 @@ theorem noise_bound_correct
     (lwe : LWEParams)
     (noise : Nat)
     (hnoise : noise ≤ lwe.q / 4) :
-    noise < lwe.q := by omega
+    noise < lwe.q := by
+  have := lwe.hq
+  have hq4 : lwe.q / 4 < lwe.q := Nat.div_lt_self this (by decide)
+  omega
 
 /-- Threshold lower-bound enforcement. -/
 theorem threshold_minimum (tp : ThresholdParams) (signers : Nat)
     (h : signers < tp.t) :
-    signers < tp.n := by omega
+    signers < tp.n := by
+  have := tp.ht
+  omega
 
 /-- Robustness: with `n` signers and up to `n - t` failures, the
     remaining honest set still meets the t-of-n threshold. -/
 theorem corona_robustness (tp : ThresholdParams) (failures : Nat)
     (h : failures ≤ tp.n - tp.t) :
-    tp.n - failures ≥ tp.t := by omega
+    tp.n - failures ≥ tp.t := by
+  have := tp.ht
+  have := tp.ht0
+  omega
 
 /-- Signature size is bounded by the Corona parameter set's
     ring-polynomial-triple wire encoding. -/

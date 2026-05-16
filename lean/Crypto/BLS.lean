@@ -26,10 +26,18 @@ import Mathlib.Tactic
 
 namespace Crypto.BLS
 
-/-- Abstract group elements (G1, G2, GT in BLS12-381) -/
-axiom G1 : Type
-axiom G2 : Type
-axiom GT : Type
+/-- Abstract group elements (G1, G2, GT in BLS12-381). We model them
+    as concrete unit-witnessed types so an `Inhabited` instance is
+    available for tuple fields that need a default. The algebraic
+    structure is captured by the `e`, `G1.add`, `G2.add`, `GT.mul`
+    axioms below, not by the witness construction. -/
+def G1 : Type := Unit
+def G2 : Type := Unit
+def GT : Type := Unit
+
+instance : Inhabited G1 := ⟨()⟩
+instance : Inhabited G2 := ⟨()⟩
+instance : Inhabited GT := ⟨()⟩
 
 /-- Bilinear pairing -/
 axiom e : G1 → G2 → GT
@@ -54,6 +62,7 @@ structure Signature where
   sig : G1       -- signature in G1
   pk  : G2       -- public key in G2
   msg : G1       -- message hash to G1
+  deriving Inhabited
 
 /-- BLS verify: e(sig, g2) = e(msg, pk) -/
 axiom g2_generator : G2
@@ -62,7 +71,7 @@ def verify (s : Signature) : Prop :=
   e s.sig g2_generator = e s.msg s.pk
 
 /-- Aggregate signature -/
-def aggregate (sigs : List Signature) (hmsg : ∀ s ∈ sigs, s.msg = sigs.head!.msg) :
+noncomputable def aggregate (sigs : List Signature) (hmsg : ∀ s ∈ sigs, s.msg = sigs.head!.msg) :
     Signature :=
   { sig := sigs.foldl (fun acc s => G1.add acc s.sig) sigs.head!.sig
   , pk  := sigs.foldl (fun acc s => G2.add acc s.pk) sigs.head!.pk
@@ -83,10 +92,10 @@ theorem aggregate_two_sound
     (hv2 : verify s2) :
     e (G1.add s1.sig s2.sig) g2_generator =
     e s1.msg (G2.add s1.pk s2.pk) := by
-  rw [bilinear_left]
-  rw [bilinear_right]
-  rw [verify] at hv1 hv2
-  rw [hv1, ← hmsg, hv2]
+  unfold verify at hv1 hv2
+  rw [bilinear_left, bilinear_right, hv1]
+  rw [← hmsg] at hv2
+  rw [hv2]
 
 /-- Rogue key resistance via proof-of-possession.
 
@@ -117,8 +126,10 @@ theorem aggregate_key_decomposes (msg : G1) (pk1 pk2 : G2) :
     e msg (G2.add pk1 pk2) = GT.mul (e msg pk1) (e msg pk2) :=
   bilinear_right msg pk1 pk2
 
-/-- Quorum threshold: 2f+1 of 3f+1 validators -/
+/-- Quorum threshold: 2f+1 of 3f+1 validators.
+    Requires the BFT envelope `n ≤ 3f + 1`. -/
 theorem bls_quorum_sufficient (n f : Nat) (hf : 3 * f < n)
+    (hn : n ≤ 3 * f + 1)
     (sigs : Nat) (h : sigs ≥ 2 * f + 1) :
     sigs > n / 2 := by omega
 
@@ -129,7 +140,8 @@ theorem aggregate_constant_size (sigs : List Signature) :
 
 /-- Two quorums overlap: any two sets of 2f+1 from 3f+1 share a member -/
 theorem quorum_overlap (n f : Nat) (hf : 3 * f < n)
-    (q1 q2 : Nat) (hq1 : q1 ≥ 2 * f + 1) (hq2 : q2 ≥ 2 * f + 1) :
+    (q1 q2 : Nat) (hq1 : q1 ≥ 2 * f + 1) (hq2 : q2 ≥ 2 * f + 1)
+    (hn : n ≤ 3 * f + 1) :
     q1 + q2 > n := by omega
 
 end Crypto.BLS

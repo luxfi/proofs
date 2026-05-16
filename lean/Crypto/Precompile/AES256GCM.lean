@@ -59,8 +59,8 @@ def gas_cost (pt_len : Nat) : Nat := gas_base + gas_per_byte * pt_len
 /-- Gas cost is monotonically increasing in plaintext length -/
 theorem gas_monotone (n m : Nat) (h : n ≤ m) :
     gas_cost n ≤ gas_cost m := by
-  simp [gas_cost]
-  omega
+  simp only [gas_cost]
+  exact Nat.add_le_add_left (Nat.mul_le_mul_left gas_per_byte h) gas_base
 
 /-- Maximum gas for max plaintext -/
 theorem max_gas : gas_cost max_plaintext = 396216 := by

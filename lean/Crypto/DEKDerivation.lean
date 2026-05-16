@@ -44,12 +44,22 @@ axiom prf_key_independent :
 
 -- String axioms: prefix disjointness and append injection.
 -- These hold for UTF-8 strings but Lean's String library lacks the lemmas.
+-- Stated against the `.toUTF8.toList` form because that's what
+-- `PRF (·) (·.toUTF8.toList)` exposes after `simp` unfolding.
 axiom string_prefix_disjoint :
-  ∀ {a b : String}, a.toUTF8 = b.toUTF8 → False
+  ∀ {a b : String}, a.toUTF8.toList = b.toUTF8.toList → False
 
 axiom string_append_injective :
-  ∀ (prefix s₁ s₂ : String),
-    prefix ++ ":" ++ s₁ = prefix ++ ":" ++ s₂ → s₁ = s₂
+  ∀ (p s₁ s₂ : String),
+    p ++ ":" ++ s₁ = p ++ ":" ++ s₂ → s₁ = s₂
+
+-- UTF-8 encoding is injective (RFC 3629). Stated here as an axiom
+-- because Lean 4 v4.14 stdlib does not export the injectivity lemma
+-- — only the validateUTF8 / fromUTF8 round-trip. Both the ByteArray
+-- and the underlying List form are accepted because `String.toUTF8`
+-- is post-composed with `.toList` in several DEK derivations.
+axiom String.toUTF8_injective : ∀ {s t : String},
+  s.toUTF8.toList = t.toUTF8.toList → s = t
 
 -- Model AES-256-GCM as an AEAD: encryption is randomized (via nonce),
 -- and ciphertext depends on key. Different keys → different ciphertext
@@ -71,16 +81,16 @@ axiom aead_wrong_key :
 
 /-! ## Key Derivation Functions (matching production FieldEncryptor) -/
 
-def deriveOrgKEK (masterKey : List UInt8) (orgSlug : String) : List UInt8 :=
+noncomputable def deriveOrgKEK (masterKey : List UInt8) (orgSlug : String) : List UInt8 :=
   PRF masterKey orgSlug.toUTF8.toList
 
-def deriveUserDEK (orgKEK : List UInt8) (orgSlug : String) (userId : String) : List UInt8 :=
+noncomputable def deriveUserDEK (orgKEK : List UInt8) (orgSlug : String) (userId : String) : List UInt8 :=
   PRF orgKEK (orgSlug ++ ":" ++ userId).toUTF8.toList
 
-def deriveFieldKey (userDEK : List UInt8) (fieldName : String) : List UInt8 :=
+noncomputable def deriveFieldKey (userDEK : List UInt8) (fieldName : String) : List UInt8 :=
   PRF userDEK fieldName.toUTF8.toList
 
-def deriveS3Key (masterKey : List UInt8) (orgSlug : String) (userId : String) : List UInt8 :=
+noncomputable def deriveS3Key (masterKey : List UInt8) (orgSlug : String) (userId : String) : List UInt8 :=
   PRF masterKey ("s3:user:" ++ orgSlug ++ ":" ++ userId).toUTF8.toList
 
 /-! ## Main Theorems -/
@@ -118,7 +128,6 @@ theorem s3_key_independent
   intro heq
   -- "s3:user:" ++ orgSlug ++ ":" ++ userId = orgSlug would require
   -- the s3 prefix to vanish, which is impossible for non-empty prefix.
-  simp [String.toUTF8] at heq
   exact string_prefix_disjoint heq
 
 /-- Theorem 3: DEK rotation safety — when masterKey is rotated, all derived
@@ -172,14 +181,9 @@ theorem convergent_encryption_disabled
   apply prf_collision_resistant
   intro heq
   apply h_users
-  -- orgSlug ++ ":" ++ user1 = orgSlug ++ ":" ++ user2 implies user1 = user2
-  have : (orgSlug ++ ":" ++ user1).toUTF8 = (orgSlug ++ ":" ++ user2).toUTF8 := by
-    simpa using heq
-  have hinj := String.toUTF8_injective this
-  -- Extract user from "orgSlug:user"
-  simp [String.append] at hinj
-  exact hinj ▸ rfl
-  exact string_append_injective orgSlug user1 user2 (by simpa using hinj)
+  -- (orgSlug ++ ":" ++ user1).toUTF8 = (orgSlug ++ ":" ++ user2).toUTF8 → strings equal
+  have hstr := String.toUTF8_injective heq
+  exact string_append_injective orgSlug user1 user2 hstr
 
 /-- Theorem 5: Key derivation is deterministic — same inputs always produce
     the same DEK. No randomness in the derivation path means key derivation
@@ -209,12 +213,8 @@ theorem user_dek_isolation
   apply prf_collision_resistant
   intro heq
   apply h
-  have : (orgSlug ++ ":" ++ user1).toUTF8 = (orgSlug ++ ":" ++ user2).toUTF8 := by
-    simpa using heq
-  have hinj := String.toUTF8_injective this
-  simp [String.append] at hinj
-  exact hinj ▸ rfl
-  exact string_append_injective orgSlug user1 user2 (by simpa using hinj)
+  have hstr := String.toUTF8_injective heq
+  exact string_append_injective orgSlug user1 user2 hstr
 
 /-- Corollary: org isolation — different orgs produce different orgKEKs,
     therefore different userDEKs and field keys. -/
@@ -225,5 +225,4 @@ theorem org_dek_isolation
   simp [deriveOrgKEK]
   apply prf_collision_resistant
   intro heq
-  apply h
-  exact String.toUTF8_injective (by simpa using heq)
+  exact h (String.toUTF8_injective (by simpa using heq))

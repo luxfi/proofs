@@ -62,10 +62,11 @@ structure Block where
   stateRoot : Hash       -- root of the state trie
   timestamp : Nat        -- Unix timestamp
   data : List Nat        -- additional block data
+  deriving Inhabited
 
 /-- Compute the hash of a block by hashing its contents.
     The preimage includes prevHash, which creates the chain link. -/
-def blockHash (b : Block) : Hash :=
+noncomputable def blockHash (b : Block) : Hash :=
   hash [b.prevHash, b.txRoot, b.stateRoot, b.timestamp]
 
 /-- A chain is a list of blocks from genesis (index 0) to head -/
@@ -87,7 +88,7 @@ def isValidChain : Chain → Prop
     isValidChain (b₁ :: rest)
 
 /-- The head hash of a chain -/
-def headHash : Chain → Hash
+noncomputable def headHash : Chain → Hash
   | [] => 0
   | chain => blockHash chain.getLast!
 
@@ -205,7 +206,7 @@ theorem head_hash_detects_tampering
   have h_orig := recompute_identity original
   have h_diff := recompute_detects_modification original modified h_tampered h_same_len
   rw [h_orig] at h_diff
-  exact h_diff h_eq
+  exact h_diff h_eq.symm
 
 -- ═══════════════════════════════════════════════════════════════
 -- WORM PROPERTY
@@ -240,13 +241,15 @@ theorem chain_grows_monotonically (chain : Chain) (new_block : Block) :
 -- APPLICATION: REGULATORY AUDIT TRAIL
 -- ═══════════════════════════════════════════════════════════════
 
-/-- SEC Rule 17a-4 compliance:
-    The hash chain satisfies the three requirements of Rule 17a-4(f):
-    1. Non-rewritable, non-erasable format (WORM)
-    2. Automatic quality/accuracy verification (hash chain verification)
-    3. Time-date serialization (block timestamps + height ordering)
+/-
+  SEC Rule 17a-4 compliance:
+  The hash chain satisfies the three requirements of Rule 17a-4(f):
+  1. Non-rewritable, non-erasable format (WORM)
+  2. Automatic quality/accuracy verification (hash chain verification)
+  3. Time-date serialization (block timestamps + height ordering)
 
-    We model each requirement as a theorem. -/
+  We model each requirement as a theorem.
+-/
 
 /-- Requirement 1: WORM — old blocks cannot be rewritten. -/
 theorem rule_17a4_worm

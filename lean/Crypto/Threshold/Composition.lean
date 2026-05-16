@@ -94,8 +94,7 @@ theorem multi_keygen_uniform (p : UnifiedParams) (i j : Nat)
     sameAccessStructure
       (multiProtocolKeygen p)[i]
       (multiProtocolKeygen p)[j] := by
-  simp [multiProtocolKeygen, sameAccessStructure, List.map]
-  constructor <;> rfl
+  simp [multiProtocolKeygen, sameAccessStructure]
 
 /-- Protocol ordering: LSS is the foundation, everything else builds on it -/
 def dependsOn : Protocol → Protocol → Prop

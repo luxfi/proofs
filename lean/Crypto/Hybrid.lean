@@ -48,18 +48,18 @@ inductive VerifyMode where
   | classical  -- ed25519 only (fallback)
 
 /-- Fast verification: ed25519 ∧ ML-DSA -/
-def verify_fast (pk : HybridPK) (msg : Nat) (sig : HybridSig) : Bool :=
+noncomputable def verify_fast (pk : HybridPK) (msg : Nat) (sig : HybridSig) : Bool :=
   ed25519_verify pk.ed25519 msg sig.ed25519 &&
   mldsa_verify pk.mldsa msg sig.mldsa
 
 /-- Full verification: ed25519 ∧ ML-DSA ∧ SLH-DSA -/
-def verify_full (pk : HybridPK) (msg : Nat) (sig : HybridSig) : Bool :=
+noncomputable def verify_full (pk : HybridPK) (msg : Nat) (sig : HybridSig) : Bool :=
   ed25519_verify pk.ed25519 msg sig.ed25519 &&
   mldsa_verify pk.mldsa msg sig.mldsa &&
   slhdsa_verify pk.slhdsa msg sig.slhdsa
 
 /-- Mode-selected verification -/
-def verify (pk : HybridPK) (msg : Nat) (sig : HybridSig) (mode : VerifyMode) : Bool :=
+noncomputable def verify (pk : HybridPK) (msg : Nat) (sig : HybridSig) (mode : VerifyMode) : Bool :=
   match mode with
   | .fast => verify_fast pk msg sig
   | .full => verify_full pk msg sig

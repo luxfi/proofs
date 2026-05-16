@@ -48,32 +48,31 @@ axiom setup_base_receiver : Nat → Nat → Nat → Context
   -- sk_R, enc, info → ctx
 
 /-- Seal: encrypt with context, advancing sequence number -/
-axiom seal : Context → Nat → Nat → Nat × Nat × Context
+axiom hpkeSeal : Context → Nat → Nat → Nat × Nat × Context
   -- ctx, aad, pt → (ct, tag, ctx')
 
 /-- Open: decrypt with context -/
 axiom open_msg : Context → Nat → Nat → Nat → Option (Nat × Context)
   -- ctx, aad, ct, tag → (pt, ctx')?
 
-/-- Correctness: open(seal(pt)) = pt -/
+/-- Correctness: open(hpkeSeal(pt)) = pt -/
 axiom hpke_correctness :
   ∀ (pk_R sk_R info entropy : Nat) (aad pt : Nat),
     let (ctx_s, enc) := setup_base_sender pk_R info entropy
     let ctx_r := setup_base_receiver sk_R enc info
-    let (ct, tag, _) := seal ctx_s aad pt
+    let (ct, tag, _) := hpkeSeal ctx_s aad pt
     ∃ (result : Nat × Context), open_msg ctx_r aad ct tag = some result
 
-/-- Sequence number increments after each seal -/
+/-- Sequence number increments after each hpkeSeal -/
 axiom seq_increments :
   ∀ (ctx : Context) (aad pt : Nat),
-    let (_, _, ctx') := seal ctx aad pt
-    ctx'.seq = ctx.seq + 1
+    (hpkeSeal ctx aad pt).2.2.seq = ctx.seq + 1
 
 /-- Nonce uniqueness: sequence numbers are strictly increasing -/
 axiom nonce_unique :
   ∀ (ctx : Context) (aad1 pt1 aad2 pt2 : Nat),
-    let (_, _, ctx1) := seal ctx aad1 pt1
-    let (_, _, ctx2) := seal ctx1 aad2 pt2
+    let ctx1 := (hpkeSeal ctx aad1 pt1).2.2
+    let ctx2 := (hpkeSeal ctx1 aad2 pt2).2.2
     ctx1.seq ≠ ctx2.seq
 
 /-- Context binding: different info strings produce different keys -/
@@ -94,12 +93,12 @@ def gas_seal_base : Nat := 8000
 def gas_per_byte : Nat := 7
 def gas_export : Nat := 3000
 
-def gas_seal (pt_len : Nat) : Nat := gas_seal_base + gas_per_byte * pt_len
+def gas_hpkeSeal (pt_len : Nat) : Nat := gas_seal_base + gas_per_byte * pt_len
 
-/-- Setup + seal fits in block for any practical message -/
+/-- Setup + hpkeSeal fits in block for any practical message -/
 theorem setup_seal_fits (pt_len : Nat) (h : pt_len ≤ 65536) :
-    gas_setup + gas_seal pt_len < 30000000 := by
-  simp [gas_setup, gas_seal, gas_seal_base, gas_per_byte]
+    gas_setup + gas_hpkeSeal pt_len < 30000000 := by
+  simp only [gas_setup, gas_hpkeSeal, gas_seal_base, gas_per_byte]
   omega
 
 end Crypto.Precompile.HPKE

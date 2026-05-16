@@ -23,11 +23,14 @@
 -/
 
 import Mathlib.Data.Nat.Defs
+import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Tactic
 import Crypto.Threshold_Lagrange
 import Crypto.Pulsar.Shamir
 
 namespace Crypto.Pulsar
+
+open Polynomial
 
 /-- The three Pulsar parameter levels mirror FIPS 204 ML-DSA. -/
 inductive ParamLevel : Type
@@ -56,16 +59,16 @@ structure ThresholdParams where
   hn : t ≤ n
 
 /-- The Pulsar extreme committee size. -/
-def targetCommitteeSize : Nat := 1_111_111
+def targetCommitteeSize : Nat := 1111111
 
 /-- The FIPS 204 prime q = 2^23 - 2^13 + 1. -/
-def fipsQ : Nat := 8_380_417
+def fipsQ : Nat := 8380417
 
 theorem target_lt_q : targetCommitteeSize < fipsQ := by
   unfold targetCommitteeSize fipsQ
   decide
 
-theorem target_gt_10000 : targetCommitteeSize > 10_000 := by
+theorem target_gt_10000 : targetCommitteeSize > 10000 := by
   unfold targetCommitteeSize
   decide
 
@@ -81,23 +84,24 @@ theorem target_gt_10000 : targetCommitteeSize > 10_000 := by
     intent; modelled as Prop to avoid carrying probability tooling
     into the algebraic layer). The TS-UF reduction composes these as
     a sum upper-bound. -/
-opaque HardnessAdvantage : Type
+opaque HardnessAdvantage : Type :=
+  Unit
 
 /-- The Module-LWE assumption: no PPT (classical or quantum) adversary
     has non-negligible advantage in distinguishing
     (A, A·s + e) from (A, u) where s, e are short and u uniform.
     NIST FIPS 204 §C.2 fixes the concrete parameters at L44/L65/L87. -/
-opaque MLWEAdv (fp : FipsParams) : HardnessAdvantage
+axiom MLWEAdv (fp : FipsParams) : HardnessAdvantage
 
 /-- The Module-SIS assumption: no PPT adversary outputs a short
     non-zero vector in the kernel of the FIPS 204 lattice generator.
     NIST FIPS 204 §C.3 fixes the concrete parameters. -/
-opaque MSISAdv (fp : FipsParams) : HardnessAdvantage
+axiom MSISAdv (fp : FipsParams) : HardnessAdvantage
 
 /-- FIPS 204 ML-DSA EUF-CMA advantage. The CRYSTALS-Dilithium
     submission (Lyubashevsky-Ducas-Kiltz-Schwabe-Seiler-Stehlé) bounds
     this in terms of `MLWEAdv` and `MSISAdv`. -/
-opaque MLDSAEUFCMAAdv (fp : FipsParams) : HardnessAdvantage
+axiom MLDSAEUFCMAAdv (fp : FipsParams) : HardnessAdvantage
 
 -- ===========================================================================
 -- Algebraic correctness re-export.
@@ -115,9 +119,9 @@ opaque MLDSAEUFCMAAdv (fp : FipsParams) : HardnessAdvantage
     `fipsQ > targetCommitteeSize`. -/
 theorem pulsar_shamir_correct_at_target
     {F : Type*} [Field F] [DecidableEq F]
-    (f : Polynomial F) {ι : Type*} (s : Finset ι) (v : ι → F)
-    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < #s) :
-    f = Polynomial.Lagrange.interpolate s v (fun i => f.eval (v i)) :=
+    (f : Polynomial F) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card) :
+    f = Lagrange.interpolate s v (fun i => f.eval (v i)) :=
   Crypto.Pulsar.Shamir.shamir_correct_at_target f s v hvs degree_f_lt
 
 -- ===========================================================================

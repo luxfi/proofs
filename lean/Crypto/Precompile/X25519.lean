@@ -37,7 +37,6 @@ def clamp (k : Nat) : Nat :=
 theorem clamp_range (k : Nat) :
     2^254 ≤ clamp k := by
   simp [clamp]
-  omega
 
 /-- Clamped scalar is divisible by 8 (cofactor clearing) -/
 theorem clamp_div_8 (k : Nat) :
@@ -56,13 +55,13 @@ axiom x25519_commutative :
     x25519 a (x25519 b G) = x25519 b (x25519 a G)
 
 /-- X25519 with base point 9 (standard generator) -/
-def x25519_base (k : Nat) : Nat := x25519 k 9
+noncomputable def x25519_base (k : Nat) : Nat := x25519 k 9
 
 /-- Key agreement: Alice and Bob derive the same shared secret -/
 theorem key_agreement (sk_a sk_b : Nat) :
     x25519 sk_a (x25519_base sk_b) = x25519 sk_b (x25519_base sk_a) := by
   simp [x25519_base]
-  exact x25519_commutative sk_a sk_b 9 (by simp [p]; omega)
+  exact x25519_commutative sk_a sk_b 9 (by simp [p])
 
 /-- Montgomery ladder executes exactly 255 steps -/
 def ladder_steps : Nat := 255

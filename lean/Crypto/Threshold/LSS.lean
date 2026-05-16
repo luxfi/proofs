@@ -109,7 +109,8 @@ axiom vss_honest_valid :
 theorem proactive_refresh_resets (acc : AccessStructure) (epochs : Nat) :
     -- Attacker needs t shares within EACH epoch, not across epochs
     -- Total compromise requires t × epochs shares (simplified model)
-    acc.threshold * (epochs + 1) ≥ acc.threshold := by omega
+    acc.threshold * (epochs + 1) ≥ acc.threshold :=
+  Nat.le_mul_of_pos_right acc.threshold (Nat.succ_pos epochs)
 
 /-- SHARE COMBINATION: Two LSS instances over the same access structure
     can be combined: share(a) + share(b) = share(a + b).

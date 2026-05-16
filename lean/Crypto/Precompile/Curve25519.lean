@@ -31,10 +31,10 @@ def cofactor : Nat := 8
 def A_param : Nat := 486662
 
 /-- p is positive -/
-theorem p_pos : 0 < p := by simp [p]; omega
+theorem p_pos : 0 < p := by simp [p]
 
 /-- p is odd (required for field arithmetic) -/
-theorem p_odd : p % 2 = 1 := by simp [p]; omega
+theorem p_odd : p % 2 = 1 := by simp [p]
 
 /-- Abstract point type (extended Edwards coordinates) -/
 axiom Point : Type
@@ -74,7 +74,7 @@ theorem fast_reduce : 2^255 % p = 19 := by simp [p]
 
 /-- Field element fits in 256 bits -/
 theorem field_element_bits (a : Nat) (ha : a < p) : a < 2^256 := by
-  have hp : p < 2^256 := by simp [p]; omega
+  have hp : p < 2^256 := by simp [p]
   omega
 
 /-- Subgroup order divides curve order -/

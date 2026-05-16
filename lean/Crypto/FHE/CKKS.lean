@@ -21,10 +21,10 @@ namespace Crypto.FHE.CKKS
 
 /-- CKKS parameters -/
 structure Params where
-  polyDegree : Nat     -- N (ring dimension)
+  polyDegree : Nat     -- N (ring dimension); production: power of 2 ≥ 2^10
   scaleBits : Nat      -- precision bits
   levels : Nat         -- multiplicative depth
-  hN : 0 < polyDegree
+  hN : 2 ≤ polyDegree  -- N ≥ 2 for the slot count N/2 to be ≥ 1
   hL : 0 < levels
 
 /-- Encrypted vector (abstract) -/
@@ -84,7 +84,8 @@ theorem transformer_layer_depth :
 def slotsPerCiphertext (p : Params) : Nat := p.polyDegree / 2
 
 theorem slots_positive (p : Params) : slotsPerCiphertext p ≥ 1 := by
-  simp [slotsPerCiphertext]; omega
+  simp only [slotsPerCiphertext]
+  exact Nat.one_le_div_iff (by decide) |>.mpr p.hN
 
 /-- Rescaling: after multiplication, rescale to manage noise -/
 axiom ckks_rescale : Params → CKKSCiphertext → CKKSCiphertext
@@ -95,10 +96,11 @@ axiom rescale_decreases_level :
 
 /-- ML inference: matrix multiply is add + multiply chains.
     With N slots and L levels, can process N×N matrices at depth L. -/
-theorem matmul_depth (rows cols : Nat) :
+theorem matmul_depth (rows cols : Nat) (hcols : 0 < cols) :
     -- Matrix multiply needs log2(cols) multiplications
     -- (each multiplication consumes one level)
-    rows * cols ≥ rows := by omega
+    rows * cols ≥ rows :=
+  Nat.le_mul_of_pos_right rows hcols
 
 /-- ROTATION: Rotate slots within a ciphertext (for matrix operations).
     Rotation is a key-switching operation — O(1) per rotation. -/
