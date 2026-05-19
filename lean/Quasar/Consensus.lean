@@ -35,7 +35,7 @@
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
-namespace Quasar.ConsensusComposition
+namespace Quasar.Consensus
 
 -- ============================================================================
 -- 1. Hardness Assumptions
@@ -371,4 +371,4 @@ theorem groth16_constant_size (num_validators : Nat)
     -- 2 * 48 (G1 compressed) + 1 * 96 (G2 compressed) = 192 bytes
     2 * 48 + 96 = 192 := by omega
 
-end Quasar.ConsensusComposition
+end Quasar.Consensus
