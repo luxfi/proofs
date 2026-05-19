@@ -69,7 +69,7 @@ theorem magnetar_empty_accepted (ps : ParamSet) :
 /-- Hash-family disjointness from lattice schemes. SLH-DSA rests on
     hash collision + preimage resistance (SHA-2 / SHAKE), not MLWE /
     MSIS / RLWE. Modelled as: an oracle for one does not yield an
-    oracle for the other. Motivates the Syzygy cert profile
+    oracle for the other. Motivates the Polaris cert profile
     (Pulsar ‖ Corona ‖ Magnetar) in LP-0120. -/
 axiom magnetar_hash_disjoint_from_mlwe :
   ∀ (mlwe_oracle : Nat → Nat),

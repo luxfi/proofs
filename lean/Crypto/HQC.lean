@@ -23,7 +23,7 @@
   IETF X-Wing KEM combiner (no new Wing letter introduced). Wing
   prefixes are reserved for the KEM and transport lanes — the
   signature *certificate profiles* use the astronomical names Aurora
-  (Pulsar ∥ Corona) and Syzygy (Pulsar ∥ Corona ∥ Magnetar).
+  (Pulsar ∥ Corona) and Polaris (Pulsar ∥ Corona ∥ Magnetar).
 
   Properties proved here:
   - Correctness: decaps(encaps(pk)) recovers the shared secret
