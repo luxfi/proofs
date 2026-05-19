@@ -89,7 +89,7 @@ in `README.md`; this section catalogues the directories.
 | `GPU/` | GPU dispatch correctness |
 | `Network/` | Networking-layer invariants |
 | `Protocol/` | Protocol-layer invariants (10 files) |
-| `Quasar/` | PQ-finality theorem |
+| `Quasar/` | Quasar Consensus (PQ-finality theorem) |
 | `Storage/` | Storage-layer invariants |
 | `StrictE2EPQ/` | Coverage + Profile theorems |
 | `Trust/` | Trust-anchor invariants |
