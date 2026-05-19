@@ -1,5 +1,5 @@
 /-
-  Quasar Three-Layer Defense Property
+  Quasar Consensus Composition
 
   Models the adversarial security of Quasar consensus across three chains,
   each protected by an independent cryptographic hardness assumption:
@@ -35,7 +35,7 @@
 import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
-namespace Quasar.LayeredDefense
+namespace Quasar.ConsensusComposition
 
 -- ============================================================================
 -- 1. Hardness Assumptions
@@ -146,10 +146,10 @@ axiom mldsa_rollup_unforgeable :
     cert.mldsaValid = false
 
 -- ============================================================================
--- 5. Main Theorem: Three-Layer Defense
+-- 5. Main Theorem: Quasar Consensus Composition
 -- ============================================================================
 
-/-- QUASAR TRIPLE DEFENSE:
+/-- QUASAR CONSENSUS COMPOSITION:
 
     Any adversary that produces a valid QuasarCert must have broken
     all three independent hardness assumptions.
@@ -371,4 +371,4 @@ theorem groth16_constant_size (num_validators : Nat)
     -- 2 * 48 (G1 compressed) + 1 * 96 (G2 compressed) = 192 bytes
     2 * 48 + 96 = 192 := by omega
 
-end Quasar.LayeredDefense
+end Quasar.ConsensusComposition

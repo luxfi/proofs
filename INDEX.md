@@ -28,8 +28,8 @@
 | `pulsar/unforgeability.tex` | EUF-CMA reduction (high-level) |
 
 The mechanized form (Lean + EasyCrypt) of these claims lives in
-`lean/Crypto/Pulsar/` and in `~/work/lux/pulsar-mptc/proofs/easycrypt/`.
-See `~/work/lux/pulsar-mptc/proofs/lean-easycrypt-bridge.md` for the
+`lean/Crypto/Pulsar/` and in `~/work/lux/pulsar/proofs/easycrypt/`.
+See `~/work/lux/pulsar/proofs/lean-easycrypt-bridge.md` for the
 correspondence map.
 
 ### `quasar/` — Quasar consensus (3 documents)
@@ -83,13 +83,13 @@ in `README.md`; this section catalogues the directories.
 | `Build/` | Build-system shared lemmas |
 | `Compliance/` | Compliance / KYC / sanctions checks |
 | `Compute/` | Compute pricing / metering |
-| `Consensus/` | Safety, liveness, BFT, Finality, Quasar composition (11 files) |
+| `Consensus/` | Safety, liveness, BFT, Finality, Quasar (11 files) |
 | `Crypto/` | Algorithm-level theorems (see below) |
 | `DeFi/` | AMM, lending, staking invariants |
 | `GPU/` | GPU dispatch correctness |
 | `Network/` | Networking-layer invariants |
 | `Protocol/` | Protocol-layer invariants (10 files) |
-| `Quasar/` | Layered defense composition |
+| `Quasar/` | Quasar (PQ-finality singularity composition theorem) |
 | `Storage/` | Storage-layer invariants |
 | `StrictE2EPQ/` | Coverage + Profile theorems |
 | `Trust/` | Trust-anchor invariants |
@@ -162,25 +162,33 @@ Run: `cd property && GOWORK=off go test ./...`
 
 ## External proof homes
 
-Not every proof artifact lives in this repo. The Pulsar NIST MPTC
-submission keeps its own self-contained EasyCrypt theories and Jasmin
-sources at:
+Not every proof artifact lives in this repo. Each PQ primitive keeps
+its own self-contained EasyCrypt theories, Jasmin sources, and proof
+artifacts in its canonical repo (post 2026-05-18 consolidation: the
+pulsar-mptc submission framework was merged into luxfi/pulsar):
 
-| Artifact | Location |
-|---|---|
-| EasyCrypt theories for Pulsar N1 + N4 | `~/work/lux/pulsar-mptc/proofs/easycrypt/` |
-| Jasmin constant-time threshold layer | `~/work/lux/pulsar-mptc/jasmin/` |
-| Lean ↔ EasyCrypt bridge map | `~/work/lux/pulsar-mptc/proofs/lean-easycrypt-bridge.md` |
-| Cross-prover correspondence guard | `~/work/lux/pulsar-mptc/scripts/check-lean-bridge.sh` |
+| Primitive | Repo | EC + Jasmin location |
+|---|---|---|
+| **Pulsar** (M-LWE) | `luxfi/pulsar` | `proofs/easycrypt/` + `jasmin/` + `proofs/lean-easycrypt-bridge.md` |
+| **Corona** (R-LWE) | `luxfi/corona` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **Magnetar** (SLH-DSA) | `luxfi/magnetar` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **P3Q** (EVM precompile) | `luxfi/precompile/p3q` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **FROST / CGGMP21 / BLS-threshold** | `luxfi/threshold/protocols/{frost,cmp,bls}/` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **TFHE** | `luxfi/fhe` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **ML-KEM** | `luxfi/crypto/mlkem` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+
+Each per-repo `scripts/check-high-assurance.sh` orchestrates the EC +
+Lean bridge + Jasmin CT gates for that primitive.
 
 ## Cross-references
 
-- `~/work/lux/papers/INDEX.md` — full paper catalogue (141 docs).
+- `~/work/lux/papers/INDEX.md` — full paper catalogue.
 - `~/work/lux/lps/CRYPTO-CANONICAL.md` — canonical crypto wiring.
-- `~/work/lux/pulsar-mptc/SUITE.md` — Hanzo PQ Threshold Suite master index.
-- `~/work/lux/pulsar-mptc/INFORMATION-ARCHITECTURE.md` — three-axis taxonomy
-  (construction × audience × governance) connecting this repo to the
-  rest of the Lux crypto ecosystem.
+- `~/work/lux/quasar/PROFILES.md` + `quasar/PRIMITIVES.md` — Quasar
+  cert profile registry and primitive pin map (the supermassive
+  black hole at the center of the Lux PQ-finality universe).
+- `~/work/lux/lps/HANZO-CRYPTO-SUITE.md` — full Lux crypto inventory
+  across all categories.
 
 ---
 

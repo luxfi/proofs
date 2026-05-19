@@ -173,7 +173,7 @@ lean_lib GPU where
 lean_lib Quasar where
   srcDir := "."
   roots := #[
-    `Quasar.LayeredDefense
+    `Quasar.ConsensusComposition
   ]
 
 lean_lib Vault where
