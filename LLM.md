@@ -55,8 +55,8 @@ registry safety are the three active proof tracks.
 ### Quasar Consensus (`lean/Consensus/Quasar.lean`)
 Proves the composition of three independent cryptographic hardness assumptions:
 - **BLS12-381** (ECDL, classical)
-- **Corona Ring-LWE** (Module-LWE, post-quantum)
-- **ML-DSA-65 FIPS 204** (Module-LWE + Module-SIS, post-quantum)
+- **Corona** (Ring-LWE, eprint 2024/1113, post-quantum)
+- **Pulsar / ML-DSA-65 FIPS 204** (Module-LWE + Module-SIS, post-quantum)
 
 Theorems:
 - `triple_requires_all`: all three layers must reach quorum

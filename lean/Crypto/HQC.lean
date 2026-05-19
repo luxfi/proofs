@@ -8,9 +8,9 @@
   and vice-versa.
 
   Wired to fill the family-disjoint gap on the KEM side, parallel to
-  the Pulsar / Corona / Comet trio on the signature side:
+  the Pulsar / Corona / Magnetar trio on the signature side:
 
-    Signature stack:    Pulsar (MLWE)   Corona (RLWE)   Comet (hash)
+    Signature stack:    Pulsar (MLWE)   Corona (RLWE)   Magnetar (hash)
     KEM stack:          ML-KEM (MLWE)   —               HQC (code)
 
   Maps to:
@@ -23,7 +23,7 @@
   IETF X-Wing KEM combiner (no new Wing letter introduced). Wing
   prefixes are reserved for the KEM and transport lanes — the
   signature *certificate profiles* use the astronomical names Aurora
-  (Pulsar ∥ Corona) and Magnetar (Pulsar ∥ Corona ∥ Comet).
+  (Pulsar ∥ Corona) and Syzygy (Pulsar ∥ Corona ∥ Magnetar).
 
   Properties proved here:
   - Correctness: decaps(encaps(pk)) recovers the shared secret

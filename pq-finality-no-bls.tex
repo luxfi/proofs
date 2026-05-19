@@ -27,7 +27,9 @@ for ``defense in depth.'' We show
 that BLS contributes no post-quantum security to the combined cert and
 can be removed without loss of PQ soundness. The simplified Quasar
 certificate uses only $\mathsf{ML\text{-}DSA}$ (FIPS 204, Module-LWE/MSIS)
-and $\mathsf{Pulsar}$ (Ring-LWE threshold; LP-073) --- two independent
+and $\mathsf{Corona}$ (Ring-LWE threshold; the lattice scheme that
+$\mathsf{Pulsar}$/LP-073 wraps with key-era lifecycle, resharing, and
+activation certs) --- two independent
 lattice assumptions, each post-quantum. The result is operationally simpler,
 smaller in the common case, and provably PQ-safe under either assumption
 independently.
