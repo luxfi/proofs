@@ -12,7 +12,7 @@
   Maps to:
   - lux/node: block header hash chain
   - lux/evm: EVM block structure
-  - : chain-first architecture (chain is source of truth)
+  - Regulated EVM L1: chain-first architecture (chain is source of truth)
 
   Properties:
   - Tamper detection: any modification to any block is detectable

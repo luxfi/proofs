@@ -13,3 +13,4 @@ out/
 *.bbl
 *.blg
 *.synctex.gz
+.claude/worktrees/
