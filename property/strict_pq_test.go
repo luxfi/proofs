@@ -41,8 +41,8 @@ type strictPQProfile struct {
 	profileName           string
 	hashSuiteID           string // "sha3_384" on strict-PQ
 	identitySchemeID      string // "mldsa65" on strict-PQ
-	finalitySchemeID      string // "pulsarm65" on strict-PQ
-	highValueSchemeID     string // "pulsarm65" or "pulsarm87"
+	finalitySchemeID      string // "pulsar65" on strict-PQ
+	highValueSchemeID     string // "pulsar65" or "pulsar87"
 	proofPolicyID         string // "pq128"
 	allowedProofBackends  []string
 	minSoundnessBits      uint16
@@ -69,8 +69,8 @@ func strictPQ() *strictPQProfile {
 		profileName:           "lux-strict-pq-v1",
 		hashSuiteID:           "sha3_384",
 		identitySchemeID:      "mldsa65",
-		finalitySchemeID:      "pulsarm65",
-		highValueSchemeID:     "pulsarm87",
+		finalitySchemeID:      "pulsar65",
+		highValueSchemeID:     "pulsar87",
 		proofPolicyID:         "pq128",
 		allowedProofBackends:  []string{"p3q", "plonky3_sha3"},
 		minSoundnessBits:      128,
@@ -113,9 +113,9 @@ var pqSchemes = map[string]bool{
 	"mldsa44":     true,
 	"mldsa65":     true,
 	"mldsa87":     true,
-	"pulsarm44":   true,
-	"pulsarm65":   true,
-	"pulsarm87":   true,
+	"pulsar44":   true,
+	"pulsar65":   true,
+	"pulsar87":   true,
 	"slhdsa256s":  true,
 }
 

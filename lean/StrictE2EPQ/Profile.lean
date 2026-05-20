@@ -26,9 +26,9 @@ inductive SigSchemeID where
   | mldsa44   : SigSchemeID  -- 0x42 (devnet only)
   | mldsa65   : SigSchemeID  -- 0x40 (strict-PQ default)
   | mldsa87   : SigSchemeID  -- 0x41
-  | pulsarm44 : SigSchemeID  -- devnet only
-  | pulsarm65 : SigSchemeID  -- 0x50
-  | pulsarm87 : SigSchemeID  -- 0x51
+  | pulsar44 : SigSchemeID  -- devnet only
+  | pulsar65 : SigSchemeID  -- 0x50
+  | pulsar87 : SigSchemeID  -- 0x51
   | slhdsa256s : SigSchemeID -- 0x80
   | ecdsaSecp256k1 : SigSchemeID  -- classical
   | ed25519        : SigSchemeID  -- classical
@@ -134,9 +134,9 @@ def isPQScheme : SigSchemeID → Bool
   | .mldsa44      => true
   | .mldsa65      => true
   | .mldsa87      => true
-  | .pulsarm44    => true
-  | .pulsarm65    => true
-  | .pulsarm87    => true
+  | .pulsar44    => true
+  | .pulsar65    => true
+  | .pulsar87    => true
   | .slhdsa256s   => true
   | _             => false
 
@@ -212,8 +212,8 @@ def luxStrictPQ : ChainSecurityProfile := {
   profileName := "lux-strict-pq-v1"
   hashSuiteID := .sha3_384
   identitySchemeID := .mldsa65
-  finalitySchemeID := .pulsarm65
-  highValueSchemeID := .pulsarm87
+  finalitySchemeID := .pulsar65
+  highValueSchemeID := .pulsar87
   proofPolicyID := .pq128
   allowedProofBackends := [.p3q, .plonky3Sha3]
   minSoundnessBits := 128
@@ -237,8 +237,8 @@ theorem luxStrictPQ_isE2EPQ : IsE2EPQ luxStrictPQ := by
   refine ⟨?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_, ?_⟩
   · rfl                        -- hashSuiteID = sha3_384
   · rfl                        -- identitySchemeID = mldsa65
-  · rfl                        -- finalitySchemeID = pulsarm65
-  · rfl                        -- highValueSchemeID = pulsarm87
+  · rfl                        -- finalitySchemeID = pulsar65
+  · rfl                        -- highValueSchemeID = pulsar87
   · rfl                        -- proofPolicyID = pq128
   · intro b hb                 -- allowedProofBackends
     simp [luxStrictPQ] at hb
@@ -269,8 +269,8 @@ def luxPermissive : ChainSecurityProfile := {
   profileName := "lux-permissive"
   hashSuiteID := .sha3_384
   identitySchemeID := .ecdsaSecp256k1   -- classical
-  finalitySchemeID := .pulsarm65
-  highValueSchemeID := .pulsarm65
+  finalitySchemeID := .pulsar65
+  highValueSchemeID := .pulsar65
   proofPolicyID := .pq128
   allowedProofBackends := [.p3q]
   minSoundnessBits := 128
