@@ -125,7 +125,7 @@ Propose(newV) ==
     \* Rank is one more than max parent rank.
     /\ newV.rank =
          IF newV.parents = {} THEN 1
-         ELSE 1 + CHOOSE maxR \in { v.rank : v \in accepted /\ v.id \in newV.parents } :
+         ELSE 1 + CHOOSE maxR \in { v.rank : v \in {x \in accepted : x.id \in newV.parents} } :
                       \A v \in accepted :
                         v.id \in newV.parents => v.rank <= maxR
     \* Sibling disjointness (the BuildVertex contract).
@@ -157,7 +157,7 @@ NoDoubleSpend ==
         v1.id # v2.id => Conflicts(v1, v2) = FALSE
 
 \* The spent set is monotone — it never shrinks.
-SpentMonotone == [] (spent' \supseteq spent \/ UNCHANGED spent)
+SpentMonotone == [] ([spent \subseteq spent']_vars)
 
 \* Within any finalised antichain, all vertices have disjoint nullifiers.
 AntichainDisjoint ==

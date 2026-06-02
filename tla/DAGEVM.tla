@@ -145,7 +145,7 @@ Propose(newV) ==
     \* Rank is one more than the max parent rank (Kahn layering).
     /\ newV.rank =
          IF newV.parents = {} THEN 1
-         ELSE 1 + CHOOSE maxR \in { v.rank : v \in accepted /\ v.id \in newV.parents } :
+         ELSE 1 + CHOOSE maxR \in { v.rank : v \in {x \in accepted : x.id \in newV.parents} } :
                       \A v \in accepted :
                         v.id \in newV.parents => v.rank <= maxR
     \* CRITICAL: no conflict with accepted siblings at the same rank.

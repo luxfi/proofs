@@ -24,7 +24,7 @@
  *   Apalache: apalache-mc check --config=MC_Quasar.cfg MC_Quasar.tla
  *)
 
-EXTENDS Quasar
+EXTENDS Quasar, TLC
 
 \* --------------------------------------------------------------------------
 \* CONCRETE CONSTANT VALUES

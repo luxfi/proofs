@@ -23,7 +23,7 @@
  *   Apalache: apalache-mc check --config=Wave.cfg MC_Wave.tla
  *)
 
-EXTENDS Wave
+EXTENDS Wave, TLC
 
 \* --------------------------------------------------------------------------
 \* CONCRETE CONSTANT VALUES

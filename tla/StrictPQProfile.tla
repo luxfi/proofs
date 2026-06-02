@@ -61,6 +61,8 @@ vars == << profileLoaded, activeProfile, pinnedDigest, computedDigest,
 \* Types
 ----------------------------------------------------------------------------
 
+NULL == CHOOSE x : x \notin Profiles
+
 TypeOK ==
     /\ profileLoaded \in BOOLEAN
     /\ activeProfile \in Profiles \cup {NULL}
@@ -70,8 +72,6 @@ TypeOK ==
     /\ admittedTxSchemes \in Seq(Schemes)
     /\ signedBlockSchemes \in Seq(Schemes)
     /\ aborted \in BOOLEAN
-
-NULL == CHOOSE x : x \notin Profiles
 
 ----------------------------------------------------------------------------
 \* Initial state: before boot
@@ -173,9 +173,9 @@ FinalityGate ==
 \* node aborted and no transactions were admitted.
 DigestGate ==
     (profileLoaded => computedDigest = pinnedDigest)
-    /\ (aborted => Len(admittedTxSchemes) = 0
-                /\ Len(signedBlockSchemes) = 0
-                \/ profileLoaded)
+    /\ (aborted => ( (Len(admittedTxSchemes) = 0
+                      /\ Len(signedBlockSchemes) = 0)
+                     \/ profileLoaded ))
 
 \* NoLoadNoAdmit: a transaction is admitted only after profile load.
 NoLoadNoAdmit ==

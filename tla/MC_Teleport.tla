@@ -25,7 +25,7 @@
  *   Apalache: apalache-mc check --config=MC_Teleport.cfg MC_Teleport.tla
  *)
 
-EXTENDS Teleport
+EXTENDS Teleport, TLC
 
 \* --------------------------------------------------------------------------
 \* CONCRETE CONSTANT VALUES

@@ -229,6 +229,6 @@ SubmissionValidity ==
 
 \* If updaters keep submitting, eventually a round is accepted
 LivenessAcceptance ==
-    [](\A u \in Updaters : submissions[u] # NULL => <>( roundId' > roundId))
+    [](\A u \in Updaters : submissions[u] # NULL => <><<roundId' > roundId>>_roundId)
 
 =============================================================================
