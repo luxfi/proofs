@@ -14,3 +14,4 @@ out/
 *.blg
 *.synctex.gz
 .claude/worktrees/
+states/

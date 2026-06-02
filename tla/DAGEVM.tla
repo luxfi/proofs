@@ -76,12 +76,19 @@ ASSUME MaxTxsPerVertex \in Nat \ {0}
 
 VertexId == 1..MaxVertices
 
+\* Ranks are layered as 1 + maxParentRank starting at 1, and a chain of
+\* accepted vertices is bounded by MaxVertices, so every reachable rank lies
+\* in 1..MaxVertices. Bounding the field here keeps Vertex a FINITE set; with
+\* `rank : Nat` it was infinite and TLC could not enumerate `\E v \in Vertex`
+\* in the Next relation ("can't enumerate the value of the rank field: Nat").
+RankRange == 1..MaxVertices
+
 Vertex ==
   [ id      : VertexId,
     reads   : SUBSET Keys,
     writes  : SUBSET Keys,
     parents : SUBSET VertexId,
-    rank    : Nat ]
+    rank    : RankRange ]
 
 \* --------------------------------------------------------------------------
 \* VARIABLES
@@ -126,8 +133,15 @@ TypeOK ==
 Init ==
     /\ accepted = {}
     /\ finalRank = 0
-    /\ mempool \in SUBSET ([reads: SUBSET Keys, writes: SUBSET Keys])
-    /\ Cardinality(mempool) <= MaxVertices * MaxTxsPerVertex
+    \* mempool is an abstract placeholder for pending tx batches; the abstracted
+    \* Propose action draws arbitrary well-formed vertices directly and never
+    \* reads mempool, so it stays UNCHANGED throughout. The previous
+    \* `mempool \in SUBSET ([reads: SUBSET Keys, writes: SUBSET Keys])`
+    \* forced TLC to enumerate 2^(2^|Keys| * 2^|Keys|) initial states (2^64 for
+    \* 3 keys) before the cardinality filter could apply, stalling the checker.
+    \* Initialising it to {} keeps Init tractable without weakening any property
+    \* (no action depends on mempool's contents).
+    /\ mempool = {}
 
 \* --------------------------------------------------------------------------
 \* ACTIONS
@@ -190,15 +204,28 @@ Serializability ==
     \A v, w \in accepted :
         w.id \in v.parents => w.rank < v.rank
 
-\* Liveness: every proposed vertex is eventually finalised, assuming its
+\* Liveness: every accepted vertex is eventually finalised, assuming its
 \* antichain stops accepting new siblings.
+\*
+\* We quantify over the FINITE set of possible ranks (1..MaxVertices) rather
+\* than over the type Vertex. Vertex has a `rank : Nat` field, so it is an
+\* infinite set; TLC cannot enumerate `\A v \in Vertex` inside a temporal
+\* (~>) formula ("can't enumerate the value of the rank field: Nat"). Ranks
+\* are layered 1 + maxParentRank and bounded by the vertex count, so every
+\* rank that can ever appear lies in 1..MaxVertices. "Every accepted vertex's
+\* rank is eventually finalised" is exactly "every populated rank is
+\* eventually <= finalRank", which is finite and TLC-checkable.
 Liveness ==
-    \A v \in Vertex :
-        (v \in accepted) ~> (finalRank >= v.rank)
+    \A r \in 1..MaxVertices :
+        (\E v \in accepted : v.rank = r) ~> (finalRank >= r)
 
 \* Conflict-flow-along-edges invariant (the BuildVertex contract).
+\* Only DISTINCT vertices are compared: every vertex trivially "conflicts"
+\* with itself (its write set intersects itself), so without the v1.id # v2.id
+\* guard the implication degenerates to TRUE => (r # r) = FALSE on the very
+\* first accepted vertex. The sibling invariant Safety already guards this way.
 ConflictsAlongEdges ==
     \A v1, v2 \in accepted :
-        Conflicts(v1, v2) => v1.rank # v2.rank
+        (v1.id # v2.id /\ Conflicts(v1, v2)) => v1.rank # v2.rank
 
 ================================================================================

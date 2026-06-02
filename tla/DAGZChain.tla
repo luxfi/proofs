@@ -57,12 +57,19 @@ ASSUME MaxVertices \in Nat \ {0}
 
 VertexId == 1..MaxVertices
 
+\* Ranks are layered as 1 + maxParentRank starting at 1, and a chain of
+\* accepted vertices is bounded by MaxVertices, so every reachable rank lies
+\* in 1..MaxVertices. Bounding the field here keeps Vertex a FINITE set; with
+\* `rank : Nat` it was infinite and TLC could not enumerate `\E v \in Vertex`
+\* in the Next relation ("can't enumerate the value of the rank field: Nat").
+RankRange == 1..MaxVertices
+
 Vertex ==
   [ id      : VertexId,
     nulls   : SUBSET Nullifiers,
     commits : SUBSET Commitments,
     parents : SUBSET VertexId,
-    rank    : Nat ]
+    rank    : RankRange ]
 
 \* --------------------------------------------------------------------------
 \* VARIABLES
@@ -165,8 +172,16 @@ AntichainDisjoint ==
         \A v1, v2 \in Antichain(r) : v1.id # v2.id => ~Conflicts(v1, v2)
 
 \* Liveness: every accepted vertex is eventually finalised.
+\*
+\* Quantify over the FINITE set of possible ranks (1..MaxVertices), not over
+\* the type Vertex. Vertex carries a `rank : Nat` field, making it infinite;
+\* TLC cannot enumerate `\A v \in Vertex` inside a temporal (~>) formula
+\* ("can't enumerate the value of the rank field: Nat"). Ranks are layered
+\* 1 + maxParentRank and bounded by the vertex count, so every reachable rank
+\* lies in 1..MaxVertices. "Every accepted vertex is eventually finalised" is
+\* equivalent to "every populated rank is eventually <= finalRank".
 Liveness ==
-    \A v \in Vertex :
-        (v \in accepted) ~> (finalRank >= v.rank)
+    \A r \in 1..MaxVertices :
+        (\E v \in accepted : v.rank = r) ~> (finalRank >= r)
 
 ================================================================================

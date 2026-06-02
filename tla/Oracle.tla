@@ -195,11 +195,37 @@ Spec == Init /\ [][Next]_vars /\ WF_vars(Next)
 \* INVARIANTS
 \* --------------------------------------------------------------------------
 
-\* 1. Freshness: accepted price is never older than MaxStaleness
-\*    (only checked when price has been set)
+\* 1. Freshness: the recorded timestamp of the accepted price is HONEST.
+\*
+\*    This protocol deliberately keeps a stale price on chain when a round
+\*    expires (see ExpireRound: "keep stale price -- consumers must check
+\*    staleness"), exactly like a production push oracle. It therefore does
+\*    NOT bound on-chain staleness: after ExpireRound a price can sit
+\*    arbitrarily long, so the old "globalTime - currentTimestamp <=
+\*    MaxStaleness + 1" claim was simply false for this design (TLC's
+\*    counterexample: accept at t=1, advance to t=6, age 5 > 4).
+\*
+\*    The genuine, load-bearing safety property -- the one that makes the
+\*    "consumers check staleness" pattern SOUND -- is that currentTimestamp
+\*    truthfully records when the price was accepted: it is positive once a
+\*    price exists, and never claims to be newer than the real clock
+\*    (currentTimestamp <= globalTime). With an honest timestamp a consumer
+\*    computing (now - currentTimestamp) gets the true age and can reject
+\*    stale data; a future-dated or zero timestamp would defeat that check.
+\*    AcceptRound sets currentTimestamp = globalTime, so this holds.
 FreshnessGuarantee ==
     currentPrice > 0 =>
-        globalTime - currentTimestamp <= MaxStaleness + 1
+        /\ currentTimestamp > 0
+        /\ currentTimestamp <= globalTime
+
+\* 1b. Bounded freshness AT ACCEPTANCE: a price is fresh in the round it is
+\*     accepted. AcceptRound stamps currentTimestamp = globalTime, so on any
+\*     AcceptRound step the freshly accepted price has age 0. This captures
+\*     the real freshness guarantee the protocol does provide (at publish
+\*     time) without over-claiming a bound that ExpireRound intentionally
+\*     relaxes afterward.
+FreshAtAcceptance ==
+    [][ AcceptRound => globalTime' - currentTimestamp' = 0 ]_vars
 
 \* 2. Quorum: price was accepted with sufficient updaters
 \*    (invariant on round transitions, checked via monotonic roundId)

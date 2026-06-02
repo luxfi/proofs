@@ -17,7 +17,9 @@ EXTENDS Naturals, Sequences, FiniteSets
 
 CONSTANTS
     Devices,        \* Set of device IDs
-    MaxOps          \* Maximum operations per device
+    MaxOps,         \* Maximum operations per device
+    Keys,           \* Set of keys a device may write
+    Values          \* Set of values a device may write
 
 VARIABLES
     localState,     \* localState[d] = map of key -> encrypted_value per device
@@ -63,13 +65,20 @@ Sync(d1, d2) ==
         /\ localState' = [localState EXCEPT ![d2] = [localState[d2] EXCEPT ![key] = val]]
         /\ UNCHANGED <<oplog, seqNum, anchored>>
 
-\* Anchor: commit current state hash to chain
+\* Anchor: commit current state hash to chain.
+\* A chain anchor is monotonic by construction: each commit must extend
+\* (not regress) the previously anchored state. A device whose local view
+\* is behind the last on-chain anchor cannot produce a newer valid anchor,
+\* so it is not enabled to overwrite the chain with a staler root. Without
+\* this guard a lagging device could anchor a smaller op-count and roll the
+\* global anchor backwards, which the real chain commit never permits.
 Anchor(d) ==
+    /\ Cardinality(delivered[d]) >= anchored
     /\ anchored' = Cardinality(delivered[d])  \* Simplified: count of merged ops as "hash"
     /\ UNCHANGED <<localState, oplog, seqNum, delivered>>
 
 Next ==
-    \/ \E d \in Devices, k \in {"a", "b", "c"}, v \in 1..10 : Write(d, k, v)
+    \/ \E d \in Devices, k \in Keys, v \in Values : Write(d, k, v)
     \/ \E d1, d2 \in Devices : Sync(d1, d2)
     \/ \E d \in Devices : Anchor(d)
 

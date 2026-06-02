@@ -32,8 +32,8 @@ EXTENDS Quasar, TLC
 
 MC_N          == 4
 MC_F          == 1
-MC_QuorumNum  == 2
-MC_QuorumDen  == 3
+MC_QuorumNum  == 3
+MC_QuorumDen  == 4
 MC_EnableBLS  == TRUE
 MC_EnableRT   == TRUE
 MC_EnableMLDSA == TRUE

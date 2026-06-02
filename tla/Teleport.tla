@@ -108,6 +108,20 @@ Init ==
     /\ paused   = [c \in Chains |-> FALSE]
 
 \* --------------------------------------------------------------------------
+\* CONSERVATION HELPERS (used by both the Release guard and the invariant)
+\* --------------------------------------------------------------------------
+
+\* Sum a function over a finite set
+RECURSIVE SumOver(_, _)
+SumOver(f, S) ==
+    IF S = {} THEN 0
+    ELSE LET x == CHOOSE x \in S : TRUE
+         IN f[x] + SumOver(f, S \ {x})
+
+TotalLocked(t) == SumOver([c \in Chains |-> locked[c][t]], Chains)
+TotalMinted(t) == SumOver([c \in Chains |-> minted[c][t]], Chains)
+
+\* --------------------------------------------------------------------------
 \* ACTIONS
 \* --------------------------------------------------------------------------
 
@@ -133,8 +147,15 @@ Lock(c, t, amt) ==
  *   CRITICAL: Mint requires a corresponding Lock on some source chain.
  *   The MPC signers enforce this coupling -- they only sign a mint
  *   message after verifying the lock event on the source chain.
- *   We model this explicitly: a Lock must exist with sufficient
- *   locked balance, and the nonce must not have been consumed.
+ *   We model this explicitly: a Lock must exist on a distinct source
+ *   chain, the nonce must not have been consumed, AND the new total
+ *   wrapped supply must stay within the total collateral. The last
+ *   conjunct is essential: checking only the per-mint amount against a
+ *   single locked balance lets two mints share the same lock (each
+ *   passes locked[src][t] >= amt individually), double-spending the
+ *   collateral and minting unbacked tokens. The MPC tracks nonces so
+ *   each unit of locked collateral backs exactly one minted unit; we
+ *   capture that net accounting as TotalMinted(t) + amt <= TotalLocked(t).
  *)
 Mint(c, t, amt, n) ==
     /\ ~paused[c]
@@ -144,7 +165,8 @@ Mint(c, t, amt, n) ==
     /\ minted[c][t] + amt <= MaxAmount
     /\ \E src \in Chains :
         /\ src # c                      \* Source and dest are distinct
-        /\ locked[src][t] >= amt        \* Lock must exist with sufficient balance
+        /\ locked[src][t] >= amt        \* a lock exists on a distinct chain
+    /\ TotalMinted(t) + amt <= TotalLocked(t)  \* wrapped supply never exceeds collateral
     /\ minted' = [minted EXCEPT ![c][t] = @ + amt]
     /\ nonces' = [nonces EXCEPT ![c] = @ \union {n}]
     /\ UNCHANGED <<locked, backing, paused>>
@@ -166,6 +188,20 @@ Burn(c, t, amt) ==
  *   Relayer releases amt of locked token t on chain c with nonce n.
  *   Precondition: chain not paused, nonce not yet processed,
  *                 amt > 0, sufficient locked balance.
+ *
+ *   CRITICAL (symmetric to Mint): a Release of collateral must
+ *   correspond to a prior Burn of the wrapped representation. The MPC
+ *   signers only sign a release message after observing the burn event
+ *   that reduced the wrapped supply on the destination chain -- exactly
+ *   mirroring how Mint requires a prior Lock.
+ *
+ *   We model this by requiring that the amount being released is no
+ *   greater than the current over-collateralization slack,
+ *   TotalLocked(t) - TotalMinted(t). Collateral that is still backing
+ *   an outstanding wrapped token cannot be released; only collateral
+ *   freed by a Burn (which lowered TotalMinted) may be released. Without
+ *   this guard a relayer could release locked funds while wrapped tokens
+ *   remain in circulation, leaving those tokens unbacked (insolvency).
  *)
 Release(c, t, amt, n) ==
     /\ ~paused[c]
@@ -173,6 +209,7 @@ Release(c, t, amt, n) ==
     /\ n \in Nonces
     /\ n \notin nonces[c]
     /\ locked[c][t] >= amt
+    /\ amt <= TotalLocked(t) - TotalMinted(t)   \* release only un-backing collateral
     /\ locked' = [locked EXCEPT ![c][t] = @ - amt]
     /\ nonces' = [nonces EXCEPT ![c] = @ \union {n}]
     /\ UNCHANGED <<minted, backing, paused>>
@@ -275,21 +312,13 @@ ExitGuarantee ==
  *   The total locked across all chains is >= total minted across
  *   all chains, for each token. No token is created from nothing.
  *
- *   Mint is now constrained to require a corresponding Lock on a
- *   source chain (see Mint precondition), so this invariant is
- *   provable by the model checker.
+ *   Mint is constrained to require a corresponding Lock on a source
+ *   chain (see Mint precondition), and Release is symmetrically
+ *   constrained to only free over-collateralized slack (see Release
+ *   precondition), so this invariant holds on every reachable state.
+ *   (SumOver / TotalLocked / TotalMinted are defined once, above Init,
+ *   since the Release guard also depends on them.)
  *)
-
-\* Helper: sum a function over a finite set
-RECURSIVE SumOver(_, _)
-SumOver(f, S) ==
-    IF S = {} THEN 0
-    ELSE LET x == CHOOSE x \in S : TRUE
-         IN f[x] + SumOver(f, S \ {x})
-
-TotalLocked(t) == SumOver([c \in Chains |-> locked[c][t]], Chains)
-TotalMinted(t) == SumOver([c \in Chains |-> minted[c][t]], Chains)
-
 ConservationOfValue ==
     \A t \in Tokens :
         TotalLocked(t) >= TotalMinted(t)

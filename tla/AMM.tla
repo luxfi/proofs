@@ -234,11 +234,27 @@ ConstantProduct ==
 
 (*
  * KMonotonic:
- *   k never decreases. Swaps preserve k (fees increase the product).
- *   Liquidity changes set k to the new product.
+ *   The recorded constant-product lower bound k never decreases *as a
+ *   result of trading*. Swaps collect fees, so the realized product
+ *   strictly grows while the lower bound k is preserved (k' = k in the
+ *   swap actions). Liquidity changes legitimately reset k to the new
+ *   pool product: RemoveLiquidity shrinks the pool, so k MUST be allowed
+ *   to drop there -- that is not a violation of constant-product, it is
+ *   liquidity leaving the pool.
+ *
+ *   Therefore monotonicity is scoped to the actions it actually governs:
+ *   the two swap actions. On any swap step k may not decrease. On
+ *   liquidity steps (Add/Remove) k is free to track the new pool size.
+ *   This faithfully captures the real invariant "fees never erode the
+ *   pool's value floor" without the vacuous claim that withdrawals are
+ *   impossible.
  *)
+SwapStep ==
+    \E a \in Addresses, amtIn \in 1..MaxAmount :
+        Swap01(a, amtIn) \/ Swap10(a, amtIn)
+
 KMonotonic ==
-    [][k' >= k]_vars
+    [][SwapStep => k' >= k]_vars
 
 (*
  * SharesConsistent:

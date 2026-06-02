@@ -96,10 +96,10 @@ TypeOK ==
     /\ walFrames \in Seq(Nat \X Pages)
     /\ replicatedUpTo \in 0..MaxTxid
     /\ checkpointedUpTo \in 0..MaxTxid
-    /\ s3Frames \subseteq (1..MaxTxid \X Pages)
+    /\ s3Frames \subseteq ((1..MaxTxid) \X Pages)
     /\ writerTxid \in 0..MaxTxid
     /\ snapshotTxid \in 0..MaxTxid
-    /\ pendingUpload \subseteq (1..MaxTxid \X Pages)
+    /\ pendingUpload \subseteq ((1..MaxTxid) \X Pages)
 
 \* --------------------------------------------------------------------------
 \* HELPERS
@@ -166,10 +166,20 @@ CommitTx ==
  *   Replicate sidecar reads WAL frame at index i and uploads to S3.
  *   The frame enters pendingUpload until S3 confirms durability.
  *   Maps to: replicator goroutine reading WAL and calling s3.PutObject().
- *   Precondition: frame exists and has not been checkpointed away.
+ *   Precondition: frame exists, belongs to a COMMITTED transaction, and has
+ *   not been checkpointed away.
+ *
+ *   The committed guard (txid < writerTxid) is essential: writerTxid is the
+ *   current in-progress transaction, and Write may still append further
+ *   frames to it. Replicating an uncommitted txid would let ConfirmDurable
+ *   advance replicatedUpTo past a transaction that can still grow, after
+ *   which a newly-written frame for that txid would never be in S3 --
+ *   breaking S3Reconstructible. The real replicator only ships frames once
+ *   the COMMIT frame has been observed.
  *)
 Replicate(i) ==
     /\ i \in 1..Len(walFrames)
+    /\ walFrames[i][1] < writerTxid          \* only committed transactions
     /\ walFrames[i][1] > checkpointedUpTo   \* not yet checkpointed
     /\ walFrames[i] \notin s3Frames          \* not already confirmed
     /\ walFrames[i] \notin pendingUpload     \* not already in flight
@@ -256,7 +266,7 @@ Fairness ==
     /\ WF_vars(CommitTx)
     /\ \A i \in 1..MaxFrames :
         WF_vars(Replicate(i))
-    /\ \A frame \in (1..MaxTxid \X Pages) :
+    /\ \A frame \in ((1..MaxTxid) \X Pages) :
         WF_vars(ConfirmDurable(frame))
 
 \* --------------------------------------------------------------------------

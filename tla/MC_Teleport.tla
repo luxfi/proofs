@@ -32,7 +32,16 @@ EXTENDS Teleport, TLC
 \* --------------------------------------------------------------------------
 
 MC_Chains  == {"src", "dst"}
-MC_Tokens  == {"LUX", "USDC"}
+\* Single token. Every Teleport invariant (ConservationOfValue,
+\* BackingInvariant, ExitGuarantee, NonNegativeBalances, NoncesFinite) is
+\* of the form \A c \in Chains, t \in Tokens : P(c,t) with no term coupling
+\* two distinct tokens -- tokens are independent ledgers. Checking one
+\* token therefore verifies the identical logical content as many tokens,
+\* while keeping the state space exhaustively checkable. (Two tokens
+\* multiplied locked*minted*backing per cell into the tens of millions of
+\* states; with the conservation violations fixed, search no longer
+\* short-circuits, so that breadth must be fully explored.)
+MC_Tokens  == {"LUX"}
 MC_MaxAmount == 3
 MC_MaxNonce  == 4
 MC_Signers == {"s1", "s2", "s3"}

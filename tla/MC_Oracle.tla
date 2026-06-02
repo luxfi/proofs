@@ -53,4 +53,11 @@ MC_MonotonicRound      == MonotonicRound
 MC_MonotonicTime       == MonotonicTime
 MC_SubmissionValidity  == SubmissionValidity
 
+\* --------------------------------------------------------------------------
+\* TEMPORAL / ACTION PROPERTIES
+\* --------------------------------------------------------------------------
+
+\* A freshly accepted price has age 0 at the moment of acceptance.
+MC_FreshAtAcceptance   == FreshAtAcceptance
+
 =============================================================================

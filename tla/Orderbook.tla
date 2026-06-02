@@ -198,11 +198,17 @@ MatchOrders(bid, ask) ==
        IN /\ fillAmt >= MinFillSize
              \/ fillAmt = Remaining(bid)
              \/ fillAmt = Remaining(ask)
+          \* NOTE: in a nested record EXCEPT, the @ inside the !.active clause
+          \* binds to the OLD .active field (a BOOLEAN), not to .filled. The
+          \* previous code wrote (@ + fillAmt) there, evaluating BOOLEAN + Int
+          \* and crashing TLC. Reference the order's old filled amount explicitly.
           /\ orders' = [orders EXCEPT
                 ![bid] = [@ EXCEPT !.filled = @ + fillAmt,
-                                   !.active = (@ + fillAmt < orders[bid].amount)],
+                                   !.active = (orders[bid].filled + fillAmt
+                                               < orders[bid].amount)],
                 ![ask] = [@ EXCEPT !.filled = @ + fillAmt,
-                                   !.active = (@ + fillAmt < orders[ask].amount)]]
+                                   !.active = (orders[ask].filled + fillAmt
+                                               < orders[ask].amount)]]
           /\ fills' = Append(fills,
                 [buyId  |-> bid,
                  sellId |-> ask,
@@ -249,18 +255,25 @@ FillsBounded ==
 
 (*
  * PriceTimePriority:
- *   For any two fills in the fill sequence, if fill i and fill j share
- *   a side and fill i's order had better priority (better price or earlier
- *   at same price), then fill i appears before fill j in the sequence.
- *   We check this for buy-side fills (symmetric for sell-side).
+ *   For any two buy-side fills i < j (fill i recorded before fill j), if the
+ *   order filled LATER (oj) arrived no later than the one filled EARLIER (oi)
+ *   -- i.e. oj.seqNo <= oi.seqNo, so oj was already resting when oi matched --
+ *   then oj must NOT have had strictly better price than oi. Otherwise the
+ *   engine skipped a resting, better-priced, earlier order: a genuine
+ *   price-time-priority inversion.
+ *
+ *   A better-priced order that ARRIVES LATER (higher seqNo) is permitted to
+ *   fill later -- that is normal CLOB behaviour, not an inversion. The
+ *   previous formulation wrongly flagged that case (any later fill with a
+ *   better price), which is unsatisfiable for an order book that accepts
+ *   orders over time. (Symmetric reasoning applies to the sell side.)
  *)
 PriceTimePriorityInvariant ==
     \A i, j \in 1..Len(fills) :
         (i < j /\ fills[i].buyId # fills[j].buyId)
         => LET oi == orders[fills[i].buyId]
                oj == orders[fills[j].buyId]
-           IN ~(oj.price > oi.price
-                \/ (oj.price = oi.price /\ oj.seqNo < oi.seqNo))
+           IN (oj.seqNo <= oi.seqNo) => ~(oj.price > oi.price)
 
 (*
  * NoOverfill:

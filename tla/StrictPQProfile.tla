@@ -37,12 +37,14 @@ CONSTANTS
     StrictPQSchemes,       \* The strict-PQ admitted scheme subset
     HashSuites,            \* Set of hash suite identifiers
     StrictPQSuite,         \* The strict-PQ pinned suite (SHA3-384)
-    MaxHeight              \* Bound on height for model checking
+    MaxHeight,             \* Bound on height for model checking
+    NULL                   \* placeholder for "no active profile" (not in Profiles)
 
 ASSUME LockedProfile \in Profiles
 ASSUME StrictPQSchemes \subseteq Schemes
 ASSUME StrictPQSuite \in HashSuites
 ASSUME MaxHeight \in Nat \ {0}
+ASSUME NULL \notin Profiles
 
 VARIABLES
     profileLoaded,         \* BOOLEAN: profile loaded at boot
@@ -60,8 +62,6 @@ vars == << profileLoaded, activeProfile, pinnedDigest, computedDigest,
 ----------------------------------------------------------------------------
 \* Types
 ----------------------------------------------------------------------------
-
-NULL == CHOOSE x : x \notin Profiles
 
 TypeOK ==
     /\ profileLoaded \in BOOLEAN
@@ -153,7 +153,15 @@ Next ==
     \/ \E s \in Schemes : SignBlock(s)
     \/ AbortMidRun
 
-Spec == Init /\ [][Next]_vars
+\* Fairness: the boot decision must not hang forever. At boot both
+\* ProfileLoadOK and ProfileLoadMismatch are enabled, and their disjunction
+\* stays enabled until one fires (each disables both by setting profileLoaded
+\* or aborted). Weak fairness on that disjunction guarantees boot terminates.
+\* We deliberately do NOT add fairness forcing ProfileLoadOK over
+\* ProfileLoadMismatch: a mismatched genesis digest must be allowed to abort.
+Fairness == WF_vars(ProfileLoadOK \/ ProfileLoadMismatch)
+
+Spec == Init /\ [][Next]_vars /\ Fairness
 
 ----------------------------------------------------------------------------
 \* Safety invariants
@@ -198,12 +206,31 @@ StrictE2EPQ ==
 \* Liveness
 ----------------------------------------------------------------------------
 
-\* HeightProgresses: under fair scheduling, height eventually increases.
-HeightProgresses ==
-    \A h \in 0..MaxHeight : <>(height >= h)
+\* BootResolves: the boot decision always terminates -- the node either
+\* loads the profile or aborts, never hanging at boot forever. This is the
+\* meaningful, TRUE liveness property of the boot gate, and it holds under
+\* the weak-fairness assumption on the boot decision in Spec.
+BootResolves == <>(profileLoaded \/ aborted)
 
-\* ProfileEventuallyLoaded: if not aborted, profile is eventually loaded.
-ProfileEventuallyLoaded ==
-    (~aborted) ~> profileLoaded
+\* ---------------------------------------------------------------------------
+\* The two liveness properties below are NOT theorems of this model and are
+\* therefore left OUT of the checked PROPERTY list (see MC_StrictPQProfile.cfg).
+\* They are kept here as documentation of why:
+\*
+\*   HeightProgresses == \A h \in 0..MaxHeight : <>(height >= h)
+\*       FALSE: a node may legitimately abort at boot (ProfileLoadMismatch)
+\*       or mid-run (AbortMidRun) and then never sign a block, so height
+\*       need not reach MaxHeight. Refusing to progress after a failed
+\*       genesis-digest check is the *intended* strict-PQ behaviour, so this
+\*       unconditional progress claim is the wrong specification, not a bug
+\*       in the protocol.
+\*
+\*   ProfileEventuallyLoaded == (~aborted) ~> profileLoaded
+\*       FALSE: from a not-yet-aborted state the node may take
+\*       ProfileLoadMismatch and abort without ever loading. A mismatched
+\*       pinned digest MUST abort rather than load, so "not aborted leads to
+\*       loaded" cannot hold. The faithful liveness statement is BootResolves
+\*       above (the decision is always reached), which IS checked.
+\* ---------------------------------------------------------------------------
 
 ============================================================================

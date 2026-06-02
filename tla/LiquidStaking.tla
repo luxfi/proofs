@@ -122,13 +122,23 @@ Stake(a, amt) ==
     /\ amt > 0
     /\ totalAssets + amt <= MaxAmount
     /\ LET price     == SharePrice
-           newShares == IF totalShares = 0 THEN amt
+           \* When the vault has shares outstanding but zero assets (e.g. after
+           \* a full slash), the share price is 0. The real contract treats a
+           \* zero-price (defunct) vault as a 1:1 mint rather than dividing by
+           \* zero, so we guard the division: price = 0 => newShares = amt.
+           newShares == IF totalShares = 0 \/ price = 0 THEN amt
                         ELSE (amt * Precision) \div price
        IN /\ newShares > 0
           /\ totalAssets' = totalAssets + amt
           /\ totalShares' = totalShares + newShares
           /\ userShares' = [userShares EXCEPT ![a] = @ + newShares]
-          /\ lastSharePrice' = SharePrice
+          \* Checkpoint the share price from the POST-stake totals, consistent
+          \* with AccrueRewards/Slash/Unstake. (totalShares + newShares > 0
+          \* always, since newShares > 0, so no division guard is needed.)
+          \* The previous code recorded the pre-stake price, leaving a stale
+          \* checkpoint that broke SlashingActionProperty.
+          /\ lastSharePrice' =
+                 ((totalAssets + amt) * Precision) \div (totalShares + newShares)
           /\ UNCHANGED slashingOccurred
 
 (*
