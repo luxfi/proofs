@@ -184,7 +184,7 @@ rule Verify_Triple:
     rt_sig    = quasar_get_rt(cert)
     mldsa_sig = quasar_get_mldsa(cert)
   in
-  [ In(cert),
+  [ In(<msg, cert>),
     !ValidatorPK(vid, bls_pk, rt_pk, mldsa_pk) ]
   --[ Eq(bls_verify(msg, bls_sig, bls_pk), true),
       Eq(rt_verify(msg, rt_sig, rt_pk), true),

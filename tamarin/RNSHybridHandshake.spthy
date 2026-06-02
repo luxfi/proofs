@@ -269,6 +269,19 @@ rule Responder_Recv_Request_Send_Accept:
 
     /* ML-DSA signature */
     sig_dsa_B = mldsa_sign(full_data_B, sk_dsa_B)
+
+    /* -- Derive the hybrid session key now --
+     * The responder already holds everything the key derivation needs:
+     * its own X25519 ephemeral secret (~esk_X_B), the initiator's X25519
+     * ephemeral public (epk_X_A from Msg1), and both ML-KEM ephemeral
+     * publics. So it computes K here (matching deriveHybridSecret in
+     * rns_link.go, which derives the key as soon as both shares are known)
+     * and carries it in its state, rather than reconstructing the DH
+     * product again in Msg4.
+     */
+    ss_X = epk_X_A^~esk_X_B
+    ss_M = h(<'MLKEM', epk_M_A, epk_M_B>)
+    K    = derive_session(ss_X, ss_M, <dest_A, dest_B>)
   in
   [ /* Receive Msg1 */
     In(<'LinkRequest', dest_A, pk_ed_A, epk_X_A, sig_ed_A,
@@ -294,20 +307,20 @@ rule Responder_Recv_Request_Send_Accept:
   [ /* Send Msg2 */
     Out(<'LinkAccept', dest_B, pk_ed_B, epk_X_B, sig_ed_B,
          pk_dsa_B, epk_M_B, sig_dsa_B>)
-  , /* Store responder state (includes $A for authentication claims) */
+  , /* Store responder state (includes $A for authentication claims
+     * and the derived session key K) */
     St_Resp_1($B, ~sid, sk_ed_B, sk_dsa_B, ~esk_X_B, ~esk_M_B,
               dest_B, pk_ed_B, epk_X_B, epk_M_B,
-              dest_A, pk_ed_A, epk_X_A, epk_M_A, $A)
+              dest_A, pk_ed_A, epk_X_A, epk_M_A, $A, K)
   ]
 
 /* -- Msg3: Initiator receives LinkAccept, derives keys, sends LinkProof -- */
 rule Initiator_Recv_Accept_Send_Proof:
   let
-    /* -- Reconstruct our public values -- */
-    pk_ed_A   = pk(sk_ed_A)
-    pk_dsa_A  = mldsa_pk(sk_dsa_A)
-    epk_X_A   = 'g'^esk_X_A
-    epk_M_A   = mlkem_pk(esk_M_A)
+    /* -- Our public values: reused from St_Init_1 (the values we
+     *    generated and stored in Msg1), not recomputed. pk_ed_A,
+     *    pk_dsa_A, epk_X_A, epk_M_A are bound directly by the St_Init_1
+     *    state fact below. -- */
 
     /* -- Parse incoming LinkAccept -- */
     classical_data_B = <pk_ed_B, epk_X_B>
@@ -350,30 +363,18 @@ rule Initiator_Recv_Accept_Send_Proof:
     St_Init_2($A, sid, K, dest_A, dest_B, pk_ed_B, pk_dsa_B, $B)
   ]
 
-/* -- Msg4: Responder receives LinkProof, derives keys, sends LinkComplete -- */
+/* -- Msg4: Responder receives LinkProof, confirms key, sends LinkComplete --
+ *
+ * The session key K was derived in Msg2 and is carried in St_Resp_1, so it
+ * is bound here directly from the responder's own state (no recomputation of
+ * the Diffie-Hellman shared secret in this rule). Receiving a LinkProof that
+ * decrypts under K is the responder's key-confirmation step.
+ */
 rule Responder_Recv_Proof_Send_Complete:
-  let
-    /* -- Reconstruct our public values -- */
-    pk_ed_B   = pk(sk_ed_B)
-    pk_dsa_B  = mldsa_pk(sk_dsa_B)
-    epk_X_B   = 'g'^esk_X_B
-    epk_M_B   = mlkem_pk(esk_M_B)
-
-    /* -- Derive session key (must match initiator's) -- */
-    /* X25519 DH: g^(esk_X_A * esk_X_B) */
-    ss_X = epk_X_A^esk_X_B
-
-    /* ML-KEM contribution: commutative hash (same as initiator) */
-    ss_M = h(<'MLKEM', epk_M_A, epk_M_B>)
-
-    /* Session key (deterministic: same salt ordering) */
-    salt = <dest_A, dest_B>
-    K    = derive_session(ss_X, ss_M, salt)
-  in
-  [ /* Our state from Msg2 (includes $A binding) */
+  [ /* Our state from Msg2 (includes $A binding and the derived key K) */
     St_Resp_1($B, sid, sk_ed_B, sk_dsa_B, esk_X_B, esk_M_B,
               dest_B, pk_ed_B, epk_X_B, epk_M_B,
-              dest_A, pk_ed_A, epk_X_A, epk_M_A, $A)
+              dest_A, pk_ed_A, epk_X_A, epk_M_A, $A, K)
   , /* Receive Msg3: encrypted proof */
     In(senc(<'LinkProof', proof_A>, K))
   , Fr(~proof_B)
@@ -392,7 +393,11 @@ rule Responder_Recv_Proof_Send_Complete:
     !SessionKey($B, sid, K)
   ]
 
-/* -- Initiator receives LinkComplete: session established -- */
+/* -- Initiator receives LinkComplete: session established --
+ *
+ * K is bound from St_Init_2 (stored in Msg3), so no DH reconstruction occurs
+ * in this rule.
+ */
 rule Initiator_Recv_Complete:
   [ St_Init_2($A, sid, K, dest_A, dest_B, pk_ed_B, pk_dsa_B, $B)
   , In(senc(<'LinkComplete', proof_B>, K))

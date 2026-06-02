@@ -180,7 +180,8 @@ rule Relayer_Combine:
     msg = <action, chainId, token, amount, nonce>
     gsig = combine_sigs(psig1, psig2)
   in
-  [ In(<'PartialSig', $S1, gid, psig1>)
+  [ In(<action, chainId, token, amount, nonce>)
+  , In(<'PartialSig', $S1, gid, psig1>)
   , In(<'PartialSig', $S2, gid, psig2>)
   , !GroupPK(gid, gpk)
   , Fr(~rid)
