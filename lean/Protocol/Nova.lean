@@ -37,13 +37,13 @@ structure NovaState where
   lastHeight : Nat
 
 /-- Genesis state -/
-def genesis (genesisBlock : Block) (hg : genesisBlock.height = 0) : NovaState :=
+def genesis (genesisBlock : Block) (_hg : genesisBlock.height = 0) : NovaState :=
   { chain := [genesisBlock], lastHeight := 0 }
 
 /-- Append block to chain -/
 def appendBlock (s : NovaState) (b : Block)
-    (hparent : b.parentId = (s.chain.head?.map Block.id).getD 0)
-    (hheight : b.height = s.lastHeight + 1) : NovaState :=
+    (_hparent : b.parentId = (s.chain.head?.map Block.id).getD 0)
+    (_hheight : b.height = s.lastHeight + 1) : NovaState :=
   { chain := b :: s.chain, lastHeight := b.height }
 
 /-- Height is strictly increasing -/
@@ -52,7 +52,6 @@ theorem height_increases (s : NovaState) (b : Block)
     (hheight : b.height = s.lastHeight + 1) :
     (appendBlock s b hparent hheight).lastHeight > s.lastHeight := by
   simp [appendBlock, hheight]
-  omega
 
 /-- Chain grows on append -/
 theorem chain_grows (s : NovaState) (b : Block)

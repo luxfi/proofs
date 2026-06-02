@@ -70,12 +70,12 @@ def submitAttestation (s : ProviderState) (a : ComputeAttestation) : ProviderSta
     existing compute from chain_j -/
 theorem chain_isolation (s : ProviderState) (a : ComputeAttestation) :
     (submitAttestation s a).totalCompute ≥ s.totalCompute := by
-  simp [submitAttestation]; split <;> omega
+  by_cases h : a.teeValid <;> simp [submitAttestation, h]
 
 /-- ACCRETIVE ONLY: Rewards only increase, never decrease -/
 theorem rewards_accretive (s : ProviderState) (a : ComputeAttestation) :
     (submitAttestation s a).totalRewards ≥ s.totalRewards := by
-  simp [submitAttestation]; split <;> omega
+  by_cases h : a.teeValid <;> simp [submitAttestation, h]
 
 /-- INVALID TEE REJECTED: Without valid TEE, state unchanged -/
 theorem invalid_tee_rejected (s : ProviderState) (a : ComputeAttestation)
@@ -96,15 +96,15 @@ theorem multi_chain_commutative (s : ProviderState)
     (a1 a2 : ComputeAttestation) :
     (submitAttestation (submitAttestation s a1) a2).totalCompute =
     (submitAttestation (submitAttestation s a2) a1).totalCompute := by
-  simp [submitAttestation]
-  split <;> split <;> omega
+  by_cases h1 : a1.teeValid <;> by_cases h2 : a2.teeValid <;>
+    simp [submitAttestation, h1, h2] <;> omega
 
 /-- MONOTONE CHAIN COUNT: active chains only grows -/
 theorem chains_monotone (s : ProviderState) (a : ComputeAttestation) :
     (submitAttestation s a).activeChains.length ≥ s.activeChains.length := by
   simp [submitAttestation]
   split
-  · split <;> simp [List.length_cons] <;> omega
+  · split <;> simp [List.length_cons]
   · exact Nat.le_refl _
 
 /-- ZERO COMPUTE = ZERO REWARDS -/

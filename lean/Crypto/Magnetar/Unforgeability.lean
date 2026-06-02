@@ -134,7 +134,7 @@ theorem magnetar_shamir_correct
     hardness advantages (SHAKE collision + preimage + FIPS 205 EUF-CMA
     + aggregator-TCB caveat). This abstract statement carries the
     composition structure. -/
-def MagnetarTSUFBound (fp : FipsSlhParams) (_tp : ThresholdParams) : Prop :=
+def MagnetarTSUFBound (_fp : FipsSlhParams) (_tp : ThresholdParams) : Prop :=
   ∃ (_a : HardnessAdvantage),
     -- The TS-UF advantage decomposes into the four named hardness
     -- advantages plus a negligible RO programming penalty. The

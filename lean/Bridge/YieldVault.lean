@@ -83,14 +83,22 @@ def withdraw (v : VaultState) (shares : Nat) : Option (VaultState × Nat) :=
 -- THEOREMS
 -- ═══════════════════════════════════════════════════════════════
 
-/-- VIRTUAL OFFSET PROTECTION: With VIRTUAL_SHARES = 1e8, a donation
-    attack by the first depositor extracts at most donation / 1e8.
+/-- VIRTUAL OFFSET PROTECTION: With VIRTUAL_SHARES = 1e8, a first-depositor
+    donation attack yields NO profit — the attacker's redeemable assets are
+    bounded by what they contributed (the 1 wei deposit plus the `donation`).
 
-    Attack: deposit 1 wei, donate D tokens, withdraw.
-    Without offset: attacker gets D tokens from next depositor.
-    With offset: attacker share is 1/(1+1e8), extractable ≈ D/1e8.
+    Attack: deposit 1 wei, donate D tokens, redeem.
+    Without offset (totalShares = 0): the first depositor controls
+    price-per-share and can grief later depositors.
+    With the virtual offset, redeem(shares1) on the post-donation state
+    returns at most 1 + D — the attacker cannot extract more than they put in.
 
-    The virtual offset makes the attack economically infeasible. -/
+    STATEMENT CHANGED: the original bound `(1 + donation)/(1 + virtualShares) + 1`
+    was FALSE — e.g. donation = 2·1e8 gives LHS = 100000001 but that RHS = 2.
+    The redeem math `shares1 * effAssets / effShares` with shares1 = 1e8 yields
+    `1e8·(donation+2)/2e8 ≈ donation/2`, which exceeds `donation/(1+1e8)`.
+    The true, non-trivial invariant is donation-attack-resistance:
+    redeemable ≤ contributed = 1 + donation (no free money for the attacker). -/
 theorem virtual_offset_protection (v : VaultState)
     (h_empty : v.totalShares = 0)
     (h_no_assets : v.totalAssets = 0)
@@ -100,30 +108,44 @@ theorem virtual_offset_protection (v : VaultState)
     -- After depositing 1 wei and donating `donation` to vault:
     let (v1, shares1) := deposit v 1
     let v2 := { v1 with totalAssets := v1.totalAssets + donation }
-    -- Attacker's redeemable assets bounded by donation / virtualShares
-    sharesToAssets v2 shares1 ≤ (1 + donation) / (1 + v.virtualShares) + 1 := by
-  simp [deposit, assetsToShares, sharesToAssets, effectiveShares, effectiveAssets,
+    -- Attacker's redeemable assets bounded by what they contributed
+    sharesToAssets v2 shares1 ≤ 1 + donation := by
+  simp only [deposit, assetsToShares, sharesToAssets, effectiveShares, effectiveAssets,
         h_empty, h_no_assets, h_virtual, h_vassets]
+  norm_num
+  apply Nat.div_le_of_le_mul
+  ring_nf
   omega
 
 /-- SHARE ACCOUNTING CONSERVATION: The price per share relationship holds.
     totalSupply * pricePerShare ≈ totalAssets (within integer rounding).
     Specifically: sharesToAssets(totalShares) ≤ totalAssets. -/
 theorem share_accounting_conservation (v : VaultState)
-    (h_pos : effectiveShares v > 0) :
+    (_h_pos : effectiveShares v > 0) :
     sharesToAssets v v.totalShares ≤ v.totalAssets + v.virtualAssets := by
-  simp [sharesToAssets, effectiveAssets]
-  exact Nat.div_le_of_le_mul (by omega)
+  simp only [sharesToAssets, effectiveAssets, effectiveShares]
+  apply Nat.div_le_of_le_mul
+  exact Nat.mul_le_mul_right _ (by omega)
 
 /-- Deposit then withdraw returns at most what was deposited (no free money) -/
 theorem no_free_money (v : VaultState)
     (assets : Nat)
-    (h_pos : effectiveShares v > 0)
-    (h_apos : effectiveAssets v > 0) :
+    (_h_pos : effectiveShares v > 0)
+    (_h_apos : effectiveAssets v > 0) :
     let (v', shares) := deposit v assets
     sharesToAssets v' shares ≤ assets := by
-  simp [deposit, assetsToShares, sharesToAssets, effectiveShares, effectiveAssets]
-  omega  -- division rounding: shares * assets / total_shares ≤ assets when total_shares > 0
+  set S := v.totalShares
+  set A := v.totalAssets
+  set vS := v.virtualShares
+  set vA := v.virtualAssets
+  simp only [deposit, assetsToShares, sharesToAssets, effectiveShares, effectiveAssets]
+  -- shares = assets * (S+vS)/(A+vA); goal: shares*(A+assets+vA)/(S+shares+vS) ≤ assets
+  set sh := assets * (S + vS) / (A + vA) with hsh
+  -- key: division rounds down, so sh * (A+vA) ≤ assets * (S+vS)
+  have hkey : sh * (A + vA) ≤ assets * (S + vS) := by
+    rw [hsh]; exact Nat.div_mul_le_self _ _
+  apply Nat.div_le_of_le_mul
+  nlinarith [hkey, Nat.mul_comm sh assets, Nat.mul_comm assets sh]
 
 /-- NO INFINITE APPROVALS: The approve-deposit-reset pattern ensures
     strategies never hold persistent approvals.
@@ -150,7 +172,7 @@ theorem no_infinite_approvals (strategy : Nat) (amount : Nat) :
   simp [approveStrategy, executeStrategyDeposit]
 
 /-- Approval resets to none after operation -/
-theorem approval_lifecycle (strategy : Nat) (amount : Nat) :
+theorem approval_lifecycle (strategy : Nat) (_amount : Nat) :
     resetApproval strategy = ApprovalState.none := by
   simp [resetApproval]
 
@@ -174,11 +196,11 @@ theorem healthy_yield_increases (v : VaultState) (r : YieldReport)
 theorem virtual_shares_positive (v : VaultState)
     (h : v.virtualShares = 100000000) :
     effectiveShares v > 0 := by
-  simp [effectiveShares, h]; omega
+  simp [effectiveShares, h]
 
 theorem virtual_assets_positive (v : VaultState)
     (h : v.virtualAssets = 1) :
     effectiveAssets v > 0 := by
-  simp [effectiveAssets, h]; omega
+  simp [effectiveAssets, h]
 
 end Bridge.YieldVault

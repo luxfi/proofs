@@ -47,15 +47,15 @@ opaque eufcma_advantage
     cited paper §5. -/
 axiom corona_eufcma_to_rlwe
     (lwe : LWEParams) (tp : ThresholdParams) :
-    ∀ (game : EUFCMAGame lwe tp),
-      ∃ (solver : RLWESolver lwe),
+    ∀ (_game : EUFCMAGame lwe tp),
+      ∃ (_solver : RLWESolver lwe),
         -- A polynomial-time reduction with poly advantage loss.
         True
 
 /-- Threshold-honest-majority preservation: a corrupted set of < t
     parties cannot forge under the RLWE hardness assumption. This is
     the standard threshold-signature EUF-CMA-via-RLWE corollary. -/
-theorem corona_threshold_unforgeable
+noncomputable def corona_threshold_unforgeable
     (lwe : LWEParams) (tp : ThresholdParams) (compromised : Nat)
     (h : compromised < tp.t) :
     CoronaEUFCMAAdv lwe :=
@@ -64,7 +64,7 @@ theorem corona_threshold_unforgeable
 /-- The honest-quorum unforgeability is preserved by Corona's signing
     protocol. This is the user-facing statement: "if RLWE is hard,
     Corona signatures are unforgeable." -/
-theorem corona_signatures_unforgeable_under_rlwe
+noncomputable def corona_signatures_unforgeable_under_rlwe
     (lwe : LWEParams) (tp : ThresholdParams) (compromised : Nat)
     (h : compromised < tp.t) :
     CoronaEUFCMAAdv lwe :=

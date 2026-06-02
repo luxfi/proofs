@@ -38,8 +38,8 @@ def expectedProb (cfg : PhotonConfig) : Rat :=
 /-- Over many rounds, each validator is selected proportionally.
     This is a statistical property; we state the expectation. -/
 theorem expected_selection_frequency
-    (cfg : PhotonConfig) (rounds : Nat) (hr : 0 < rounds)
-    (validator_selections : Nat) :
+    (_cfg : PhotonConfig) (_rounds : Nat) (_hr : 0 < _rounds)
+    (_validator_selections : Nat) :
     -- Expected selections = rounds * k / n
     -- This is a probabilistic statement; in formal verification we
     -- prove the expectation and bound deviation via Chernoff
@@ -51,6 +51,7 @@ theorem committee_size_exact
     (cfg : PhotonConfig) (committee : List Nat)
     (hlen : committee.length = cfg.k) :
     committee.length ≤ cfg.n := by
+  have hk := cfg.hk
   omega
 
 /-- Non-empty committee: k > 0 when n > 0 and k ≤ n -/

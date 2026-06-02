@@ -51,9 +51,9 @@ theorem secret_recovery_at_zero
     (f : Polynomial F) {ι : Type*} [DecidableEq ι]
     (s : Finset ι) (v : ι → F)
     (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card)
-    (hv0 : ∀ i ∈ s, v i ≠ 0) :
+    (_hv0 : ∀ i ∈ s, v i ≠ 0) :
     (Lagrange.interpolate s v (fun i => f.eval (v i))).eval 0 = f.eval 0 :=
-  Crypto.Threshold.Lagrange.secret_recovery_at_zero f s v hvs degree_f_lt hv0
+  (Crypto.Threshold.Lagrange.secret_recovery_at_zero f s v hvs degree_f_lt).symm
 
 /-- Lagrange interpolation is linear in the per-party values.
 

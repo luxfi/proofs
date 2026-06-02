@@ -55,7 +55,7 @@ structure FieldState where
 
 /-- Commit a prefix (models Committer.Commit) -/
 def commitPrefix (s : FieldState) (newCommits : Finset VertexId)
-    (hcut : IsConsistentCut s.dag (s.committed ∪ newCommits)) : FieldState :=
+    (_hcut : IsConsistentCut s.dag (s.committed ∪ newCommits)) : FieldState :=
   { s with committed := s.committed ∪ newCommits }
 
 /-- Committed set is always a consistent cut -/
@@ -73,7 +73,6 @@ theorem committed_monotone
     (hcut : IsConsistentCut s.dag (s.committed ∪ newCommits)) :
     s.committed ⊆ (commitPrefix s newCommits hcut).committed := by
   simp [commitPrefix]
-  exact Finset.subset_union_left
 
 /-- Empty DAG has trivially consistent empty cut -/
 theorem empty_consistent :
@@ -85,11 +84,11 @@ theorem new_commits_included
     (s : FieldState) (nc : Finset VertexId)
     (hcut : IsConsistentCut s.dag (s.committed ∪ nc)) :
     nc ⊆ (commitPrefix s nc hcut).committed := by
-  simp [commitPrefix]; exact Finset.subset_union_right
+  simp [commitPrefix]
 
 /-- Frontier shrinks as more vertices are committed -/
 theorem frontier_progress (s : FieldState) (v : VertexId)
-    (h_in_frontier : v ∈ s.frontier)
+    (_h_in_frontier : v ∈ s.frontier)
     (h_in_committed : v ∈ s.committed) :
     -- A committed frontier vertex is no longer "frontier"
     -- (this is a state invariant maintained by the driver)

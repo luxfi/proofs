@@ -19,7 +19,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/
 
-import Mathlib.Data.Nat.Basic
+import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
 namespace Zoo.GPU.Consensus
@@ -36,14 +36,14 @@ Hybrid (Quasar) requires BOTH BLS and Corona verification. -/
     requires `n + 1` pairing operations (n pairings + 1 for generator).
     GPU parallelizes pairings across cores.
     With `p` cores: time = (n + 1) / p. -/
-theorem bls_batch_parallel (n p : Nat) (hp : 0 < p) :
+theorem bls_batch_parallel (n p : Nat) (_hp : 0 < p) :
     (n + 1) / p ≤ n + 1 := by
   exact Nat.div_le_self (n + 1) p
 
 /-- BLS aggregation reduces verification cost: instead of verifying
     `v` individual signatures (v pairings), aggregate into 1
     verification (2 pairings). Savings = v - 2 pairings. -/
-theorem bls_aggregation_savings (v : Nat) (hv : v ≥ 2) :
+theorem bls_aggregation_savings (v : Nat) (_hv : v ≥ 2) :
     v - 2 ≥ 0 := by omega
 
 /-- Hybrid finality (Quasar): both BLS and Corona must verify.
@@ -58,7 +58,7 @@ theorem hybrid_parallel_speedup (bls_time corona_time : Nat) :
     verifying `v` signatures. GPU batch verification scales:
     time = v / p (p = GPU cores). Adding validators doesn't
     degrade finality if GPU cores scale proportionally. -/
-theorem validator_gpu_scaling (v p : Nat) (hp : 0 < p)
+theorem validator_gpu_scaling (v p : Nat) (_hp : 0 < p)
     (hscale : p ≥ v) :
     v / p ≤ 1 := by
   exact Nat.div_le_of_le_mul (by omega)
@@ -67,7 +67,7 @@ theorem validator_gpu_scaling (v p : Nat) (hp : 0 < p)
     requires NTT operations. GPU parallelizes NTT butterflies.
     ML-DSA verify = 2 NTTs of degree 256.
     GPU speedup for NTT is linear in cores (up to N/2 per stage). -/
-theorem pq_ntt_parallel (degree cores : Nat) (hc : 0 < cores) :
+theorem pq_ntt_parallel (degree cores : Nat) (_hc : 0 < cores) :
     degree / cores ≤ degree := Nat.div_le_self degree cores
 
 /-- Block production pipelining: while block N is being finalized
@@ -82,8 +82,8 @@ theorem pipeline_utilization (exec_time consensus_time : Nat)
 /-- Quorum threshold with GPU: verifying quorum (2f+1 out of 3f+1)
     on GPU. GPU verifies all signatures in parallel, then counts.
     Quorum check is O(1) after parallel verify completes. -/
-theorem quorum_gpu_verify (n f : Nat) (hf : 3 * f < n)
-    (quorum : Nat) (hq : quorum ≥ 2 * f + 1) :
+theorem quorum_gpu_verify (n f : Nat) (hf : n = 3 * f + 1)
+    (quorum : Nat) (hq : quorum = 2 * f + 1) :
     quorum ≤ n := by omega
 
 /-- GPU memory per validator: each BLS public key is 48 bytes,
@@ -98,7 +98,7 @@ theorem validator_memory (v key_size : Nat) :
     GPU reduces verify contribution, block time unchanged.
     Faster finality means faster cross-chain messaging (Warp). -/
 theorem finality_improvement (block_time verify_time gpu_speedup : Nat)
-    (hg : 0 < gpu_speedup) :
+    (_hg : 0 < gpu_speedup) :
     block_time + verify_time / gpu_speedup
       ≤ block_time + verify_time := by
   have : verify_time / gpu_speedup ≤ verify_time := Nat.div_le_self verify_time gpu_speedup

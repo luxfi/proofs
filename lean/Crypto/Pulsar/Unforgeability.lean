@@ -132,7 +132,7 @@ theorem pulsar_shamir_correct_at_target
     adversary's advantage expressed as a sum of the three named
     hardness advantages. This abstract statement carries the
     composition structure without depending on a probability monad. -/
-def TSUFBound (fp : FipsParams) (_tp : ThresholdParams) : Prop :=
+def TSUFBound (_fp : FipsParams) (_tp : ThresholdParams) : Prop :=
   ∃ (_a : HardnessAdvantage),
     -- The TS-UF advantage decomposes into MLWE + MSIS + MLDSA EUF-CMA
     -- advantages plus a negligible RO programming penalty. The

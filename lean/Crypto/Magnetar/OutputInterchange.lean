@@ -124,7 +124,7 @@ theorem magnetar_output_interchangeable
        ∀ pk msg ctx sig,
          magnetarVerify pk msg ctx sig = fips205Verify V pk msg ctx sig)
     (pk msg ctx sig : ByteArray)
-    (h_honest : IsHonestMagnetarCeremony pk msg ctx sig)
+    (_h_honest : IsHonestMagnetarCeremony pk msg ctx sig)
     (h_fips_accepts : fips205Verify V pk msg ctx sig = true) :
     magnetarVerify pk msg ctx sig = true := by
   -- The Magnetar Verify entry is FIPS205Verify (dispatch axiom)

@@ -206,12 +206,12 @@ theorem nonce_monotonicity
   unfold bridgeFill at h_fill
   split at h_fill
   · rename_i hcond
-    simp [Bool.and_eq_true, decide_eq_true_eq] at hcond
+    simp only [Bool.and_eq_true, decide_eq_true_eq] at hcond
     obtain ⟨⟨⟨_, _⟩, _⟩, h_ord⟩ := hcond
     simp only [Option.some.injEq] at h_fill
     subst h_fill
     simp only [fillPostState, FillState.nextNonce, gt_iff_lt]
-    omega
+    exact Nat.lt_succ_of_le h_ord
   · simp at h_fill
 
 /-- Insufficient signatures always fail -/

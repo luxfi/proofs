@@ -44,7 +44,7 @@ def deriveSessionKey (kex : KeyExchange) : Nat :=
 
 /-- HYBRID: Session key depends on BOTH shared secrets -/
 theorem hybrid_both_contribute (kex : KeyExchange)
-    (h_x : kex.x25519SS > 0) (h_m : kex.mlkemSS > 0) :
+    (_h_x : kex.x25519SS > 0) (h_m : kex.mlkemSS > 0) :
     deriveSessionKey kex > kex.x25519SS := by
   simp [deriveSessionKey]; omega
 
@@ -63,7 +63,9 @@ theorem transcript_binding (kex1 kex2 : KeyExchange)
     -- (this is ruled out by forward_secrecy axiom in practice)
     kex1.x25519SS + kex1.mlkemSS ≠ kex2.x25519SS + kex2.mlkemSS ∨
     kex1.transcriptHash = kex2.transcriptHash := by
-  right; omega
+  left
+  simp only [deriveSessionKey] at h_same_key
+  omega
 
 /-- FAILED IS TERMINAL -/
 theorem failed_terminal (reason : String) :

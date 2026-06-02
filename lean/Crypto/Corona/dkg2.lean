@@ -28,8 +28,10 @@ opaque PedersenCommit : Type
     encrypted shares (broadcast on the channel). -/
 opaque DKGTranscript : Type
 
-/-- An R_q^N share. -/
-opaque Share : Type
+/-- An R_q^N share. Modeled as a single-field byte wrapper so it is
+    `Inhabited` (every real share is a concrete byte string); the
+    reconstruction *operation* below stays opaque. -/
+structure Share where ofBytes :: (bytes : ByteArray) deriving Inhabited
 
 /-- A committee identifier: a list of party indices participating in
     the ceremony. -/
@@ -61,7 +63,7 @@ axiom dkg_binding :
 
     Stated as a named axiom citing Pedersen 1991. -/
 axiom dkg_hiding :
-    ∀ (c : Committee) (tr : DKGTranscript),
+    ∀ (_c : Committee) (_tr : DKGTranscript),
       -- The marginal distribution of any < t shares is independent of
       -- the secret. (Stated abstractly here -- the probability-monad
       -- form lives in EC + the threshold_lagrange.lean bridge.)

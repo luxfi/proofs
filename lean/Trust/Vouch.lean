@@ -51,15 +51,22 @@ structure Vouch where
 def chainAuthority (chain : List Vouch) (top : Nat) : Nat :=
   chain.foldl (fun acc v => min acc v.scope) top
 
+/-- foldl over `min · scope` is monotone in its starting accumulator -/
+theorem foldl_min_mono (l : List Vouch) : ∀ a b : Nat, a ≤ b →
+    l.foldl (fun acc v => min acc v.scope) a ≤
+      l.foldl (fun acc v => min acc v.scope) b := by
+  induction l with
+  | nil => intro a b h; simpa using h
+  | cons hd tl ih =>
+    intro a b h
+    simp only [List.foldl_cons]
+    exact ih _ _ (min_le_min h (le_refl hd.scope))
+
 /-- Adding a vouch can only reduce authority -/
 theorem chain_authority_monotone (chain : List Vouch) (v : Vouch) (top : Nat) :
     chainAuthority (v :: chain) top ≤ chainAuthority chain top := by
-  simp [chainAuthority, List.foldl_cons]
-  induction chain generalizing top with
-  | nil => simp [List.foldl, chainAuthority]; exact Nat.min_le_left top v.scope
-  | cons hd tl ih =>
-    simp [List.foldl]
-    apply ih
+  simp only [chainAuthority, List.foldl_cons]
+  exact foldl_min_mono chain _ _ (Nat.min_le_left top v.scope)
 
 /-- Empty chain gives full authority -/
 theorem empty_chain_full (top : Nat) :
@@ -88,9 +95,9 @@ theorem chain_bounded_by_scope (chain : List Vouch) (top : Nat) (v : Vouch)
     cases List.mem_cons.mp hv with
     | inl h =>
       subst h
-      calc chainAuthority tl (min top hd.scope)
-          ≤ min top hd.scope := chain_bounded tl _
-        _ ≤ hd.scope := Nat.min_le_right top hd.scope
+      calc chainAuthority tl (min top v.scope)
+          ≤ min top v.scope := chain_bounded tl _
+        _ ≤ v.scope := Nat.min_le_right top v.scope
     | inr h => exact ih (min top hd.scope) h
 
 end Trust.Vouch

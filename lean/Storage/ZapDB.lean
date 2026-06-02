@@ -125,8 +125,8 @@ def restore (rs : ReplicaSet) : List KVEntry :=
 theorem backup_completeness (db : ZapState) (e : KVEntry)
     (h_mem : e ∈ db.entries) (h_bound : e.version ≤ db.maxVersion) :
     e ∈ (createFullBackup db).entries := by
-  simp [createFullBackup, snapshotAt]
-  exact List.mem_filter.mpr ⟨h_mem, h_bound⟩
+  simp only [createFullBackup, snapshotAt, List.mem_filter, decide_eq_true_eq]
+  exact ⟨h_mem, h_bound⟩
 
 /-- Theorem 2: Version monotonicity — after creating an incremental backup
     from sinceVersion, the untilVersion is strictly greater (assuming new
@@ -143,8 +143,8 @@ theorem version_monotonicity (db : ZapState) (sinceVersion : Nat)
 theorem snapshot_consistency (db : ZapState) (e : KVEntry)
     (h_mem : e ∈ (createFullBackup db).entries) :
     e.version ≤ db.maxVersion := by
-  simp [createFullBackup, snapshotAt] at h_mem
-  exact (List.mem_filter.mp h_mem).2
+  simp only [createFullBackup, snapshotAt, List.mem_filter, decide_eq_true_eq] at h_mem
+  exact h_mem.2
 
 /-- Theorem 4: Incremental union — restoring a full backup plus all
     incrementals yields the union of all their entries.
@@ -195,8 +195,8 @@ theorem wrong_key_rejected
 theorem incremental_covers_gap (db : ZapState) (sinceVersion : Nat) (e : KVEntry)
     (h_mem : e ∈ (createIncrBackup db sinceVersion).entries) :
     sinceVersion < e.version ∧ e.version ≤ db.maxVersion := by
-  simp [createIncrBackup, entriesBetween] at h_mem
-  exact (List.mem_filter.mp h_mem).2
+  simp only [createIncrBackup, entriesBetween, List.mem_filter, decide_eq_true_eq] at h_mem
+  exact h_mem.2
 
 /-! ## Post-Quantum Backup Encryption -/
 

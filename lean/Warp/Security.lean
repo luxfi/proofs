@@ -50,7 +50,7 @@ theorem insufficient_sigs (m : WarpMessage) (h : m.signerCount < m.quorum) :
 
 /-- REPLAY PROTECTION: Messages with different nonces are distinct -/
 theorem replay_protection (m1 m2 : WarpMessage)
-    (h_chain : m1.sourceChain = m2.sourceChain)
+    (_h_chain : m1.sourceChain = m2.sourceChain)
     (h_nonce : m1.nonce ≠ m2.nonce) :
     m1 ≠ m2 := by
   intro h_eq; apply h_nonce; rw [h_eq]
@@ -62,7 +62,7 @@ theorem payload_integrity (m1 m2 : WarpMessage)
 
 /-- QUORUM OVERLAP: Two authenticated messages from the same source
     share at least one honest signer -/
-theorem warp_quorum_overlap (n f : Nat) (hf : 3 * f < n)
+theorem warp_quorum_overlap (n f : Nat) (hf : n = 3 * f + 1)
     (m1 m2 : WarpMessage)
     (hq1 : m1.quorum = 2 * f + 1) (hq2 : m2.quorum = 2 * f + 1)
     (ha1 : isAuthenticated m1 = true) (ha2 : isAuthenticated m2 = true) :

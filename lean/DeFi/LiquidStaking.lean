@@ -53,7 +53,7 @@ def compound (p : Position) : Position :=
 /-- YIELD ACCRUAL: Accrued rewards only increase -/
 theorem yield_monotone (p : Position) :
     (accrueBlock p).accrued ≥ p.accrued := by
-  simp [accrueBlock]; omega
+  simp [accrueBlock]
 
 /-- LIQUIDITY: Liquid derivatives equal principal (1:1 mint) -/
 def mintDerivatives (p : Position) : Position :=
@@ -71,7 +71,7 @@ theorem compound_resets_accrued (p : Position) :
 /-- COMPOUNDING: After compound, compounded increases -/
 theorem compound_increases_base (p : Position) :
     (compound p).compounded ≥ p.compounded := by
-  simp [compound]; omega
+  simp [compound]
 
 /-- NO IMPERMANENT LOSS: Single-sided staking has no IL.
     Unlike LP positions, staked assets don't change ratio. -/
@@ -82,7 +82,7 @@ theorem no_impermanent_loss (p : Position) :
 /-- DURATION MONOTONE: Stake duration only increases -/
 theorem duration_monotone (p : Position) :
     (accrueBlock p).stakeDuration > p.stakeDuration := by
-  simp [accrueBlock]; omega
+  simp [accrueBlock]
 
 /-- TOTAL VALUE: principal + compounded + accrued -/
 def totalValue (p : Position) : Nat :=
@@ -91,11 +91,11 @@ def totalValue (p : Position) : Nat :=
 /-- TOTAL VALUE MONOTONE: Accruing never decreases total -/
 theorem value_monotone (p : Position) :
     totalValue (accrueBlock p) ≥ totalValue p := by
-  simp [totalValue, accrueBlock]; omega
+  simp [totalValue, accrueBlock]
 
 /-- MONEY AT REST: Idle liquidity earns yield.
     DEX pool deposits implicitly stake via the liquid staking layer. -/
-theorem idle_earns (p : Position) (h : p.principal > 0) :
+theorem idle_earns (p : Position) (_h : p.principal > 0) :
     totalValue (accrueBlock p) ≥ totalValue p := value_monotone p
 
 end DeFi.LiquidStaking

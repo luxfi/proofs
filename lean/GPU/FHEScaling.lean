@@ -20,7 +20,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/
 
-import Mathlib.Data.Nat.Basic
+import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
 namespace Zoo.GPU.FHE
@@ -38,21 +38,21 @@ FHE operations on a chain:
     each stage takes N/(2*p) butterflies sequentially.
     Total time = log2(N) * N/(2*p).
     Speedup vs single core: p (linear in cores per stage). -/
-theorem ntt_parallel_speedup (n p : Nat) (hp : 0 < p) (hn : 0 < n) :
+theorem ntt_parallel_speedup (n p : Nat) (_hp : 0 < p) (_hn : 0 < n) :
     n / p ≤ n := by
   exact Nat.div_le_self n p
 
 /-- NTT stages are sequential: log2(N) stages cannot be parallelized
     across stages (each depends on prior). This is the sequential
     fraction in Amdahl's law for NTT. -/
-theorem ntt_stage_sequential (stages : Nat) (p : Nat) (hp : 0 < p) :
-    stages ≥ stages / p := by
-  exact Nat.le_of_dvd (Nat.pos_of_ne_zero (by omega)) ⟨p, by ring⟩ |>.symm ▸ Nat.div_le_self stages p
+theorem ntt_stage_sequential (stages : Nat) (_p : Nat) (_hp : 0 < _p) :
+    stages ≥ stages / _p := by
+  exact Nat.div_le_self stages _p
 
 /-- TFHE bootstrap GPU speedup: if CPU takes `cpu_time` and GPU
     achieves `speedup` factor, GPU time = cpu_time / speedup.
     At 40x speedup, 10ms bootstrap → 0.25ms. -/
-theorem bootstrap_speedup (cpu_time speedup : Nat) (hs : 0 < speedup) :
+theorem bootstrap_speedup (cpu_time speedup : Nat) (_hs : 0 < speedup) :
     cpu_time / speedup ≤ cpu_time := by
   exact Nat.div_le_self cpu_time speedup
 
@@ -61,7 +61,7 @@ theorem bootstrap_speedup (cpu_time speedup : Nat) (hs : 0 < speedup) :
     it only makes each level faster.
     Available depth = initial_budget / noise_per_level. -/
 theorem noise_depth_invariant (budget noise_per_level : Nat)
-    (hn : 0 < noise_per_level) :
+    (_hn : 0 < noise_per_level) :
     budget / noise_per_level = budget / noise_per_level := rfl
 
 /-- Batch FHE amortization: processing `b` ciphertexts in one
@@ -69,31 +69,31 @@ theorem noise_depth_invariant (budget noise_per_level : Nat)
     decreases as batch size grows. -/
 theorem batch_amortization (overhead per_ct batch : Nat) (hb : 0 < batch) :
     (overhead + batch * per_ct) / batch ≤ overhead + per_ct := by
-  have h1 : overhead / batch ≤ overhead := Nat.div_le_self overhead batch
-  have h2 : batch * per_ct / batch = per_ct := Nat.mul_div_cancel per_ct hb
+  have hle : overhead + batch * per_ct ≤ batch * (overhead + per_ct) := by
+    have h0 : overhead ≤ batch * overhead := Nat.le_mul_of_pos_left overhead hb
+    rw [Nat.mul_add]; omega
   calc (overhead + batch * per_ct) / batch
-      ≤ overhead / batch + (batch * per_ct) / batch := Nat.div_add_div_le_div overhead (batch * per_ct) batch
-    _ = overhead / batch + per_ct := by rw [h2]
-    _ ≤ overhead + per_ct := by omega
+      ≤ (batch * (overhead + per_ct)) / batch := Nat.div_le_div_right hle
+    _ = overhead + per_ct := Nat.mul_div_cancel_left _ hb
 
 /-- Threshold FHE decryption: with `n` validators and threshold `t`,
     decryption requires exactly `t` shares. Adding validators beyond
     `t` doesn't speed up decryption but increases availability. -/
-theorem threshold_decryption_shares (t n : Nat) (ht : t ≤ n) (ht1 : 0 < t) :
+theorem threshold_decryption_shares (t n : Nat) (ht : t ≤ n) (_ht1 : 0 < t) :
     t ≤ n := ht
 
 /-- GPU memory limits FHE polynomial degree: if each coefficient
     is `w` bytes and polynomial degree is `N`, one ciphertext
     uses `2 * N * w` bytes (two polynomials). GPU memory `M` limits
     concurrent ciphertexts to M / (2 * N * w). -/
-theorem gpu_memory_bound (mem_bytes n w : Nat) (hw : 0 < w) (hn : 0 < n) :
+theorem gpu_memory_bound (mem_bytes n w : Nat) (_hw : 0 < w) (_hn : 0 < n) :
     mem_bytes / (2 * n * w) * (2 * n * w) ≤ mem_bytes := by
   exact Nat.div_mul_le_self mem_bytes (2 * n * w)
 
 /-- CKKS rescaling on GPU: each multiplication requires rescaling
     (modulus switching). GPU parallelizes the coefficient-wise
     division across all N coefficients simultaneously. -/
-theorem rescale_parallel (n p : Nat) (hp : 0 < p) :
+theorem rescale_parallel (n p : Nat) (_hp : 0 < p) :
     n / p ≤ n := Nat.div_le_self n p
 
 /-- End-to-end FHE throughput: combining NTT speedup, batch

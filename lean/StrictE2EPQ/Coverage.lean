@@ -186,7 +186,7 @@ theorem bridge_pq_no_classical (b : BridgeProfileState)
 
 /-- Relaxing ForbidPairings to false breaks IsE2EPQ. -/
 theorem relax_pairings_breaks (p : ChainSecurityProfile)
-    (hp : IsE2EPQ p)
+    (_hp : IsE2EPQ p)
     (q : ChainSecurityProfile)
     (h_eq : q = { p with forbidPairings := false }) :
     ¬ IsE2EPQ q := by
@@ -197,7 +197,7 @@ theorem relax_pairings_breaks (p : ChainSecurityProfile)
 
 /-- Relaxing ForbidKZG to false breaks IsE2EPQ. -/
 theorem relax_kzg_breaks (p : ChainSecurityProfile)
-    (hp : IsE2EPQ p)
+    (_hp : IsE2EPQ p)
     (q : ChainSecurityProfile)
     (h_eq : q = { p with forbidKZG := false }) :
     ¬ IsE2EPQ q := by
@@ -208,7 +208,7 @@ theorem relax_kzg_breaks (p : ChainSecurityProfile)
 
 /-- Relaxing RequireTypedTxAuth to false breaks IsE2EPQ. -/
 theorem relax_typed_tx_auth_breaks (p : ChainSecurityProfile)
-    (hp : IsE2EPQ p)
+    (_hp : IsE2EPQ p)
     (q : ChainSecurityProfile)
     (h_eq : q = { p with requireTypedTxAuth := false }) :
     ¬ IsE2EPQ q := by

@@ -27,7 +27,7 @@ structure FeeTier where
   minVolume : Nat
   makerBps : Nat
   takerBps : Nat
-  deriving DecidableEq, Repr
+  deriving DecidableEq, Repr, Inhabited
 
 /-- Standard DeFi tiers -/
 def tiers : List FeeTier :=
@@ -62,6 +62,7 @@ def validatorShare (totalFee : Nat) (validatorPct : Nat) : Nat :=
 
 theorem validator_bounded (totalFee pct : Nat) (h : pct ≤ 100) :
     validatorShare totalFee pct ≤ totalFee := by
-  simp [validatorShare]; exact Nat.div_le_of_le_mul (by omega)
+  simp only [validatorShare]
+  exact Nat.div_le_of_le_mul (by nlinarith)
 
 end DeFi.FeeModel

@@ -66,7 +66,14 @@ theorem local_full_capture (arb : ArbOpp) :
 /-- GEOGRAPHIC MOAT: Closer → more profitable -/
 theorem closer_more_profit (arb : ArbOpp) (rtt1 rtt2 : Nat) (h : rtt1 < rtt2) :
     netProfit arb rtt1 ≥ netProfit arb rtt2 := by
-  simp [netProfit, latencyCost, grossProfit]; omega
+  have hmono : latencyCost arb rtt1 ≤ latencyCost arb rtt2 := by
+    unfold latencyCost
+    apply Nat.div_le_div_right
+    apply Nat.mul_le_mul_right
+    apply Nat.mul_le_mul_right
+    exact Nat.div_le_div_right (le_of_lt h)
+  unfold netProfit
+  omega
 
 /-- Typical DeFi arb: 5bps spread, $10M volume, 1bps/ms decay -/
 def typicalArb : ArbOpp := ⟨5, 10000000, 1⟩
@@ -90,7 +97,7 @@ theorem permissionless_colocation (validatorId : Nat) :
 
 /-- BEIJING: Worst case — 11,000km fiber, ~110ms RTT -/
 theorem beijing_cost : latencyCost typicalArb 110000 = 110000 := by
-  simp [latencyCost]
+  simp [latencyCost, typicalArb]
 
 /-- BEIJING LOSS: $110,000 latency cost vs $5,000 gross = -$105,000 -/
 theorem beijing_massive_loss : netProfit typicalArb 110000 < 0 := by

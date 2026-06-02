@@ -36,7 +36,10 @@ def executeLoan (s : LoanState) (amount : Nat) (repaid : Bool) : LoanState :=
 /-- SOLVENCY: Pool never loses money on flash loans -/
 theorem flash_loan_solvent (s : LoanState) (amount : Nat) (repaid : Bool) :
     (executeLoan s amount repaid).poolBalance ≥ s.poolBalance := by
-  simp [executeLoan]; split <;> omega
+  unfold executeLoan
+  split
+  · simp
+  · exact le_refl _
 
 /-- NO REPAY = NO LOAN: Unreturned loan reverts -/
 theorem no_repay_reverts (s : LoanState) (amount : Nat) :
@@ -45,9 +48,9 @@ theorem no_repay_reverts (s : LoanState) (amount : Nat) :
 
 /-- FEE ACCRUAL: Successful loan increases pool by fee -/
 theorem fee_accrues (s : LoanState) (amount : Nat)
-    (h : amount ≤ s.poolBalance) (hf : s.feeBps > 0) :
+    (h : amount ≤ s.poolBalance) (_hf : s.feeBps > 0) :
     (executeLoan s amount true).poolBalance ≥ s.poolBalance := by
-  simp [executeLoan, h]; omega
+  simp [executeLoan, h]
 
 /-- OVERDRAFT BLOCKED: Can't borrow more than pool has -/
 theorem overdraft_blocked (s : LoanState) (amount : Nat)

@@ -72,7 +72,7 @@ theorem nonca_file_breaks (p : String) : isReproducible [.file p] = false := rfl
 theorem repro_compose (a b : BuildTrace)
     (ha : isReproducible a = true) (hb : isReproducible b = true) :
     isReproducible (a ++ b) = true := by
-  simp [isReproducible, List.all_append, Bool.and_eq_true]
+  simp only [isReproducible, List.all_append, Bool.and_eq_true] at *
   exact ⟨ha, hb⟩
 
 /-- CONTAMINATION: one non-repro access contaminates entire build -/
@@ -98,8 +98,8 @@ def nonReproCount (trace : BuildTrace) : Nat :=
 theorem repro_zero_bad (trace : BuildTrace)
     (h : isReproducible trace = true) :
     nonReproCount trace = 0 := by
-  simp [nonReproCount, isReproducible, List.all_eq_true] at *
-  rw [List.filter_eq_nil]
+  simp only [nonReproCount, isReproducible, List.all_eq_true] at *
+  rw [List.length_eq_zero, List.filter_eq_nil_iff]
   intro a ha
   simp [h a ha]
 

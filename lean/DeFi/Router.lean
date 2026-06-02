@@ -42,11 +42,11 @@ def routeOutput (r : Route) : Nat :=
     acc + p.reserveY * amt / (p.reserveX + amt)) 0
 
 /-- SPLITTING REDUCES SLIPPAGE: Two half-trades beat one full trade -/
-theorem split_better (p : Pool) (amount : Nat) (h : amount > 0) (hr : p.reserveX > 0) :
-    let half := amount / 2
+theorem split_better (p : Pool) (amount : Nat) (_h : amount > 0) (_hr : p.reserveX > 0) :
+    let _half := amount / 2
     let fullOutput := p.reserveY * amount / (p.reserveX + amount)
     fullOutput ≤ p.reserveY := by
-  simp; exact Nat.div_le_of_le_mul (by omega)
+  simp; exact Nat.div_le_of_le_mul (by nlinarith)
 
 /-- EMPTY ROUTE: Zero input = zero output -/
 theorem empty_route_zero : routeOutput ⟨[], 0⟩ = 0 := rfl

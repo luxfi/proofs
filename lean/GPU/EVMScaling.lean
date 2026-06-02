@@ -22,7 +22,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/
 
-import Mathlib.Data.Nat.Basic
+import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
 namespace Zoo.GPU.EVM
@@ -49,7 +49,7 @@ theorem linear_scaling (p : Nat) (rate : Nat) (hp : 0 < p) :
     Speedup = t / (s + (t-s)/p). We prove the parallel portion
     always reduces total time. -/
 theorem amdahl_bound (total seq : Nat) (p : Nat)
-    (hp : 0 < p) (hs : seq ≤ total) :
+    (_hp : 0 < p) (hs : seq ≤ total) :
     seq + (total - seq) / p ≤ total := by
   have h1 : (total - seq) / p ≤ total - seq := Nat.div_le_self (total - seq) p
   omega
@@ -70,16 +70,16 @@ theorem disjoint_state_commutative (a b : Nat) :
 
 /-- GPU memory bandwidth bounds throughput: if each tx reads `r` bytes
     and GPU bandwidth is `bw` bytes/cycle, max txns/cycle ≤ bw/r. -/
-theorem bandwidth_bound (bw r : Nat) (hr : 0 < r) :
+theorem bandwidth_bound (bw r : Nat) (_hr : 0 < r) :
     bw / r * r ≤ bw := by
   exact Nat.div_mul_le_self bw r
 
 /-- State conflict serialization: if `c` out of `n` transactions
     conflict, at most `n - c` can run in parallel.
     Total time ≥ c + (n - c) / p. -/
-theorem conflict_serialization (n c p : Nat) (hp : 0 < p) (hc : c ≤ n) :
+theorem conflict_serialization (n c p : Nat) (_hp : 0 < p) (_hc : c ≤ n) :
     c + (n - c) / p ≥ c := by
-  omega
+  exact Nat.le_add_right c _
 
 /-- At 2.3 Gops/sec per GPU (cevm benchmark), a single GPU processes
     at least 2.3 billion operations per second.

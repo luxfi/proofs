@@ -52,6 +52,9 @@ structure Params where
   hnBR : 0 < nBR
   hqLWE : 0 < qLWE
   hqBR : 0 < qBR
+  -- TFHE ciphertext moduli are large (smallest concrete set uses 2^27-scale q);
+  -- the centered-decoding budget qLWE/4 is only meaningful for qLWE ≥ 8.
+  hqLWE8 : 8 ≤ qLWE
 
 /-- Concrete parameter set resolution. -/
 def resolveParams (ps : ParamSet) : Params :=
@@ -63,6 +66,7 @@ def resolveParams (ps : ParamSet) : Params :=
       sigmaE := 6
       hnLWE := by decide, hnBR := by decide
       hqLWE := by decide, hqBR := by decide
+      hqLWE8 := by decide
     }
   | .PN11QP54 => {
       ps := .PN11QP54
@@ -71,6 +75,7 @@ def resolveParams (ps : ParamSet) : Params :=
       sigmaE := 6
       hnLWE := by decide, hnBR := by decide
       hqLWE := by decide, hqBR := by decide
+      hqLWE8 := by decide
     }
   | .PN9QP28_STD128 => {
       ps := .PN9QP28_STD128
@@ -79,6 +84,7 @@ def resolveParams (ps : ParamSet) : Params :=
       sigmaE := 3
       hnLWE := by decide, hnBR := by decide
       hqLWE := by decide, hqBR := by decide
+      hqLWE8 := by decide
     }
   | .PN9QP27_STD128Q => {
       ps := .PN9QP27_STD128Q
@@ -87,6 +93,7 @@ def resolveParams (ps : ParamSet) : Params :=
       sigmaE := 3
       hnLWE := by decide, hnBR := by decide
       hqLWE := by decide, hqBR := by decide
+      hqLWE8 := by decide
     }
 
 /-- Ciphertext (abstract). -/
@@ -183,6 +190,16 @@ axiom programmable_bootstrap_correct :
     ct.valid = true →
     decrypt p (programmable_bootstrap p ct f) = f (decrypt p ct)
 
+/-- PBS output is itself a valid (in-budget) ciphertext, so PBS gates
+    chain. This is the EC `pbs_in_budget` fact: the blind rotation resets
+    noise to the fresh-PBS level (`pbs_noise_bound`), which sits below the
+    decryption threshold (`pbs_output_in_budget`).
+    Bridge: TFHE_Noise_Growth.ec `pbs_in_budget`. -/
+axiom programmable_bootstrap_preserves_valid :
+  ∀ (p : Params) (ct : Ciphertext) (f : Bool → Bool),
+    ct.valid = true →
+    (programmable_bootstrap p ct f).valid = true
+
 /-- Noise growth: AND increases noise.
     Bridge: TFHE_Noise_Growth.ec axiom `gate_add_noise_bound` (XOR case)
     plus the per-PBS reset. -/
@@ -223,10 +240,13 @@ theorem pbs_output_in_budget (p : Params) (ct : Ciphertext) (f : Bool → Bool) 
     (programmable_bootstrap p ct f).noise < p.qLWE / 4 := by
   have h1 := pbs_noise_bound p ct f
   have h2 : p.qLWE / 8 < p.qLWE / 4 := by
-    apply Nat.div_lt_div_left
-    · exact p.hqLWE
-    · omega
-    · omega
+    have hq := p.hqLWE8
+    have hstep : 2 * (p.qLWE / 8) ≤ p.qLWE / 4 := by
+      rw [Nat.le_div_iff_mul_le (by omega)]
+      calc 2 * (p.qLWE / 8) * 4 = 8 * (p.qLWE / 8) := by ring
+        _ ≤ p.qLWE := Nat.mul_div_le p.qLWE 8
+    have hpos : 1 ≤ p.qLWE / 8 := (Nat.one_le_div_iff (by omega)).mpr hq
+    omega
   omega
 
 /-- Fresh encryption decrypts correctly. -/
@@ -301,8 +321,8 @@ theorem chained_pbs_correctness (p : Params) (b : Bool) (f1 f2 : Bool → Bool) 
   intro hb
   have h_inner := programmable_bootstrap_correct p (encrypt p b) f1 hb
   -- The PBS output is in budget (Lean side mirrors EC pbs_in_budget).
-  have h_inner_valid : (programmable_bootstrap p (encrypt p b) f1).valid = true := by
-    rfl
+  have h_inner_valid : (programmable_bootstrap p (encrypt p b) f1).valid = true :=
+    programmable_bootstrap_preserves_valid p (encrypt p b) f1 hb
   have h_outer := programmable_bootstrap_correct p
                     (programmable_bootstrap p (encrypt p b) f1) f2 h_inner_valid
   have h_inner_decrypt := h_inner

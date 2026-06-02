@@ -36,10 +36,13 @@ def removePeer (s : PeerSet) : PeerSet :=
   if s.peers > 0 then { s with peers := s.peers - 1 }
   else s
 
-/-- BOUNDED DEGREE: Never exceed max peers -/
-theorem bounded_degree (s : PeerSet) :
+/-- BOUNDED DEGREE: Never exceed max peers.
+    Requires the well-formedness invariant that the current peer count
+    does not already exceed the limit (`addPeer` preserves this, but
+    cannot repair a state that already violates it). -/
+theorem bounded_degree (s : PeerSet) (hwf : s.peers ≤ s.maxPeers) :
     (addPeer s).peers ≤ s.maxPeers := by
-  simp [addPeer]; split <;> omega
+  unfold addPeer; split <;> simp_all <;> omega
 
 /-- ECLIPSE RESISTANCE: Bootstrap connections provide minimum connectivity.
     An attacker must control ALL bootstrap nodes to isolate a validator. -/
@@ -49,19 +52,19 @@ theorem eclipse_needs_all_bootstraps (s : PeerSet) :
 /-- GOSSIP CONVERGENCE: O(log n) rounds for full propagation.
     With n nodes and each forwarding to k peers, information
     reaches all nodes in ceil(log_k(n)) rounds. -/
-theorem gossip_rounds (n k : Nat) (hn : n > 0) (hk : k ≥ 2) :
+theorem gossip_rounds (n k : Nat) (_hn : n > 0) (hk : k ≥ 2) :
     -- k^rounds ≥ n for rounds = ceil(log_k(n))
     k ≥ 2 := hk
 
 /-- ADD MONOTONE: Peer count only increases on add -/
 theorem add_monotone (s : PeerSet) :
     (addPeer s).peers ≥ s.peers := by
-  simp [addPeer]; split <;> omega
+  unfold addPeer; split <;> simp_all
 
 /-- REMOVE MONOTONE: Peer count only decreases on remove -/
 theorem remove_monotone (s : PeerSet) :
     (removePeer s).peers ≤ s.peers := by
-  simp [removePeer]; split <;> omega
+  unfold removePeer; split <;> simp_all
 
 /-- AT CAPACITY: Full peer set rejects new connections -/
 theorem at_capacity_no_add (s : PeerSet) (h : s.peers ≥ s.maxPeers) :

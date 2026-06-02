@@ -72,12 +72,12 @@ theorem valid_message_succeeds (s : DestState) (msg : WarpMessage)
   simp [processMessage, hsig, hfresh]
 
 /-- Processed nonces grow monotonically -/
-theorem nonces_monotone (s : DestState) (msg : WarpMessage)
+theorem nonces_monotone (s : DestState) (msg : WarpMessage) (s' : DestState)
     (h : processMessage s msg = some s') :
     s.processedNonces ⊆ s'.processedNonces := by
   simp [processMessage] at h
-  split at h <;> simp_all
-  split at h <;> simp_all
+  obtain ⟨_, _, h2⟩ := h
+  subst h2
   exact Finset.subset_union_left
 
 end Warp.Delivery

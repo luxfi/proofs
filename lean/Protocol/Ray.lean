@@ -48,7 +48,7 @@ def init (items : List ItemId) : RayState :=
   , decisions := fun _ => Decision.pending }
 
 /-- Step: decide the next pending item -/
-def decideNext (s : RayState) (d : Decision) (hd : d ≠ Decision.pending) : RayState :=
+def decideNext (s : RayState) (d : Decision) (_hd : d ≠ Decision.pending) : RayState :=
   match s.sourceOrder.get? s.decided with
   | none => s  -- no more items
   | some item =>
@@ -60,13 +60,16 @@ def decideNext (s : RayState) (d : Decision) (hd : d ≠ Decision.pending) : Ray
 theorem decideNext_marks_item (s : RayState) (d : Decision) (hd : d ≠ Decision.pending)
     (item : ItemId) (h_get : s.sourceOrder.get? s.decided = some item) :
     (decideNext s d hd).decisions item = d := by
-  simp [decideNext, h_get]
+  unfold decideNext
+  rw [h_get]
+  simp
 
 /-- decideNext advances the frontier by exactly 1 when items remain -/
 theorem decideNext_advances (s : RayState) (d : Decision) (hd : d ≠ Decision.pending)
     (item : ItemId) (h_get : s.sourceOrder.get? s.decided = some item) :
     (decideNext s d hd).decided = s.decided + 1 := by
-  simp [decideNext, h_get]
+  unfold decideNext
+  rw [h_get]
 
 /-- Initial state has nothing decided -/
 theorem init_nothing_decided (items : List ItemId) :
@@ -82,7 +85,9 @@ theorem no_gaps (s s' : RayState) (d : Decision) (hd : d ≠ Decision.pending)
 /-- Monotonic: decided count never decreases -/
 theorem decided_monotone (s : RayState) (d : Decision) (hd : d ≠ Decision.pending) :
     (decideNext s d hd).decided ≥ s.decided := by
-  simp [decideNext]
-  split <;> omega
+  unfold decideNext
+  split
+  · exact le_refl _
+  · simp
 
 end Protocol.Ray

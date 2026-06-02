@@ -23,7 +23,7 @@ import Mathlib.Tactic
 
 namespace Protocol.Nebula
 
-/-- Nebula is a thin wrapper around Field. Its correctness reduces to Field's. -/
+/- Nebula is a thin wrapper around Field. Its correctness reduces to Field's. -/
 
 /-- A DAG vertex -/
 structure Vertex where

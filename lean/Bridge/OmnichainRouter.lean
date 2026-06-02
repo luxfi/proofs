@@ -138,7 +138,7 @@ theorem nonce_uniqueness (st : RouterState) (d : Deposit)
   simp [processDeposit, h]
 
 /-- After processing, the nonce is in the processed set -/
-theorem nonce_recorded (st : RouterState) (d : Deposit)
+theorem nonce_recorded (st : RouterState) (d : Deposit) (st' : RouterState)
     (h : d.nonce ∉ st.processedNonces)
     (hst : processDeposit st d = some st') :
     d.nonce ∈ st'.processedNonces := by
@@ -160,7 +160,7 @@ theorem exit_guarantee (st : RouterState) (amount : Nat)
 
 /-- Exit works even when paused -/
 theorem exit_ignores_pause (st : RouterState) (amount : Nat)
-    (h : amount ≤ st.totalMinted) :
+    (_h : amount ≤ st.totalMinted) :
     burnForWithdrawal { st with paused := true } amount =
     burnForWithdrawal { st with paused := false } amount := by
   simp [burnForWithdrawal]
@@ -190,8 +190,8 @@ theorem auto_pause_dead_band (st : RouterState)
     (h1 : st.backingRatioBps ≥ 9850)
     (h2 : st.backingRatioBps < 9900) :
     (updateAutoPause st).autoPaused = st.autoPaused := by
-  simp [updateAutoPause]
-  omega
+  unfold updateAutoPause
+  rw [if_neg (by omega), if_neg (by omega)]
 
 /-- TOTAL MINTED ACCURACY: totalMinted equals the sum of all
     individual minted amounts (pre-fee). Maintained by processDeposit. -/
@@ -207,7 +207,8 @@ theorem total_minted_accuracy (st : RouterState) (d : Deposit)
   intro st' hst
   simp [processDeposit, h_not_processed] at hst
   rw [← hst]
-  simp [sumList, h_invariant]
+  simp only [sumList, h_invariant]
+  omega
 
 /-- FEE BOUNDED: bridgeFeeBps can never exceed MAX_BRIDGE_FEE_BPS (100 = 1%).
     setBridgeFee reverts if newFee > maxBridgeFeeBps. -/
@@ -222,9 +223,14 @@ theorem fee_bounded (st : RouterState) (newFee : Bps)
     ∀ st', setBridgeFee st newFee = some st' →
       st'.bridgeFeeBps ≤ 100 := by
   intro st' h
-  simp [setBridgeFee] at h
-  split at h <;> simp_all
-  omega
+  simp only [setBridgeFee] at h
+  split at h
+  · rename_i hle
+    simp only [Option.some.injEq] at h
+    subst h
+    rw [hmax] at hle
+    exact hle
+  · simp at h
 
 /-- Fee computation never exceeds the amount -/
 def computeFee (amount : Nat) (feeBps : Bps) : Nat :=
@@ -232,7 +238,9 @@ def computeFee (amount : Nat) (feeBps : Bps) : Nat :=
 
 theorem fee_leq_amount (amount : Nat) (feeBps : Bps) (h : feeBps ≤ 10000) :
     computeFee amount feeBps ≤ amount := by
-  simp [computeFee]
-  exact Nat.div_le_of_le_mul (by omega)
+  simp only [computeFee]
+  apply Nat.div_le_of_le_mul
+  calc amount * feeBps ≤ amount * 10000 := Nat.mul_le_mul_left _ h
+    _ = 10000 * amount := Nat.mul_comm _ _
 
 end Bridge.OmnichainRouter

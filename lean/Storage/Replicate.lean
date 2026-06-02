@@ -136,11 +136,10 @@ def restore (rs : ReplicaSet) : DBState :=
     all WAL frames are uploaded, all transactions are replicated. -/
 theorem wal_completeness (db : DBState) (txnId : Nat) (h : txnId ∈ db.txns) :
     ∃ f ∈ dbToWAL db, f.txnId = txnId := by
-  simp [dbToWAL]
-  obtain ⟨i, hi, htx⟩ := List.mem_iff_get.mp h
-  exact ⟨{ txnId := txnId, version := i + 1 },
-    List.mem_map.mpr ⟨(i, txnId), List.mem_enum.mpr ⟨i, hi, htx⟩, rfl⟩,
-    rfl⟩
+  obtain ⟨i, hi⟩ := List.mem_iff_getElem?.mp h
+  refine ⟨{ txnId := txnId, version := i + 1 }, ?_, rfl⟩
+  simp only [dbToWAL, List.mem_map]
+  exact ⟨(i, txnId), List.mk_mem_enum_iff_getElem?.mpr hi, rfl⟩
 
 /-- Theorem 2: Restore integrity — restoring from a snapshot with no
     incrementals yields exactly the snapshot state. -/

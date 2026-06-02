@@ -25,7 +25,7 @@ namespace Protocol.Flare
 structure Params where
   n : Nat
   f : Nat
-  hf : 3 * f < n  -- strict BFT bound
+  hf : n = 3 * f + 1  -- canonical BFT bound (n = 3f+1); 3f<n alone is too weak for cert/skip exclusivity
 
 /-- Decision type (models flare.Decision) -/
 inductive Decision where
@@ -69,6 +69,7 @@ theorem cert_skip_exclusive
   intro ⟨hcert, hskip⟩
   simp [hasCertificate, hasSkip] at hcert hskip
   have h := vc.hsum
+  have hp := p.hf
   omega
 
 /-- If a certificate exists, at least f+1 honest nodes support it.
@@ -89,7 +90,11 @@ theorem classify_total (p : Params) (vc : VoteCounts) :
     classify p vc = Decision.commit ∨
     classify p vc = Decision.skip ∨
     classify p vc = Decision.undecided := by
-  simp [classify]
-  split <;> simp
+  unfold classify
+  split
+  · exact Or.inl rfl
+  · split
+    · exact Or.inr (Or.inl rfl)
+    · exact Or.inr (Or.inr rfl)
 
 end Protocol.Flare

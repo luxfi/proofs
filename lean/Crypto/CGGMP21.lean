@@ -25,9 +25,9 @@
 -/
 
 import Mathlib.Data.Nat.Defs
-import Mathlib.Algebra.GroupPower.Basic
 import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Tactic
+import Crypto.Threshold_Lagrange
 
 namespace Crypto.Threshold.CGGMP21
 
@@ -64,24 +64,24 @@ inductive Phase where
 axiom keygen_correctness :
   ∀ (p : Params) (honest : Nat),
     honest ≥ p.t →
-    ∃ (pk : Nat) (shares : List KeyShare),
+    ∃ (_pk : Nat) (shares : List KeyShare),
       shares.length = p.n ∧
       -- All honest parties agree on the same public key
       True
 
 /-- Signing correctness: t parties with presignatures produce valid ECDSA sig -/
 axiom sign_correctness :
-  ∀ (p : Params) (shares : List KeyShare) (msg : Nat),
+  ∀ (p : Params) (shares : List KeyShare) (_msg : Nat),
     shares.length ≥ p.t →
-    ∃ (r s : Nat), True  -- (r, s) is a valid ECDSA signature
+    ∃ (_r _s : Nat), True  -- (r, s) is a valid ECDSA signature
 
 /-- Identifiable abort: if signing fails, we know who cheated -/
 axiom identifiable_abort :
-  ∀ (p : Params) (shares : List KeyShare) (msg : Nat),
+  ∀ (p : Params) (shares : List KeyShare) (_msg : Nat),
     -- If protocol doesn't produce a valid signature,
     -- the zero-knowledge proofs identify the malicious party
     shares.length ≥ p.t →
-    (∃ (sig : Nat), True) ∨ (∃ (cheater : Nat), cheater < p.n)
+    (∃ (_sig : Nat), True) ∨ (∃ (cheater : Nat), cheater < p.n)
 
 /-- Threshold: t-1 parties learn nothing about the key -/
 theorem insufficient_parties_no_key (p : Params) (compromised : Nat)
@@ -95,12 +95,12 @@ theorem online_constant_round : (1 : Nat) = 1 := rfl
 
 /-- Refresh preserves the public key -/
 axiom refresh_preserves_pk :
-  ∀ (p : Params) (old_shares new_shares : List KeyShare),
+  ∀ (_p : Params) (old_shares new_shares : List KeyShare),
     new_shares.length = old_shares.length
 
 /-- Refresh invalidates old shares -/
 axiom refresh_invalidates_old :
-  ∀ (p : Params) (old_shares new_shares : List KeyShare) (msg : Nat),
+  ∀ (_p : Params) (_old_shares _new_shares : List KeyShare) (_msg : Nat),
     -- Old shares alone cannot produce signatures after refresh
     True
 
@@ -120,7 +120,7 @@ def presigUsed (presigs : List Presignature) (idx : Nat) : Bool :=
   | none => true
 
 /-- OFFLINE/ONLINE SEPARATION: Presig generation is independent of msg. -/
-theorem offline_online_independent (p : Params) :
+theorem offline_online_independent (_p : Params) :
     (1 : Nat) + 0 = 1 := rfl
 
 /-- THRESHOLD ECDSA: t signers produce a valid ECDSA sig.
@@ -140,12 +140,12 @@ theorem cggmp_robustness (p : Params) (failures : Nat)
 /-- PAILLIER ZK: Each round includes Paillier-based ZK proofs.
     These ensure honest behavior without revealing shares. -/
 axiom paillier_zk_sound :
-  ∀ (p : Params) (share : KeyShare),
+  ∀ (_p : Params) (_share : KeyShare),
     -- ZK proof verifies iff the share is correctly formed
     True
 
 /-- REFRESH PRESERVES THRESHOLD: After refresh, same t is needed -/
-theorem refresh_preserves_threshold (p : Params) (old_shares new_shares : List KeyShare)
+theorem refresh_preserves_threshold (_p : Params) (old_shares new_shares : List KeyShare)
     (h : new_shares.length = old_shares.length) :
     new_shares.length = old_shares.length := h
 
@@ -197,7 +197,7 @@ namespace Paillier
     mechanization is multi-week Lean work and is gated on a future
     Mathlib `Crypto.Paillier` module. -/
 axiom paillier_add_homomorphism :
-  ∀ (N a b r_a r_b : Nat), True
+  ∀ (_N _a _b _r_a _r_b : Nat), True
 
 /-- **EC AXIOM 6 BRIDGE**: `paillier_scalar_homomorphism` in
     `proofs/easycrypt/CGGMP21_Paillier.ec:69`.
@@ -205,7 +205,7 @@ axiom paillier_add_homomorphism :
     Derived from the additive homomorphism:
       enc(N, a, r)^b = enc(N, a*b mod N, r^b mod N). -/
 axiom paillier_mul_homomorphism :
-  ∀ (N a b r : Nat), True
+  ∀ (_N _a _b _r : Nat), True
 
 end Paillier
 
@@ -214,6 +214,6 @@ end Paillier
 /-- **EC AXIOM 4 BRIDGE (CGGMP21_N4)**: derive_pk = g^s on secp256k1 is
     a group homomorphism. -/
 axiom derive_pk_homomorphism :
-  ∀ (s1 s2 : Nat), True
+  ∀ (_s1 _s2 : Nat), True
 
 end Crypto.Threshold.CGGMP21

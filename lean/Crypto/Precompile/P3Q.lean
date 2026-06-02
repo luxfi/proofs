@@ -185,7 +185,7 @@ axiom precompile_dispatches_to_backend :
     bridge to the Pulsar EC theory and is the headline reduction of
     `Crypto.Pulsar.Verify`. -/
 axiom backend_reduces_to_fips204 :
-  ∀ (version : Nat) (proof pub : List Nat),
+  ∀ (version : Nat) (_proof _pub : List Nat),
     version = version_v1 →
     True  -- "byte-equivalent to MLDSA.Verify(version, proof, pub)" —
           -- imported from Crypto.Pulsar by name once that theory is
@@ -197,8 +197,8 @@ axiom backend_reduces_to_fips204 :
 theorem gas_monotonic (a b : Nat) :
     a ≤ b → required_gas a ≤ required_gas b := by
   intro h
-  simp [required_gas]
-  exact Nat.add_le_add_left (Nat.mul_le_mul_left _ h) _
+  simp only [required_gas, base_verify_gas, per_byte_gas]
+  omega
 
 /-- Theorem 2: gas is exactly linear (baseline + per-byte cost). -/
 theorem gas_linear (n : Nat) :
@@ -213,7 +213,7 @@ theorem gas_empty : required_gas 0 = base_verify_gas := by
     base. -/
 theorem gas_at_least_base (n : Nat) :
     required_gas n ≥ base_verify_gas := by
-  simp [required_gas]
+  simp only [required_gas]
   omega
 
 /-- Theorem 5: parse demands magic. Equivalent restatement of
@@ -250,7 +250,7 @@ theorem p3q_short_rejected (input : List Nat) :
     accepts; and the backend is byte-equivalent to ML-DSA.Verify on
     the parsed triple under wire-version v0x01. -/
 theorem p3q_fips204_reduction
-    (version : Nat) (proof pub : List Nat) :
+    (version : Nat) (_proof _pub : List Nat) :
     version = version_v1 → True := by
   intro _
   trivial
@@ -281,12 +281,14 @@ def gas_pulsar : Nat := 75000
     (the STARK verifier base cost). -/
 theorem p3q_base_dominates_mldsa :
     required_gas 0 > gas_mldsa := by
-  simp [required_gas, gas_mldsa]
+  simp only [required_gas, base_verify_gas, per_byte_gas, gas_mldsa]
+  omega
 
 /-- P3Q gas costs are always within EVM block-gas budget for
     reasonable inputs (4096 bytes = 4 KiB chunk). -/
 theorem p3q_within_block_budget :
     required_gas 4096 < 30000000 := by
-  simp [required_gas]
+  simp only [required_gas, base_verify_gas, per_byte_gas]
+  omega
 
 end Crypto.Precompile.P3Q

@@ -94,7 +94,7 @@ theorem pulsar_output_interchangeable
     (h_dispatch :
        ∀ pk msg sig, pulsarVerify pk msg sig = fips204Verify V pk msg sig)
     (pk msg sig : ByteArray)
-    (h_honest : IsHonestPulsarCeremony pk msg sig)
+    (_h_honest : IsHonestPulsarCeremony pk msg sig)
     (h_fips_accepts : fips204Verify V pk msg sig = true) :
     pulsarVerify pk msg sig = true := by
   -- The Pulsar Verify entry is FIPS204Verify (dispatch axiom)

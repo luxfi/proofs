@@ -124,9 +124,9 @@ axiom mlkem_ind_cca2 :
 /-- Wire-format byte-equality to FIPS 203 reference.
     Bridge: MLKEM_Wire_Format.ec theorem `mlkem_wire_format_*`. -/
 axiom wire_format_byte_equal :
-  ∀ (level : SecurityLevel) (r pk : Nat),
+  ∀ (level : SecurityLevel) (_r pk : Nat),
     let (ct, _ss) := encaps level pk
-    ct.toNat ≥ 0   -- placeholder: byte-equality is mechanized in EC
+    ct ≥ 0   -- placeholder: byte-equality is mechanized in EC
 
 /-- Shared secret is always 32 bytes. -/
 theorem ss_fixed_size (level : SecurityLevel) : ssSize level = 32 := by

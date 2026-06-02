@@ -23,9 +23,9 @@ import Mathlib.Tactic
 
 namespace Protocol.Prism
 
-/-- Fisher-Yates shuffle model.
-    For n elements, produces one of n! permutations uniformly
-    if the random source is uniform. -/
+/- Fisher-Yates shuffle model.
+   For n elements, produces one of n! permutations uniformly
+   if the random source is uniform. -/
 
 /-- Number of possible k-subsets from n elements -/
 def binomial (n k : Nat) : Nat :=
@@ -35,7 +35,7 @@ def binomial (n k : Nat) : Nat :=
     This is a well-known result; we state it as an axiom and
     reference Knuth Vol 2, Algorithm P. -/
 axiom fisher_yates_uniform :
-  ∀ (n : Nat) (hn : 0 < n),
+  ∀ (n : Nat) (_hn : 0 < n),
     -- Each of n! permutations has probability 1/n!
     -- i.e., the number of equally likely outcomes equals n!
     Nat.factorial n > 0
@@ -43,7 +43,7 @@ axiom fisher_yates_uniform :
 /-- Selecting first k elements from a uniform permutation
     gives a uniform k-subset. -/
 axiom prefix_k_is_uniform_subset :
-  ∀ (n k : Nat) (hk : k ≤ n),
+  ∀ (n k : Nat) (_hk : k ≤ n),
     -- Each of C(n,k) subsets has probability 1/C(n,k)
     -- i.e., the number of equally likely k-subsets equals C(n,k)
     Nat.choose n k > 0
@@ -61,6 +61,7 @@ theorem sufficient_luminance
     (l : Luminance) (k : Nat)
     (hk : k ≤ l.activePeers) :
     k ≤ l.totalPeers := by
+  have := l.hactive
   omega
 
 /-- Sample size must be positive -/
@@ -68,7 +69,9 @@ theorem sample_positive (k : Nat) (hk : 0 < k) : k > 0 := hk
 
 /-- Sample size bounded by population -/
 theorem sample_bounded (l : Luminance) (k : Nat) (hk : k ≤ l.activePeers) :
-    k ≤ l.totalPeers := by omega
+    k ≤ l.totalPeers := by
+  have := l.hactive
+  omega
 
 /-- More active peers → more possible committees -/
 theorem more_active_more_committees (n k : Nat) (hk : k ≤ n) :

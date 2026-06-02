@@ -361,7 +361,7 @@ theorem corona_security_bits : (184 : Nat) > 128 := by omega
     ALL layers must fall, so the effective security is additive in
     the number of independent assumptions required. -/
 theorem composite_security_floor :
-    min (min 127 192) 128 = 127 := by native_decide
+    min (min 127 192) 128 = 127 := by decide
 
 /-- Groth16 proof size: constant 192 bytes (2 G1 points + 1 G2 point)
     regardless of the number of ML-DSA signatures rolled up.

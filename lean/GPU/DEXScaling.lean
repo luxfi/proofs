@@ -20,7 +20,7 @@
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/
 
-import Mathlib.Data.Nat.Basic
+import Mathlib.Data.Nat.Defs
 import Mathlib.Tactic
 
 namespace Zoo.GPU.DEX
@@ -35,7 +35,7 @@ GPU parallelizes matching across pairs and within pairs
 /-- Independent pair parallelism: `m` trading pairs matched on
     `p` cores. Each pair's orderbook is independent.
     Time = max(time_per_pair) when p ≥ m. -/
-theorem pair_parallel (m p : Nat) (hp : 0 < p) :
+theorem pair_parallel (m p : Nat) (_hp : 0 < p) :
     m / p ≤ m := Nat.div_le_self m p
 
 /-- Orderbook matching within a pair is sequential: price-time
@@ -48,40 +48,40 @@ theorem matching_sequential (depth : Nat) :
 /-- AMM routing: finding optimal path through `n` pools.
     GPU parallel BFS explores all pools simultaneously.
     With `p` cores, exploration time = n / p. -/
-theorem amm_routing_parallel (pools cores : Nat) (hc : 0 < cores) :
+theorem amm_routing_parallel (pools cores : Nat) (_hc : 0 < cores) :
     pools / cores ≤ pools := Nat.div_le_self pools cores
 
 /-- Constant product preservation under GPU batch execution:
     if each swap preserves x*y=k individually, batch execution
     of non-overlapping pool swaps also preserves invariant.
     (Overlapping pool swaps must serialize.) -/
-theorem batch_amm_invariant (x y k : Nat) (hk : x * y = k)
+theorem batch_amm_invariant (x y k : Nat) (_hk : x * y = k)
     (dx dy : Nat) (hswap : (x + dx) * (y - dy) = k) :
     (x + dx) * (y - dy) = k := hswap
 
 /-- Settlement parallelism: `f` fills across `m` pairs.
     Fills in different pairs are independent.
     GPU processes all fills for independent pairs simultaneously. -/
-theorem settlement_parallel (fills pairs : Nat) (hp : 0 < pairs) :
+theorem settlement_parallel (fills pairs : Nat) (_hp : 0 < pairs) :
     fills / pairs * pairs ≤ fills := Nat.div_mul_le_self fills pairs
 
 /-- Price oracle GPU aggregation: computing median of `n` validator
     price submissions. GPU parallel sort: O(n * log(n) / p).
     Median selection after sort is O(1). -/
-theorem oracle_parallel_sort (n p : Nat) (hp : 0 < p) (hn : 0 < n) :
+theorem oracle_parallel_sort (n p : Nat) (_hp : 0 < p) (_hn : 0 < n) :
     n / p ≤ n := Nat.div_le_self n p
 
 /-- ZAP binary protocol: GPU-native deserialization.
     Each order message is fixed-size, deserialized in parallel.
     `b` messages on `p` cores: time = b / p. -/
-theorem zap_parallel_deser (messages cores : Nat) (hc : 0 < cores) :
+theorem zap_parallel_deser (messages cores : Nat) (_hc : 0 < cores) :
     messages / cores ≤ messages := Nat.div_le_self messages cores
 
 /-- Cross-pair arbitrage detection: GPU scans all pair
     combinations for circular arbitrage opportunities.
     With `m` pairs, combinations = m*(m-1)/2.
     GPU checks all combinations in parallel. -/
-theorem arbitrage_scan (pairs cores : Nat) (hc : 0 < cores) :
+theorem arbitrage_scan (pairs cores : Nat) (_hc : 0 < cores) :
     pairs * (pairs - 1) / 2 / cores ≤ pairs * (pairs - 1) / 2 :=
   Nat.div_le_self _ cores
 
@@ -95,7 +95,7 @@ theorem gpu_dex_throughput (cpu_tps gpu_tps : Nat) (h : gpu_tps ≥ cpu_tps) :
     GPU reduces each parallelizable component.
     Only matching within a single pair is fully sequential. -/
 theorem latency_composition (deser match_time settle finalize : Nat)
-    (gpu_speedup : Nat) (hg : 0 < gpu_speedup) :
+    (gpu_speedup : Nat) (_hg : 0 < gpu_speedup) :
     deser / gpu_speedup + match_time + settle / gpu_speedup + finalize / gpu_speedup
     ≤ deser + match_time + settle + finalize := by
   have h1 := Nat.div_le_self deser gpu_speedup

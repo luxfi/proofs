@@ -20,10 +20,15 @@ import Mathlib.Tactic
 
 namespace Crypto.Corona.OutputInterchange
 
-/-- Abstract types for the protocol layer. -/
-opaque GroupPk : Type
-opaque Share : Type
-opaque Signature : Type
+/-- Abstract types for the protocol layer. The three artifact types
+    that appear as outputs of the opaque protocol operations are modeled
+    as distinct single-field byte wrappers so they are `Inhabited` (every
+    real public key / share / signature is a concrete byte string), while
+    the protocol *operations* below remain fully opaque — that is where
+    the cryptographic abstraction lives. -/
+structure GroupPk where ofBytes :: (bytes : ByteArray) deriving Inhabited
+structure Share where ofBytes :: (bytes : ByteArray) deriving Inhabited
+structure Signature where ofBytes :: (bytes : ByteArray) deriving Inhabited
 opaque Message : Type
 opaque Ctx : Type
 opaque Randomness : Type

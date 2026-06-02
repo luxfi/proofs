@@ -34,6 +34,7 @@ import Mathlib.Data.Nat.Defs
 import Mathlib.LinearAlgebra.Lagrange
 import Mathlib.Algebra.Polynomial.FieldDivision
 import Mathlib.Tactic
+import Crypto.Threshold_Lagrange
 
 namespace Crypto.FROST
 
@@ -114,7 +115,7 @@ theorem majority_threshold_safe (n : Nat) (hn : n > 0)
     This is a protocol property: the refreshed polynomial has the
     same constant term (same secret) but different shares. -/
 axiom share_refresh_correctness :
-  ∀ (p : ThresholdParams) (old_shares new_shares : List (Share p.n))
+  ∀ (p : ThresholdParams) (_old_shares new_shares : List (Share p.n))
     (aggPK msg : Nat),
     new_shares.length ≥ p.t →
     ∃ (sig : SchnorrSig), schnorr_verify sig aggPK msg = true
@@ -186,7 +187,7 @@ end Lagrange
     g^s in the Schnorr group. Public-key preservation across
     refresh reduces to this homomorphism + the Lagrange identity. -/
 axiom derive_pk_homomorphism :
-  ∀ (s1 s2 : Nat), True
+  ∀ (_s1 _s2 : Nat), True
   -- The actual statement: derive_pk (s1 + s2) = group_pk_add (derive_pk s1) (derive_pk s2)
   -- requires concrete group structure not in scope here.
 
