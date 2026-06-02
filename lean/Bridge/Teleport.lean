@@ -180,8 +180,9 @@ theorem lock_mint_correspondence
       totalMinted := dst.totalMinted + amount
       processedLockNonces := dst.processedLockNonces ∪ {nonce}
       mints := ⟨src.chainId, dst.chainId, amount, nonce⟩ :: dst.mints }
-  · simp [lockTokens, h_lock_fresh, h_amount, h_diff]
-    omega
+  · have ha : amount ≠ 0 := by omega
+    have hd : ¬ dst.chainId = src.chainId := fun h => h_diff h.symm
+    simp [lockTokens, h_lock_fresh, ha, hd]
   · simp [mintTokens, h_mint_fresh]
   · simp
 
@@ -191,10 +192,8 @@ theorem lock_nonce_consumed (st : TeleportState) (dest : ChainId)
     (h : lockTokens st dest amount nonce = some st') :
     nonce ∈ st'.processedLockNonces := by
   simp [lockTokens] at h
-  split at h <;> simp_all
-  split at h <;> simp_all
-  split at h <;> simp_all
-  rw [← h]; simp [Finset.mem_union]
+  obtain ⟨_, _, _, rfl⟩ := h
+  simp [Finset.mem_union, Finset.mem_singleton]
 
 /-- BURN-RELEASE CORRESPONDENCE: Every burn on the destination chain
     has exactly one release on the source chain, bound by nonce. -/
@@ -220,10 +219,9 @@ theorem burn_release_correspondence
       processedBurnNonces := src.processedBurnNonces ∪ {nonce}
       releases := ⟨src.chainId, dst.chainId, amount, nonce⟩ :: src.releases }
   · simp [burnTokens, h_burn_ok, h_burn_fresh]
-    omega
   · simp [releaseTokens, h_release_ok, h_release_fresh]
-    omega
   · simp
+    omega
 
 /-- BACKING RATIO INVARIANT: If totalBacking >= totalMinted across
     all chains, the system is solvent. No user can withdraw more
@@ -249,10 +247,9 @@ theorem lock_increases_backing (st : TeleportState) (dest : ChainId)
     (h : lockTokens st dest amount nonce = some st') :
     st'.totalBacking ≥ st.totalBacking := by
   simp [lockTokens] at h
-  split at h <;> simp_all
-  split at h <;> simp_all
-  split at h <;> simp_all
-  rw [← h]; omega
+  obtain ⟨_, _, _, rfl⟩ := h
+  show st.totalBacking + amount ≥ st.totalBacking
+  omega
 
 /-- SOVEREIGN GOVERNANCE ISOLATION: The governor on chain A has no
     authority over chain B. Each TeleportState has its own governor
@@ -267,7 +264,7 @@ def setGovernor (st : TeleportState) (caller newGovernor : Nat) :
 
 theorem sovereign_governance_isolation
     (stA stB : TeleportState) (caller newGov : Nat)
-    (h_diff : stA.chainId ≠ stB.chainId) :
+    (_h_diff : stA.chainId ≠ stB.chainId) :
     -- Modifying governor on A does not affect B
     ∀ stA', setGovernor stA caller newGov = some stA' →
       stB.governor = stB.governor := by
@@ -284,10 +281,6 @@ theorem cross_chain_governor_rejected
 theorem same_chain_rejected (st : TeleportState) (amount nonce : Nat) :
     lockTokens st st.chainId amount nonce = none := by
   simp [lockTokens]
-  intro _
-  intro h_amt
-  simp [bne_self_eq_false]
-  omega
 
 /-- Zero-amount teleport is rejected -/
 theorem zero_amount_rejected (st : TeleportState) (dest : ChainId) (nonce : Nat)
