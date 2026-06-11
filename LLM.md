@@ -12,7 +12,7 @@ registry safety are the three active proof tracks.
 
 | SHA | Impact |
 |-----|--------|
-| `07d01da` | Remove Liquidity branding cross-contamination |
+| `07d01da` | Remove downstream-tenant branding cross-contamination |
 | `ef3c3df` | M/F/Z-Chain canonical naming per LP-134 |
 | `aaee863` | Scrub Avalabs IP brand refs |
 | `c5d805f` | Lux liquidity protocol adoption + Quasar refs + Pulsar naming |
