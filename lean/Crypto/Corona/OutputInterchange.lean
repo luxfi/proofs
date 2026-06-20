@@ -1,8 +1,9 @@
 /-
   Corona Output-Interchangeability (Class N1) -- Lean formalization.
 
-  Mirrors `~/work/lux/proofs/lean/Crypto/Pulsar/OutputInterchange.lean`
-  for the R-LWE setting.
+  Mirrors `~/work/lux/proofs/lean/Crypto/Pulsar/OutputInterchange.lean`;
+  Corona is a Module-LWE threshold scheme (the Ringtail-derived
+  parameter regime), distinct from Pulsar only in parameters/lifecycle.
 
   Claim: every signature byte string produced by Corona's threshold
   Combine procedure on inputs `(group_pk = (A, bTilde), m, ctx, quorum,
@@ -61,7 +62,7 @@ opaque accept_path : Share → Message → Ctx → Randomness → Prop
 
     Stated as a named axiom because it is bridged to the EC proof; the
     Lean side does NOT re-prove the byte-walk content (that's the
-    Jasmin extraction + RLWE_Functional structural identity). -/
+    Jasmin extraction + MLWE_Functional structural identity). -/
 axiom corona_n1_byte_equality
     (gpk : GroupPk) (m : Message) (ctx : Ctx) (q : Quorum)
     (shares : List Share) (rho : Randomness)

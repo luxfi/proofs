@@ -5,7 +5,8 @@
   each protected by an independent cryptographic hardness assumption:
 
   - P-Chain: BLS12-381 aggregate signatures (discrete log over pairing groups)
-  - Q-Chain: Corona threshold lattice signatures (Ring-LWE / Module-SIS)
+  - Q-Chain: Corona threshold lattice signatures (Module-LWE / Module-SIS;
+    Ringtail-derived parameter regime)
   - Z-Chain: ML-DSA-65 identity signatures rolled up via Groth16 (Module-LWE)
 
   MAIN THEOREM (quasar_triple_defense):
@@ -352,9 +353,12 @@ theorem bls_security_bits : 255 / 2 ≥ 127 := by omega
     Core hardness: Module-LWE_{6,5,eta} for eta in {4,4}. -/
 theorem mldsa_security_bits : (192 : Nat) > 128 := by omega
 
-/-- Corona (Module-SIS, n=630, q=2^32): 128-bit PQ security.
-    Lattice dimension 630. Best known: sieving in 2^{0.292*630} approx 2^{184}. -/
-theorem corona_security_bits : (184 : Nat) > 128 := by omega
+/-- Corona (Module-LWE / Module-SIS): NIST Category 1, ~128-bit
+    classical / ~130-bit quantum security. Module of rank M=8 over
+    R_q = Z_q[X]/(X^256+1), q = 0x1000000004A01 (48-bit); BDGL sieving
+    on the rank-8 module clears the 128-bit bar (Ringtail/corona
+    `sign/config.go`). -/
+theorem corona_security_bits : (130 : Nat) > 128 := by omega
 
 /-- Composite security floor: the system is as strong as the weakest
     layer for any single-layer attacker. But the main theorem shows

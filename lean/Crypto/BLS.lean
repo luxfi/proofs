@@ -22,7 +22,10 @@
 -/
 
 import Mathlib.Data.Nat.Defs
+import Mathlib.LinearAlgebra.Lagrange
+import Mathlib.Algebra.Polynomial.FieldDivision
 import Mathlib.Tactic
+import Crypto.Threshold_Lagrange
 
 namespace Crypto.BLS
 
@@ -175,12 +178,26 @@ axiom derive_pk_homomorphism :
     True
 
 /-- **EC AXIOM 4 BRIDGE** (`BLS_Threshold_N1.ec:148`): Lagrange
-    identity over F_r specialized to no-y-mask form.
+    identity over `F_r` specialized to no-y-mask form — now a
+    *theorem*, no longer an axiom.
 
-    Specialization of `Crypto.Threshold.Lagrange.threshold_partial_response_identity`
-    with y = 0 (BLS partial sigs have no per-party nonce). -/
-axiom threshold_lagrange_identity :
-  ∀ (s : Nat) (Q : List Nat), True
+    Threshold BLS partial signatures carry no per-party nonce, so this
+    is `Crypto.Threshold.Lagrange.threshold_partial_response_identity`
+    with `y = 0`: combining the per-party partials `σ_i = c · share_i`
+    (with `share_i = f.eval (v i)`) via Lagrange coefficients
+    reproduces the single-party value `c · secret = c · f.eval 0`.
+
+    Discharged by `threshold_partial_response_identity_no_mask`, which
+    is proved from Mathlib's `Lagrange.eq_interpolate` — no axiom, no
+    `sorry`. Mirrors the `FROST.lean` Lagrange bridge. -/
+theorem threshold_lagrange_identity
+    {F : Type*} [Field F] [DecidableEq F]
+    (f : Polynomial F) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card)
+    (c : F) (z : ι → F) (hz : z = c • fun i => f.eval (v i)) :
+    (Lagrange.interpolate s v z).eval 0 = c * f.eval 0 :=
+  Crypto.Threshold.Lagrange.threshold_partial_response_identity_no_mask
+    f s v hvs degree_f_lt c z hz
 
 end Threshold
 

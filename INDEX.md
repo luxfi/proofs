@@ -170,7 +170,7 @@ pulsar-mptc submission framework was merged into luxfi/pulsar):
 | Primitive | Repo | EC + Jasmin location |
 |---|---|---|
 | **Pulsar** (M-LWE) | `luxfi/pulsar` | `proofs/easycrypt/` + `jasmin/` + `proofs/lean-easycrypt-bridge.md` |
-| **Corona** (R-LWE) | `luxfi/corona` | `proofs/easycrypt/` + `jasmin/` (in flight) |
+| **Corona** (M-LWE, Ringtail fork) | `luxfi/corona` | `proofs/easycrypt/` + `jasmin/` (in flight) |
 | **Magnetar** (SLH-DSA) | `luxfi/magnetar` | `proofs/easycrypt/` + `jasmin/` (in flight) |
 | **P3Q** (EVM precompile) | `luxfi/precompile/p3q` | `proofs/easycrypt/` + `jasmin/` (in flight) |
 | **FROST / CGGMP21 / BLS-threshold** | `luxfi/threshold/protocols/{frost,cmp,bls}/` | `proofs/easycrypt/` + `jasmin/` (in flight) |

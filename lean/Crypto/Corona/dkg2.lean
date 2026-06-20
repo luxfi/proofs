@@ -1,8 +1,10 @@
 /-
   Corona Pedersen DKG (dkg2) correctness -- Lean statement.
 
-  Mirrors `~/work/lux/proofs/lean/Crypto/Pulsar/dkg2.lean` for the
-  R-LWE setting.
+  Mirrors `~/work/lux/proofs/lean/Crypto/Pulsar/dkg2.lean`; Corona is a
+  Module-LWE threshold scheme (the Ringtail-derived parameter regime
+  over the R_q^N module, M=8/N=7), distinct from Pulsar in parameters
+  and lifecycle, not lattice family.
 
   Claim: the Corona Pedersen-VSS-based DKG (`luxfi/corona/dkg2/dkg2.go`)
   produces correct + hiding + binding shares of the group secret over

@@ -6,8 +6,11 @@
 %% theorem. Papers cite this; do not redefine.
 %%
 %% Pulsar targets Module-LWE / MSIS and is byte-equal to FIPS 204
-%% ML-DSA. The Ring-LWE sibling is Corona (see lean/Crypto/Corona.lean
-%% and ~/work/lux/papers/lux-corona-pq).
+%% ML-DSA. Corona is the sibling Module-LWE threshold scheme (the
+%% Ringtail-derived parameter regime: module dims M=8,N=7, q 48-bit,
+%% ~33-35 KB sigs, not FIPS-byte-equal); see lean/Crypto/Corona.lean
+%% and ~/work/lux/papers/lux-corona-pq. Pulsar and Corona share the
+%% Module-LWE family and differ in parameter regime / lifecycle.
 %% ============================================================
 
 \subsection*{Pulsar threshold signature unforgeability}
@@ -93,10 +96,10 @@ Apply \Cref{thm:pulsar-scales-n}: the bound is $n$-independent.
 \label{rem:pulsar-hash-suite-invariance}
 The reduction is parameterised by the SHA-3 / cSHAKE / KMAC / TupleHash
 family fixed in DD-002 (\texttt{docs/design-decisions.md}). Pulsar
-explicitly forbids the BLAKE3 variants of the Pulsar (R-LWE) family
-to keep the NIST hash-family compliance unambiguous; \Cref{thm:pulsar-tsuf}
-holds verbatim for the SHA-3-only profile and would require an
-independent re-proof for any alternative suite.
+explicitly forbids any BLAKE3 variant to keep the NIST hash-family
+compliance unambiguous and to preserve FIPS~204 byte-equality;
+\Cref{thm:pulsar-tsuf} holds verbatim for the SHA-3-only profile and
+would require an independent re-proof for any alternative suite.
 \end{remark}
 
 \begin{remark}[Adaptive corruption is round-2 work]

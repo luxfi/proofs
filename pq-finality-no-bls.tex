@@ -22,31 +22,39 @@
 
 \begin{abstract}
 The current Quasar consensus certificate combines BLS12-381 aggregation with
-Pulsar (Corona-derived lattice threshold) and ML-DSA lattice signatures
-for ``defense in depth.'' We show
+the Corona and ML-DSA lattice threshold signatures for ``defense in
+depth.'' We show
 that BLS contributes no post-quantum security to the combined cert and
 can be removed without loss of PQ soundness. The simplified Quasar
 certificate uses only $\mathsf{ML\text{-}DSA}$ (FIPS 204, Module-LWE/MSIS)
-and $\mathsf{Corona}$ (Ring-LWE threshold; the lattice scheme that
-$\mathsf{Pulsar}$/LP-073 wraps with key-era lifecycle, resharing, and
-activation certs) --- two independent
-lattice assumptions, each post-quantum. The result is operationally simpler,
-smaller in the common case, and provably PQ-safe under either assumption
+and $\mathsf{Corona}$ (a Module-LWE threshold signature, the Lux fork of
+Ringtail (Boschini et al., IACR ePrint 2024/1113; see Related Work):
+module dimensions $M=8$, $N=7$ over
+$R_q = \mathbb{Z}_q[X]/(X^{256}+1)$, $q = \mathtt{0x1000000004A01}$,
+$\sigma_E = 6.108$, NIST Category~1) --- two independent
+lattice instances, each post-quantum. The result is operationally simpler,
+smaller in the common case, and provably PQ-safe under either instance
 independently.
 
-\paragraph{Naming.} ``Corona'' is the underlying signing primitive
-(the two-round MAC-authenticated lattice scheme of \cite{boschini2024corona});
-``Pulsar'' is the Lux systems-layer composition that wraps it with
-key-era lifecycle, verifiable resharing, activation cert, and rollback
-suitable for permissionless validator rotation (LP-073 / \texttt{github.com/luxfi/pulsar}).
-The soundness arguments below apply to the signing primitive; lifecycle
-additions are orthogonal.
+\paragraph{Naming.} ``Corona'' is the Lux first-party fork of Ringtail
+(Boschini et al., IACR ePrint 2024/1113; see Related Work), the
+two-round Module-LWE threshold signature;
+Corona adds a permissionless leaderless DKG, verifiable resharing,
+activation cert, and rollback suitable for validator rotation (LP-4440 /
+\texttt{github.com/luxfi/corona}). ``Pulsar'' (LP-073 /
+\texttt{github.com/luxfi/pulsar}) is a \emph{separate} Module-LWE
+threshold scheme, parameterised to be byte-equal to FIPS~204 ML-DSA-65;
+it is not a fork of Corona, nor is Corona a fork of it. Both are
+Module-LWE --- their diversity is parameter regime and lifecycle, not
+lattice family. The soundness arguments below apply to either signing
+primitive.
 
 This document specifies:
 \begin{enumerate}
   \item the reduced three-layer Quasar cert: per-block committee cert,
         per-epoch Pulsar pulse, per-era Z-chain ZK proof;
-  \item the security argument (forgery requires both MLWE and RLWE breaks);
+  \item the security argument (forgery requires breaking both
+        independent Module-LWE instances --- ML-DSA's and Corona's);
   \item concrete efficiency numbers measured on MacBook M3 / arm64;
   \item why a fixed-size committee of $k=128$ is scale-invariant from
         $N=10^3$ to $N=10^5$ validators.
@@ -76,7 +84,8 @@ Against these we weigh:
         may assume the cert is PQ when in fact it is only PQ conditional
         on verifying the lattice component.
   \item \textbf{Complexity cost}: three independent crypto stacks
-        (pairing, Module-LWE, Ring-LWE) to maintain, benchmark, and audit.
+        (BLS pairing, plus two distinct Module-LWE instances --- ML-DSA
+        and Corona) to maintain, benchmark, and audit.
   \item \textbf{PQ-first deployments}: networks that explicitly reject
         any classical primitive (regulated finance, long-archival chains)
         cannot use the BLS-inclusive cert at all.
@@ -180,25 +189,41 @@ $\mathsf{Adv}^{\textsf{VRF}} + \binom{k}{2k/3} \varepsilon_{\text{ML-DSA}}^{2k/3
 which is negligible under our assumptions.
 \end{proof}
 
-\subsection{Independence of the two lattice assumptions}
+\subsection{Independence of the two lattice instances}
 
-$\mathsf{ML\text{-}DSA}$ is secure under $\mathsf{MLWE}$ (Module-LWE) and
-$\mathsf{MSIS}$ (Module-SIS). $\mathsf{Corona}$ is secure under
-$\mathsf{RLWE}$ (Ring-LWE) with different ring structure and parameters.
+Both lattice legs rest on Module-LWE (with Module-SIS for binding), so
+this is \emph{not} family-disjoint diversity --- it is two independent
+\emph{instances} of the same family.
+$\mathsf{ML\text{-}DSA}$ is secure under $\mathsf{MLWE}_{q,k,\ell,\chi}$
+and $\mathsf{MSIS}$ at the FIPS~204 parameters
+($q = 8\,380\,417$, ring degree $256$, module rank $(k,\ell) = (6,5)$).
+$\mathsf{Corona}$ is secure under $\mathsf{MLWE}$ and $\mathsf{MSIS}$ at
+its own (Ringtail-derived) parameters: a much larger 48-bit modulus
+$q = \mathtt{0x1000000004A01}$ over the same ring degree $256$, with
+module dimensions $M=8$, $N=7$ and $\sigma_E = 6.108$.
 
-A reduction from $\mathsf{MLWE}$ to $\mathsf{RLWE}$ (or vice versa) at
-concrete parameters is unknown. In particular, structural attacks against
-one family have not transferred to the other in any published result.
+No reduction relating the two concrete instances is known, and the two
+parameter regimes, key formats, and codebases are disjoint, so a break
+that exploits one parameterisation or one implementation need not affect
+the other. This is implementation- and parameter-level defense in depth,
+not a hedge across distinct hardness families: a structural break against
+Module-LWE \emph{as a family} would threaten both legs simultaneously.
+The only truly family-disjoint signature leg in the Lux stack is the
+hash-based $\mathsf{Magnetar}$ (SLH-DSA / FIPS~205); cross-family hedging
+requires adding that leg, not the second lattice instance.
 
-\begin{proposition}[Hedged PQ security]
-Under the conjunction ``$\mathsf{MLWE}$ is hard $\lor$
-$\mathsf{RLWE}$ is hard,'' the combined per-epoch certificate
+\begin{proposition}[Hedged PQ security within Module-LWE]
+Under the conjunction ``the ML-DSA Module-LWE instance is hard $\lor$
+the Corona Module-LWE instance is hard,'' the combined per-epoch
+certificate
 $(\textsf{cert}_h \text{ for } h \in \text{epoch}, \sigma_{\text{epoch}})$
 is unforgeable.
 \end{proposition}
 
-This gives us defense in depth strictly within the post-quantum setting,
-without relying on any classical primitive.
+This gives us defense in depth against parameter- or implementation-specific
+breaks strictly within the post-quantum setting, without relying on any
+classical primitive; for cross-family assurance, compose the Magnetar
+(hash) leg as in the Polaris profile.
 
 \section{Why BLS contributes no PQ security}
 
@@ -311,9 +336,10 @@ MB/year). A light client synchronises from Z-chain era proofs only
 \begin{itemize}
   \item Celi, del Pino, Espitau, Niot, Prest.
         \emph{Efficient Threshold ML-DSA.} USENIX Security 2026.
-  \item Boschini et al.
-        \emph{Corona: Practical Two-Round Threshold Signatures from
-        Learning With Errors.} IEEE S\&P 2025.
+  \item Boschini, Kaviani, Lai, Malavolta, Takahashi, Tibouchi.
+        \emph{Ringtail: Practical Two-Round Threshold Signatures from
+        LWE.} IEEE S\&P 2025 (IACR ePrint 2024/1113). The construction
+        Corona forks.
   \item Ethereum beacon chain attester committee design (BLS-based).
   \item Avalanche / Snowman probabilistic sampling family.
 \end{itemize}

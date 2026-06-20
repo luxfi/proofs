@@ -53,10 +53,18 @@ registry safety are the three active proof tracks.
 ## Key Consensus Proofs (Lean4)
 
 ### Quasar Consensus (`lean/Consensus/Quasar.lean`)
-Proves the composition of three independent cryptographic hardness assumptions:
+Proves the composition of independent cryptographic hardness assumptions
+across two families (lattice + pairing):
 - **BLS12-381** (ECDL, classical)
-- **Corona** (Ring-LWE, eprint 2024/1113, post-quantum)
+- **Corona** (Module-LWE + Module-SIS, eprint 2024/1113, post-quantum;
+  Lux fork of Ringtail — module dims M=8/N=7, q=0x1000000004A01 48-bit,
+  σ_E=6.108, NIST Cat-1; same lattice family as Pulsar, distinct
+  parameter regime / lifecycle)
 - **Pulsar / ML-DSA-65 FIPS 204** (Module-LWE + Module-SIS, post-quantum)
+
+Note: Corona and Pulsar/ML-DSA are BOTH Module-LWE — their diversity is
+parameter-regime / codebase, not family-disjoint. Magnetar (SLH-DSA /
+hash) is the only true cross-family signature leg.
 
 Theorems:
 - `triple_requires_all`: all three layers must reach quorum
@@ -71,7 +79,7 @@ Four modes: BLS-only, BLS+ML-DSA, BLS+Corona, BLS+Corona+ML-DSA (triple).
 ### Crypto Proofs (`lean/Crypto/`)
 - `BLS.lean` — BLS12-381 aggregate signature unforgeability
 - `MLDSA.lean` — ML-DSA-65 (FIPS 204) correctness
-- `Corona.lean` — Ring-LWE threshold signature security
+- `Corona.lean` — Module-LWE threshold signature security (Ringtail fork)
 - `Hybrid.lean` — Triple hybrid identity sig (Ed25519 + ML-DSA + SLH-DSA)
 - `MLKEM.lean` — ML-KEM-768 key encapsulation
 - `FROST.lean` — FROST threshold signing

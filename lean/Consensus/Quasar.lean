@@ -1,11 +1,16 @@
 /-
   Quasar Consensus
 
-  Quasar is the post-quantum consensus engine combining three independent
-  cryptographic hardness assumptions:
+  Quasar is the post-quantum consensus engine combining independent
+  cryptographic hardness assumptions across two families:
   - BLS12-381 signature aggregation (ECDL hardness, classical)
-  - Corona Ring-LWE threshold signatures (Module-LWE hardness, PQ)
+  - Corona Module-LWE threshold signatures (Module-LWE + Module-SIS, PQ;
+    Ringtail-derived parameter regime)
   - ML-DSA-65 identity signatures (Module-LWE + Module-SIS hardness, PQ, FIPS 204)
+
+  Corona and ML-DSA/Pulsar are BOTH Module-LWE (lattice) — their
+  diversity is parameter-regime / codebase level, not family-disjoint.
+  Magnetar (SLH-DSA / hash) is the only true cross-family signature leg.
 
   This file proves the composition is sound: the Quasar signature scheme
   inherits safety from BFT + unforgeability from all three primitives.

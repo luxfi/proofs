@@ -2,7 +2,8 @@
   Threshold — Lagrange interpolation identity for threshold correctness.
 
   This is the algebraic heart of the threshold-to-single-party reduction
-  for Pulsar (ML-DSA threshold) and Corona (R-LWE threshold).
+  for Pulsar (ML-DSA threshold) and Corona (Module-LWE threshold). Both
+  are Module-LWE schemes; the Shamir-over-ring structure below is shared.
 
   Both schemes share the structure:
 
@@ -23,7 +24,7 @@
   Maps to:
     • ref/go/pkg/pulsar/shamir.go        ShamirSecretSharingGeneral
     • ref/go/pkg/pulsar/threshold.go     ThresholdSigner.Round1/Round2/Combine
-    • corona/sign/sign.go                Combine (R-LWE variant)
+    • corona/sign/sign.go                Combine (Corona M-LWE params)
 -/
 
 import Mathlib.LinearAlgebra.Lagrange
@@ -138,5 +139,34 @@ theorem threshold_partial_response_identity
     (threshold_reconstructs_secret f s v hvs degree_f_lt).symm
   rw [hshare, smul_eq_mul]
   -- Now both sides match: y-eval + c · f.eval 0
+
+/-- **No-mask specialization** (threshold BLS partial-signature form).
+
+    BLS threshold partial signatures carry no per-party nonce
+    (`y_i = 0`): party `i` contributes `σ_i = c · share_i` where
+    `share_i = f.eval (v i)`. Combining the partials via Lagrange
+    coefficients reproduces the single-party value `c · secret =
+    c · f.eval 0` exactly.
+
+    This is `threshold_partial_response_identity` with `y = 0`: the
+    `y`-part's Lagrange interpolation is the zero polynomial (the
+    interpolation map is `F`-linear, so it sends the zero function to
+    `0`), and `(0 : F[X]).eval 0 = 0` makes the masking term vanish.
+
+    Discharges the EC AXIOM 4 bridge cited at `Crypto/BLS.lean`
+    (`BLS_Threshold_N1.ec:148`, Boldyreva 2003 threshold BLS) — the
+    "Lagrange identity over `F_r` specialized to no-y-mask form". -/
+theorem threshold_partial_response_identity_no_mask
+    (f : F[X]) {ι : Type*} [DecidableEq ι] (s : Finset ι) (v : ι → F)
+    (hvs : Set.InjOn v s) (degree_f_lt : f.degree < s.card)
+    (c : F) (z : ι → F) (hz : z = c • fun i => f.eval (v i)) :
+    (Lagrange.interpolate s v z).eval 0 = c * f.eval 0 := by
+  -- Re-express z with an explicit zero mask so the general identity applies.
+  have hz' : z = (0 : ι → F) + c • fun i => f.eval (v i) := by rw [hz, zero_add]
+  -- The Lagrange interpolation of the zero mask is the zero polynomial.
+  have hzero : Lagrange.interpolate s v (0 : ι → F) = 0 :=
+    (Lagrange.interpolate s v).map_zero
+  have h := threshold_partial_response_identity f s v hvs degree_f_lt 0 c z hz'
+  rw [h, hzero, Polynomial.eval_zero, zero_add]
 
 end Crypto.Threshold.Lagrange

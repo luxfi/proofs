@@ -1,9 +1,10 @@
 # Pulsar proofs
 
-LaTeX theorem statements + proofs for Pulsar (Module-LWE),
-the FIPS 204-compatible sibling of Pulsar (R-LWE). Each file is
-included from `~/work/lux/pulsar/spec/pulsar.tex` or from a
-paper.
+LaTeX theorem statements + proofs for Pulsar (Module-LWE), the
+FIPS 204-byte-equal threshold scheme. Its sibling is Corona, a
+separate Module-LWE threshold scheme (the Ringtail-derived parameter
+regime; not FIPS-byte-equal). Each file is included from
+`~/work/lux/pulsar/spec/pulsar.tex` or from a paper.
 
 | file | claim |
 |---|---|
@@ -14,11 +15,14 @@ paper.
 | `reshare-preservation.tex` | Reshare preserves pk, soundness, privacy under beacon-randomised quorum |
 | `grouped-sortition.tex` | Pulsar (3,2) × Quasar sortition × P3Q rollup composition (the production 1.1M-validator stack); fully PQ end-to-end |
 
-The R-LWE Pulsar proofs live in the parent `proofs/pulsar/`
-directory and target the Pulsar (Class S1+S4) submission. Do not
-confuse the two: Pulsar.R has its own R_q ring-degree polynomial
-shape and verifier; Pulsar.M (this directory) operates over R_q^k
-and verifies under the FIPS 204 verifier verbatim.
+The Corona proofs (Module-LWE, Ringtail-derived parameter regime,
+module dims M=8/N=7 over R_q = Z_q[X]/(X^256+1), q 48-bit) live with
+the `lean/Crypto/Corona/` tree and `luxfi/corona`. Do not confuse the
+two: Corona has its own large parameter set and verifier and is not
+FIPS-byte-equal; Pulsar (this directory) operates over R_q^k at the
+FIPS 204 ML-DSA-65 parameters and verifies under the FIPS 204 verifier
+verbatim. Both are Module-LWE — they differ in parameter regime and
+lifecycle, not lattice family.
 
 ## Mechanization status
 

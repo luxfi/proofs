@@ -3,14 +3,16 @@
 
   NIST PQC4-round selected backup KEM. Code-based, hardness rests on
   the Syndrome Decoding Problem (SDP) on random quasi-cyclic codes
-  — family-disjoint from Module-LWE (ML-KEM, Pulsar) and Ring-LWE
-  (Corona). A structural break against MLWE does NOT compromise HQC
-  and vice-versa.
+  — family-disjoint from Module-LWE (ML-KEM, Pulsar, Corona). A
+  structural break against MLWE does NOT compromise HQC and vice-versa.
 
   Wired to fill the family-disjoint gap on the KEM side, parallel to
-  the Pulsar / Corona / Magnetar trio on the signature side:
+  the Pulsar / Corona / Magnetar trio on the signature side. Note that
+  Pulsar and Corona are BOTH Module-LWE (differing in parameter regime
+  and lifecycle); Magnetar (hash) is the only cross-family signature
+  leg, just as HQC (code) is the only cross-family KEM leg:
 
-    Signature stack:    Pulsar (MLWE)   Corona (RLWE)   Magnetar (hash)
+    Signature stack:    Pulsar (MLWE)   Corona (MLWE)   Magnetar (hash)
     KEM stack:          ML-KEM (MLWE)   —               HQC (code)
 
   Maps to:
