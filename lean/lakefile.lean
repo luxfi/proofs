@@ -86,7 +86,9 @@ lean_lib Crypto where
     `Crypto.Pulsar.Shamir,
     `Crypto.Pulsar.Unforgeability,
     `Crypto.Pulsar.dkg2,
-    `Crypto.Pulsar.BoundaryClearance
+    `Crypto.Pulsar.BoundaryClearance,
+    `Crypto.Pulsar.NoLeakAggregate,
+    `Crypto.Corona.NoLeakAggregate
   ]
 
 lean_lib Storage where
