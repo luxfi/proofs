@@ -1,0 +1,63 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\title{Red-team checklist: hash-based threshold signatures\\(Magnetar = threshold SLH-DSA / FIPS 205)}
+\date{}
+\begin{document}\maketitle
+\noindent Review a hash-based scheme as a stateful/stateless one-time-key
+protocol, NOT a lattice one --- the Module-LWE concepts ($c\!\cdot\!s_2$,
+$r_0$, LowBits, BCC) DO NOT apply. The central invariant:
+
+\begin{quote}\itshape No SLH-DSA one-time signing material (FORS/WOTS+ secret,
+SK.seed, SK.prf, chain start, unrevealed auth path) is ever reconstructed,
+reused, or revealed outside the exact public signature elements a FIPS 205
+verifier requires.\end{quote}
+
+\section{Impossibility boundary (read first)}
+Cheap, oracle-respecting thresholdization of an extractable hash-based scheme
+is IMPOSSIBLE in the no-dealer/no-preprocessing model a public, leaderless,
+permissionless chain needs (Kondi--Kumar--Vanegas). So the only safe
+production options are: (a) threshold CERTIFICATION over INDEPENDENT FIPS 205
+signatures (a STARK/FRI quorum proof), or (b) generic active-secure MPC that
+evaluates SHAKE/SHA-2 INSIDE the computation (T-SLH-DSA-MPC: research-grade,
+expensive). A scheme that ``shares the seed and reconstructs at a combiner'' is
+NOT threshold signing --- flag it as such.
+
+\section{One-time-key safety}
+\begin{enumerate}[leftmargin=*]
+  \item Does any party or aggregator ever learn a complete FORS secret element
+    or a complete WOTS+ chain secret?
+  \item Can the same SLH-DSA leaf index be used twice (across signers, attempts,
+    a Byzantine aggregator replaying a request, crash recovery, or snapshot
+    rollback)? Is the per-leaf reservation atomic and single-use?
+  \item Is the index/domain separation collision-resistant across the committee?
+\end{enumerate}
+
+\section{Address / domain separation (FIPS 205 ADRS)}
+\begin{enumerate}[leftmargin=*]
+  \item Are layer, tree, key-pair, chain, hash, and FORS-tree ADRS fields all
+    bound exactly per FIPS 205?
+  \item Is the message digest / FORS-index derivation byte-compatible with the
+    standard verifier? Is \texttt{opt\_rand} / randomized hashing handled
+    safely in threshold mode?
+\end{enumerate}
+
+\section{Seed / key-share non-reconstruction}
+\begin{enumerate}[leftmargin=*]
+  \item Is SK.seed / SK.prf ever reconstructed in one buffer at a combiner?
+    (``strict-atom'' that only renames the buffer does NOT change the bytes ---
+    see \texttt{framework/checks/proof-by-rename.sh}.)
+  \item Does the DKG ever publish a party's secret contribution (open-reveal),
+    making the master reconstructible by any transcript observer? The
+    production path must use complaint-conditional reveal or fail closed.
+\end{enumerate}
+
+\section{Output and accountability}
+\begin{enumerate}[leftmargin=*]
+  \item Does the final signature verify byte-for-byte under an UNMODIFIED,
+    INDEPENDENT FIPS 205 verifier (e.g. circl AND pq-crystals)?
+  \item Is the signer bitmap + transcript root bound to the final signature
+    (no accountability forgery)? Are debug seed exports build-tag-gated out of
+    production?
+\end{enumerate}
+\end{document}

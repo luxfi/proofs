@@ -1,0 +1,61 @@
+\documentclass[11pt]{article}
+\usepackage[margin=1in]{geometry}
+\usepackage{enumitem}
+\title{Red-team checklist: STARK/FRI proof systems and circuits\\(P3Q, the Magnetar/Quasar quorum-certificate rollup)}
+\date{}
+\begin{document}\maketitle
+\noindent For a post-quantum STARK/FRI prover+verifier and the circuits that
+prove ``$N$ independent FIPS 204/205 verifications + a weighted-quorum
+predicate.'' PQ discipline: Goldilocks/SHA-3/FRI only --- NO pairings, KZG,
+BN254, Groth16, PLONK (any of those reintroduces a classical assumption).
+
+\section{Soundness of the proof system}
+\begin{enumerate}[leftmargin=*]
+  \item Does the verifier actually enforce the AIR's boundary AND transition
+    constraints (the constraint identity $Q(\zeta)Z_H(\zeta)=\sum\alpha_k C_k$
+    at OOD), or is it a bare FRI low-degree test with ``no AIR glue''? A trace
+    that violates a constraint MUST be rejected --- test it (tampered-trace).
+  \item Is the prover real (commits trace+quotient, binds via OOD/DEEP+FRI), or
+    a toy single-polynomial stub? Does a satisfying trace verify AND a tampered
+    one fail, end-to-end?
+  \item Does FRI reject a high-degree codeword and a cheating final polynomial?
+  \item Is \texttt{eval}/the constraint method REQUIRED on every AIR (forgetting
+    constraints is a compile error, not a silent zero-constraint proof)?
+\end{enumerate}
+
+\section{In-circuit hash fidelity}
+\begin{enumerate}[leftmargin=*]
+  \item SLH-DSA/ML-DSA verification is mostly SHAKE. Does the in-circuit
+    Keccak-f[1600] AIR produce bytes IDENTICAL to the host SHAKE256 reference
+    (golden cross-check)? A divergent gadget silently proves the wrong thing.
+  \item Are the WOTS+/FORS/Merkle/hypertree compositions over that gadget, or is
+    any step host-trusted (outside the proof)?
+\end{enumerate}
+
+\section{The quorum predicate (what the circuit must actually prove)}
+\begin{enumerate}[leftmargin=*]
+  \item For every claimed signer: Merkle inclusion in the epoch
+    \texttt{validator\_set\_root} whose leaf binds
+    $(\mathrm{id},\mathrm{pubkey},\mathrm{weight},\mathrm{param\_set},
+    \mathrm{key\_version})$; the unmodified FIPS verify returns true; the
+    parameter set is allowed.
+  \item Distinct signers (strictly increasing ids / bitmap / nullifier set ---
+    no double-count), and $\sum\mathrm{weight}\ge$ threshold, with
+    \texttt{aggregate\_weight} and \texttt{signer\_commitment} bound.
+  \item The message binds every consensus field (chain/epoch/height/round/
+    qc\_type) --- no cross-domain validity.
+  \item NO private key / seed / one-time material is in the witness in a form
+    that a non-owning party could extract; the prover needs only PUBLIC facts.
+\end{enumerate}
+
+\section{Verifier hygiene}
+\begin{enumerate}[leftmargin=*]
+  \item Is the on-chain/precompile verifier registered and fail-closed (no
+    ``\texttt{ErrVerifierNotRegistered} but returns valid'')? Run
+    \texttt{framework/checks/fail-open.sh}.
+  \item Is there a trusted setup? (FRI/STARK should need none --- if one
+    appears, it is a classical assumption smuggled in.)
+  \item Honest performance: are DFTs naive $O(N^2)$? State the cost and the
+    FFT-before-scale plan; do not claim batched-SLH-DSA scale on a toy DFT.
+\end{enumerate}
+\end{document}
