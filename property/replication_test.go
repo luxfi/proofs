@@ -301,7 +301,7 @@ func TestEncryption_CiphertextDiffersFromPlaintext(t *testing.T) {
 // Property: For any two readers R1, R2 reading at committed TXID t:
 //   Restore(WAL.FramesUpTo(t)) as seen by R1 = as seen by R2.
 func TestWALIsolation_ConcurrentReaders(t *testing.T) {
-	seeds := []int64{42, 1337, 8675309}
+	seeds := []int64{42, 1337, 1234567}
 
 	for _, seed := range seeds {
 		rng := mathrand.New(mathrand.NewSource(seed))

@@ -190,7 +190,7 @@ func (p *GovernanceProposal) Vote(addr string, weight uint64, support bool) bool
 // Property: For all vote sequences V and addresses a:
 //   count(a votes in V) <= 1
 func TestGovernance_NoDoubleVoting(t *testing.T) {
-	seeds := []int64{42, 99, 2026, 8675309, 1}
+	seeds := []int64{42, 99, 2026, 1234567, 1}
 
 	addresses := []string{"a1", "a2", "a3", "a4", "a5"}
 
