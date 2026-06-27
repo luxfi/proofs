@@ -200,6 +200,105 @@ from configuration/checkpoint/genesis and a non-configured peer has zero weight
 (Invariant~1, test~D). $\qed$
 \end{proof}
 
+\section{Caught-up by acceptance, not store presence}
+
+The policy of \S\ref{def:policy} names the correct frontier $b^\star$, but a node only
+\emph{converges} if it then \emph{recognises} that it has reached $b^\star$ and otherwise
+advances toward it. Two further degrees of freedom in that recognition --- which set of blocks
+counts as ``reached,'' and which height the loop reads to detect advancement --- admit a
+non-converging fixed point that named-frontier correctness alone does not exclude. This was the
+final live-mainnet defect (LP-304, layer 8).
+
+\begin{definition}[Held vs.\ accepted]
+A recovering node $u$ has two monotone heights: its \emph{accepted height} $\mathsf{acc}(u)$ (the
+top of its consensus-accepted chain) and its \emph{held height} $\mathsf{held}(u)\ge\mathsf{acc}(u)$
+(the highest block present in its block store). Block gossip may raise $\mathsf{held}(u)$ above
+$\mathsf{acc}(u)$: the node \emph{has} blocks it has not \emph{accepted}. Let $N^\star$ be the named
+frontier height (Thm~\ref{thm:liveness}), with $N^\star>\mathsf{acc}(u)$.
+\end{definition}
+
+\begin{definition}[Caught-up predicates]
+The \emph{store-presence} predicate is
+$\mathsf{CU}_{\mathsf{Has}}(u)\equiv \mathsf{held}(u)\ge N^\star$ (the named tip is present in the
+store). The \emph{acceptance} predicate is
+$\mathsf{CU}_{\mathsf{Acc}}(u)\equiv \mathsf{acc}(u)\ge N^\star$ (the named tip is on the accepted
+chain). When caught-up is false, the loop runs one \emph{cert-gated accept step}: it accepts the
+held block at height $\mathsf{acc}(u)+1$ iff that block carries a verifying $\alpha$-of-$K$
+certificate, raising $\mathsf{acc}(u)$ by one; with no caught-up signal it instead concludes and
+goes live.
+\end{definition}
+
+\begin{theorem}[Store-presence caught-up is a non-converging fixed point]\label{thm:has}
+There is a reachable state with $\mathsf{held}(u)\ge N^\star>\mathsf{acc}(u)$ in which
+$\mathsf{CU}_{\mathsf{Has}}(u)$ holds, so the loop concludes ``caught up'' and runs no accept step,
+yet $u$ is not at the frontier. The state is a fixed point: $\mathsf{acc}(u)$ never advances, and
+every restart re-enters it.
+\end{theorem}
+
+\begin{proof}
+Let $u$ have accepted to $\mathsf{acc}(u)=h_0$ and received by gossip every block up to
+$N^\star=h_0+k$, so $\mathsf{held}(u)=h_0+k\ge N^\star$. Then
+$\mathsf{CU}_{\mathsf{Has}}(u)=(\mathsf{held}(u)\ge N^\star)=\text{true}$, so the loop takes the
+caught-up branch and performs no accept step; $\mathsf{acc}(u)$ stays $h_0<N^\star$. Nothing in the
+branch mutates $\mathsf{held}$ or $\mathsf{acc}$, so the state is fixed. On restart the store still
+holds the blocks, $\mathsf{CU}_{\mathsf{Has}}$ is again true, and the same branch is taken --- the
+defect is self-reinforcing. The node serves a stale accepted chain while believing it is current.
+$\qed$
+\end{proof}
+
+\begin{remark}
+This is exactly the observed mainnet state: \texttt{luxd-2} logged
+\texttt{NAMED namedHeight=1082796 held=true} with $\mathsf{acc}=1082780$ --- it \emph{held}
+$1082781..1082796$ by gossip but had \emph{accepted} only to $1082780$, and the store-presence
+predicate (resolving ``held'' through the VM's \texttt{GetBlock}, which returns stored \emph{or}
+accepted blocks alike) reported caught-up at the stale height (LP-304, layer 8).
+\end{remark}
+
+\begin{theorem}[Acceptance caught-up converges, safely]\label{thm:acc}
+Using $\mathsf{CU}_{\mathsf{Acc}}$, a node with $\mathsf{held}(u)\ge N^\star>\mathsf{acc}(u)$ and a
+valid certificate for each held block on the named chain reaches $\mathsf{acc}(u)=N^\star$ in
+exactly $N^\star-\mathsf{acc}(u)$ accept steps, and no block is accepted without its certificate.
+\end{theorem}
+
+\begin{proof}
+While $\mathsf{acc}(u)<N^\star$, $\mathsf{CU}_{\mathsf{Acc}}(u)$ is false, so the loop runs an
+accept step. The block at height $\mathsf{acc}(u)+1$ is present (since
+$\mathsf{held}(u)\ge N^\star>\mathsf{acc}(u)+1$ until the last step) and carries a verifying
+certificate by hypothesis, so the cert-gated guard accepts it and $\mathsf{acc}(u)$ increases by
+exactly one. The accept step strictly increases a quantity bounded above by $N^\star$, so after
+$N^\star-\mathsf{acc}_0$ steps $\mathsf{acc}(u)=N^\star$ and $\mathsf{CU}_{\mathsf{Acc}}$ becomes
+true. Safety: the guard accepts a block \emph{only} on a verifying $\alpha$-of-$K$ certificate, so a
+stored block lacking one (a forged or off-chain block in the store) is never accepted merely for
+being present --- store presence confers no acceptance. $\qed$
+\end{proof}
+
+\begin{lemma}[Convergence recognition must read the advancing ledger]\label{lem:frozen}
+Suppose the accept step advances the in-process finalised height $\mathsf{acc}(u)$, but the loop
+evaluates caught-up against a cached value $\widehat{\mathsf{acc}}(u)$ that is written once at
+initialisation and never refreshed. Then even under $\mathsf{CU}_{\mathsf{Acc}}$ the node fails to
+recognise convergence: it advances on disk yet loops forever. Reading $\mathsf{acc}(u)$ from the
+finalised ledger restores Thm~\ref{thm:acc}.
+\end{lemma}
+\begin{proof}
+$\mathsf{CU}_{\mathsf{Acc}}$ evaluated on the frozen cache is
+$\widehat{\mathsf{acc}}(u)\ge N^\star$, with $\widehat{\mathsf{acc}}(u)=\mathsf{acc}_0<N^\star$
+constant. It is false at every step regardless of the real $\mathsf{acc}(u)$; the loop keeps running
+accept steps (or, past the top, finds nothing to accept and stalls) and never reports caught-up ---
+an advance-then-stall. Substituting the live finalised height $\mathsf{acc}(u)$ for
+$\widehat{\mathsf{acc}}(u)$ makes the predicate the one of Thm~\ref{thm:acc}, which converges. $\qed$
+\end{proof}
+
+\begin{remark}
+The frozen cache is the plugin (zap) RPC client's \texttt{LastAccepted}, written at
+initialisation and not on \texttt{Accept}; the live source is the consensus finalised ledger that
+the per-height accept guard already maintains. Driving recognition off the ledger (and refreshing
+the client cache on \texttt{Accept}, since the stale value was also served to peers) is the layer-8
+fix. The unit mocks hid both Thm~\ref{thm:has} and Lemma~\ref{lem:frozen} because the mock VM
+advanced \texttt{LastAccepted} on accept and resolved ``held'' as ``accepted'' --- it was
+\emph{higher-fidelity} than the real host in exactly the two ways that mask the bug, so a green
+suite did not imply convergence.
+\end{remark}
+
 \section{Conclusion}
 
 \begin{corollary}
@@ -207,10 +306,14 @@ Separating $\mathsf{BootstrapTrust}$ from $\mathsf{ConsensusQuorum}$ converts an
 unsatisfiable recovery (Thm~\ref{thm:deadlock}) into a live one under realistic validator
 loss (Thm~\ref{thm:liveness}, Prop~\ref{prop:floor}) at no cost to finality safety
 (Thm~\ref{thm:safety}) and no new forgery surface under the standard weak-subjectivity
-assumption (Thm~\ref{thm:c1}). Validators may freely leave and rejoin: a rejoining node
-bootstraps from whichever configured beacons are reachable and agreeing, then finalises on
-the current stake set. The liveness threshold and the safety threshold are now distinct
-objects with distinct denominators, and cannot be re-conflated.
+assumption (Thm~\ref{thm:c1}). Convergence is then \emph{recognised} correctly only when
+caught-up is defined by acceptance, not store presence (Thm~\ref{thm:has},
+Thm~\ref{thm:acc}), and is read from the advancing finalised ledger, not a frozen cache
+(Lemma~\ref{lem:frozen}); both are cert-gated, so safety is preserved. Validators may freely
+leave and rejoin: a rejoining node bootstraps from whichever configured beacons are reachable
+and agreeing, accepts the gap under quorum certificates, and finalises on the current stake set.
+The liveness threshold and the safety threshold are distinct objects with distinct denominators,
+and ``reached the frontier'' is the accepted chain, never the store --- none can be re-conflated.
 \end{corollary}
 
 \end{document}
