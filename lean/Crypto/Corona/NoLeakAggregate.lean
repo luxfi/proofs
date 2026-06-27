@@ -64,6 +64,20 @@
   construction (ePrint 2024/1113) already stands on. The residual is now a
   STANDARD-ASSUMPTION reduction, not an implementation reconstruct.
 
+  ## Naming note (Module-LWE, not Ring-LWE)
+
+  Corona's hardness is **Module-LWE** (module rank ~7-8 over
+  R_q = Z_q[X]/(X^256+1), matrix A in R_q^{8x7}) with Module-SIS for
+  binding -- see `Crypto/Corona.lean`. It coincides with Ring-LWE only in
+  the degenerate rank-1 case, which Corona does not use. The identifiers
+  here that carry an `rlwe`/`Rlwe` token -- the local `RlweSignatureLeakage`,
+  and the referenced EasyCrypt cone ops `rlwe_sign_op` and
+  `sign_abs_op_lifted_eq_rlwe` -- are RETAINED names for the single-party
+  *reference signer*, NOT a family claim. They are left unrenamed: the EC
+  names are string-keyed by the corona repo's assurance gates, and a Lean
+  rename cannot be compile-verified in this environment (no `lake`
+  toolchain). The prose family labels below are corrected to Module-LWE.
+
   Maps to:
   • corona/sign/sign.go            SignRound2 (z_i with telescoping masks),
                                    SignFinalize (z_sum)
@@ -176,13 +190,13 @@ hypotheses — the honest replacement for the EC reconstruct-then-sign cone. -/
     the rounded `h`, and the aggregate `z`-sum. It does NOT contain any
     per-party `c·λ_i·s_i`, any individual mask, or the reconstructed `s`. -/
 structure PublicTranscript where
-  commitments : ByteArray   -- per-party R-LWE commitments (public)
+  commitments : ByteArray   -- per-party Module-LWE commitments (public)
   roundedH    : ByteArray   -- RoundVector(D·u) high part  (public)
   zSum        : ByteArray   -- Σ_i z_i  (public, in sig; mask-free)
   c           : ByteArray   -- LowNormHash challenge        (public, in sig)
   deriving Inhabited
 
-/-- A single-party Boschini R-LWE signature's public footprint on the same
+/-- A single-party Boschini Module-LWE signature's public footprint on the same
     `(pk, m)` — the reference leakage profile. -/
 opaque RlweSignatureLeakage : Type
 
@@ -203,7 +217,7 @@ opaque transcriptSimulator : RlweSignatureLeakage → PublicTranscript
 /-- **No-leak reduction (the residual open assumption — STANDARD).**
 
     The public Corona threshold transcript is simulatable from a
-    single-party R-LWE signature's leakage, GIVEN Module-LWE and
+    single-party Boschini signature's leakage, GIVEN Module-LWE and
     Module-SIS. This replaces reconstruct-then-sign: the threshold path
     reveals nothing about `s` beyond one ordinary signature, under the SAME
     standard lattice assumptions the construction already uses. Stated as a
@@ -218,7 +232,7 @@ def NoLeakReduction : Prop :=
 /-- **The shape of the honest claim, packaged.** Under the standard lattice
     assumptions, IF the no-leak reduction holds THEN every public
     transcript is the simulator's output — carrying no key information
-    beyond a single R-LWE signature. -/
+    beyond a single Boschini signature. -/
 theorem no_leak_under_standard_assumptions
     (hred : NoLeakReduction)
     (hlwe : ModuleLWEHard) (hsis : ModuleSISHard)
