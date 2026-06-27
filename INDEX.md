@@ -10,6 +10,7 @@
 |---|---|---|
 | Strict-PQ-finality without BLS | `pq-finality-no-bls.tex` | `pq-finality-no-bls.pdf` |
 | Quasar certificate soundness | `quasar-cert-soundness.tex` | `quasar-cert-soundness.pdf` |
+| Bootstrap recovery liveness + finality safety (LP-304) | `bootstrap-recovery-liveness-safety.tex` | `bootstrap-recovery-liveness-safety.pdf` |
 
 ## LaTeX proof bundles (by topic)
 
