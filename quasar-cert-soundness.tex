@@ -260,12 +260,29 @@ one of $\{\mathsf{pchain\_validator\_root}, \mathsf{qchain\_ceremony\_root},
 \mathsf{zchain\_vk\_root}\}$ disables only the corresponding lane.
 \end{proof}
 
+%% ------------------------------------------------------------------
+%% DISCHARGED 2026-07-02 (cryptographer audit of luxfi/consensus v1.35.16):
+%% Cor.~\ref{cor:no-conflict} and Rmk.~\ref{rem:epoch-blind-slot} state
+%% the FIXED design --- the vote-once slot is (chain_id, round)/height
+%% alone (epoch-blind), the guard is durable and pruned strictly below
+%% the finalised tip, and accept rejects sibling subtrees transitively.
+%% Verified against shipped code: SlotKey{Height} (engine.go:2095),
+%% strictly-below prune `k.Height < height` (engine.go:2190), durable
+%% decided-height gate `height <= floor => refuse` (engine.go:2098-2104),
+%% Accept-before-Reject in applyBranchFinalization. The durable-floor
+%% machinery the corollary's premise relies on is now FORMALISED and the
+%% no-double-finalization result proved standalone in
+%% \S\ref{sec:nodoublefinal}.
+%% ------------------------------------------------------------------
 \begin{corollary}[No conflicting certificates]
 \label{cor:no-conflict}
 If $\mathcal{C}, \mathcal{C}'$ both verify on subjects $\mathsf{subj},
-\mathsf{subj}'$ that share $(\mathsf{chain\_id}, \mathsf{epoch},
+\mathsf{subj}'$ that share the per-height slot $(\mathsf{chain\_id},
 \mathsf{round})$ but disagree on the chain-state roots, then
-$> \tau$ stake is Byzantine.
+$\geq S/3$ stake is Byzantine.  The slot is deliberately
+\emph{epoch-blind}: $\mathsf{epoch}$ is bound inside $\mathsf{subj}$ for
+verification and replay protection (Thm.~\ref{thm:replay}), but it is
+\emph{not} part of the vote-once slot key.
 \end{corollary}
 
 \begin{proof}
@@ -273,11 +290,257 @@ By Lane~1, $\mathrm{stk}(S_{\mathrm{BLS}}) \geq \tau S$ and
 $\mathrm{stk}(S_{\mathrm{BLS}}') \geq \tau S$.  Stake-weighted quorum
 intersection gives
 $\mathrm{stk}(S_{\mathrm{BLS}} \cap S_{\mathrm{BLS}}') \geq (2\tau - 1) S
-= S/3$.  Any validator in the intersection signed two distinct subjects
-at the same $(\mathsf{chain\_id}, \mathsf{epoch}, \mathsf{round})$,
-which is detectable equivocation; if Byzantine stake is $< S/3$ this
-is impossible.
+= S/3$.  Each honest validator signs at most one subject in each
+per-height slot $(\mathsf{chain\_id}, \mathsf{round})$: the accept path maintains a
+\emph{durable} per-height vote-once guard that is pruned strictly below
+the finalised tip --- never while a sibling at that height could still
+be signed --- and rejects sibling subtrees transitively, so a decided
+height's siblings are unsignable.  Any validator in the intersection
+would therefore have signed two distinct subjects at the same
+$(\mathsf{chain\_id}, \mathsf{round})$, which is detectable
+equivocation; if Byzantine stake is $< S/3$ this is impossible.
 \end{proof}
+
+\begin{remark}[The slot must not key on a proposer-chosen axis]
+\label{rem:epoch-blind-slot}
+Soundness of Cor.~\ref{cor:no-conflict} requires the vote-once slot to
+be $(\mathsf{chain\_id}, \mathsf{round})$ alone.  Folding a
+proposer-influenced value --- e.g.\ an epoch derived from a
+proposer-selected validator-set height --- \emph{into} the slot key
+would let two honest siblings at one height carry distinct slots, so a
+single honest validator could sign both without equivocating; this is
+precisely the double-finalisation hazard.  Epoch therefore lives in
+$\mathsf{subj}$ (bound and verified) but never in the slot.  A
+conflicting certificate that is nonetheless observed is treated as a
+fatal, halting event --- the BFT-safe response, since two verified
+certificates at one height are irrefutable evidence of $\geq S/3$
+Byzantine stake.
+\end{remark}
+
+%% ==================================================================
+\section{Finality Admission: No Double-Finalization}
+\label{sec:nodoublefinal}
+%% ==================================================================
+
+Corollary~\ref{cor:no-conflict} shows that two conflicting certificates
+at one height imply $\geq S/3$ Byzantine stake \emph{given} its premise:
+each honest validator signs at most one subject per per-height slot.
+That premise is exactly what the height-10 devnet storm and the
+1082814 mainnet fork broke. This section formalises the durable
+\emph{decided-height frontier} that restores the premise
+unconditionally --- including across a correlated rolling restart, the
+window a purely in-memory guard leaves open --- and proves that an
+observable double-finalization is unreachable below $S/3$ Byzantine
+stake. The construction is the mechanical analog of avalanchego's
+acceptance frontier (\texttt{topological.go}: a decided height's blocks
+are permanently unsignable via the monotone last-accepted height plus
+\texttt{rejectTransitively}), \emph{lifted onto the Quasar sign path}.
+The canonical statements live in
+\texttt{definitions/finality-definitions.tex}; we restate what the
+proof needs.
+
+\begin{definition}[Two finality authorities]
+\label{def:nf-authorities}
+A Lux chain runs two decision machines over one block DAG: the
+\emph{acceptance} machine $\mathcal{A}$ (local preference/accept; admits
+siblings and nondeterminism; never irreversible alone) and the
+\emph{certified-finality} map $\mathcal{F} = \mathsf{byHeight}$, where
+$\mathsf{byHeight}[H]$ is the canonical execution commitment finalized
+at $H$ and is written \emph{only} by folding a $\mathsf{Prism}$-passing
+quorum certificate over the frontier-extending branch (or the bootstrap
+frontier-trust path). The 1082814 break was a path other than a
+verified-QC fold advancing $\mathcal{F}$; the fix makes the verified-QC
+fold its sole writer.
+\end{definition}
+
+\begin{definition}[Durable decided-floor]
+\label{def:nf-floor}
+Let $\mathsf{FinHeight}$ be the certified height ($(0,\bot)$ before the
+first cert; the $\mathsf{vm.LastAccepted}$ recovery hint is
+non-authoritative and never sets it --- \emph{PART-A}). Define
+\[
+  \varphi \;=\; \max\!\bigl(
+     \mathsf{FinHeight},\;
+     \mathsf{fsync}(\mathsf{finalizedThrough}),\;
+     \mathsf{height}(\mathsf{vm.LastAccepted})\bigr).
+\]
+$\mathsf{finalizedThrough}$ is a monotone height persisted (fsync'd)
+in the vote-guard file at each finalize. $\varphi$ is monotone,
+restart-surviving, and (Lemma~\ref{lem:nf-lowerbound}) a sound lower
+bound on the network's decided height. \textbf{Sign-gate only:}
+$\varphi$ is read by the sign gate and never writes $\mathsf{byHeight}$,
+$\mathsf{FinHeight}$, or the equivocation index, and reads only the
+hint's \emph{height}, never its identity.
+\end{definition}
+
+\begin{definition}[Sign admissibility]
+\label{def:nf-admissible}
+An honest validator binds its single accept-signature at height $H$ on
+canonical commitment $C$ only if (i)~$H > \varphi$ (decided-height
+gate), and (ii)~the per-height slot at $H$ is empty or already bound to
+$C$ (idempotent); a different $C$ at an undecided $H$ is refused on the
+single-phase path, or governed by the round-scoped lock rule
+(one precommit per $(H,\mathrm{round})$; cross-round migration only on a
+proof-of-lock) on the view-change path.
+\end{definition}
+
+\begin{definition}[Observable double-finalization]
+\label{def:nf-double}
+Two certificates $\mathcal{C}_A, \mathcal{C}_B$ that both verify against
+the active validator set at height $H$'s epoch with canonical
+commitments $C_A \ne C_B$. Certs are keyed on the \emph{canonical
+execution commitment}, so two envelopes wrapping the same $C$ are a
+duplicate alias, never this fault (Rmk.~\ref{rem:nf-canonical}).
+\end{definition}
+
+\begin{lemma}[Floor soundness]
+\label{lem:nf-lowerbound}
+$\varphi \le \mathsf{FinHeight}_{\mathrm{network}}$ at all times.
+\end{lemma}
+\begin{proof}
+Each argument of the $\max$ is a height the network has finalized.
+$\mathsf{FinHeight}$ is certified by definition.
+$\mathsf{finalizedThrough}$ is written only by the finalizer
+$\mathsf{acceptWithCertCore}$ after a $\mathsf{Prism}$-passing cert
+commits, and only up to the height the VM actually applied (the
+fail-closed accept: finality advances only to $\mathsf{highestAccepted}$,
+never past the VM's state). $\mathsf{vm.LastAccepted}$ is the node's
+applied head, and a block is VM-applied only inside that same finalizer;
+a state-sync import lands only on an already-finalized frontier. Hence
+every argument is $\le \mathsf{FinHeight}_{\mathrm{network}}$, so is
+their maximum. $\varphi$ therefore never refuses signing at a height the
+network has \emph{not} decided --- it costs no liveness.
+\end{proof}
+
+\begin{lemma}[No-window durability]
+\label{lem:nf-nowindow}
+For every height $H$ and at every instant on an honest node, either the
+in-memory slot at $H$ is present, or $\varphi \ge H$ (or both). There is
+no instant at which both are absent.
+\end{lemma}
+\begin{proof}
+The slot at $H$ is created when the node first signs at $H$ and is
+deleted only by $\mathsf{pruneCommittedSlotsBelow}(h)$ with the
+\emph{strict} test $k.\mathsf{Height} < h$. That prune runs inside the
+finalizer, in the same critical section (\texttt{slotMu}) that first
+advances $\varphi \gets \max(\varphi, h)$ and persists both in one
+fsync'd write. So the slot at $H$ can be removed only by a prune with
+$h > H$, and any such prune has already set $\varphi \ge h > H$.
+Conversely, before $H$ is ever finalized the slot persists (no prune
+with $h>H$ has run). The two conditions therefore cover every instant;
+the removal of the slot and the raising of the floor are atomic on disk,
+so a crash between them is impossible. In particular the just-finalized
+tip's own slot is \emph{retained} (strict, not inclusive) until a higher
+height finalizes --- closing precisely the inclusive-prune window that
+admitted the height-10 storm's late sibling.
+\end{proof}
+
+\begin{lemma}[Honest one-canonical-per-height, durable]
+\label{lem:nf-oneper}
+An honest validator obeying Def.~\ref{def:nf-admissible} binds its
+accept-signature to at most one canonical commitment at any height $H$,
+and this holds across process restarts.
+\end{lemma}
+\begin{proof}
+Fix $H$ and suppose the validator has bound $C$ at $H$. Consider any
+later sign request $(H, C')$ with $C' \ne C$. By
+Lemma~\ref{lem:nf-nowindow} at least one of two cases holds. \emph{(a)
+The slot at $H$ is present:} it is bound to $C$, so admissibility
+clause~(ii) refuses $C'$ on the single-phase path; on the view-change
+path the lock rule forbids a second precommit at the locked round and
+permits migration only on a proof-of-lock for $C'$, which requires
+$\alpha$ honest-majority prevotes for $C'$ and is itself unique per
+round (so it cannot coexist with a POL for $C$ --- the standard
+Tendermint lock/POL argument, sound when $2\alpha - n > f$). \emph{(b)
+$\varphi \ge H$:} clause~(i) refuses outright. Durability: $\varphi$ is
+reconstructed at boot from the fsync'd $\mathsf{finalizedThrough}$ and
+$\mathsf{vm.LastAccepted}$ before any signing goroutine starts, so a
+restart cannot reset it below a height already decided (the correlated
+rolling-restart window that a memory-only guard leaves open). Hence at
+most one canonical is ever signed at $H$.
+\end{proof}
+
+\begin{theorem}[No double-finalization]
+\label{thm:nodoublefinal}
+Assume the accept quorum requires signer stake $\ge \tau S$ with
+$\tau \ge 2/3$, the active validator set at $H$'s epoch is fixed by the
+epoch-bound set-root cross-checked on every incoming cert, and Byzantine
+stake is $< S/3$. If every honest validator obeys
+Def.~\ref{def:nf-admissible} with the durable floor of
+Def.~\ref{def:nf-floor}, then no observable double-finalization
+(Def.~\ref{def:nf-double}) can occur at any height.
+\end{theorem}
+\begin{proof}
+Suppose two certs $\mathcal{C}_A, \mathcal{C}_B$ exist at height $H$ with
+$C_A \ne C_B$, both verifying against the set-root of $H$'s epoch. Since
+both fold the same epoch set-root (enforced by the incoming-cert
+cross-check: a cert whose set-root differs from the one the node
+recomputes at the block's P-chain epoch height is dropped), the two
+signer sets $S_A, S_B$ are drawn from the \emph{same} validator set of
+total stake $S$. Each has stake $\ge \tau S$, so by stake-weighted
+quorum intersection
+$\mathrm{stk}(S_A \cap S_B) \ge (2\tau - 1)S \ge S/3$. As Byzantine
+stake is $< S/3$, the intersection contains an \emph{honest} validator
+$v$, which then signed both $C_A$ and $C_B$ at height $H$. This
+contradicts Lemma~\ref{lem:nf-oneper}. Hence no such pair exists.
+Equivalently: any observed conflicting cert pair is irrefutable evidence
+of $\ge S/3$ Byzantine stake --- now \emph{unconditionally}, without the
+``healthy sequential net'' caveat the pre-fix guard silently required,
+because Lemmas~\ref{lem:nf-nowindow}--\ref{lem:nf-oneper} hold under the
+contested-finality storm and across restarts.
+\end{proof}
+
+\begin{corollary}[PART-A non-interference]
+\label{cor:nf-parta}
+The durable floor never advances $\mathcal{F}$: for all reachable
+states, $\mathsf{FinHeight} = (0,\bot)$ until the first
+$\mathsf{Prism}$-passing cert folds, and thereafter $\mathsf{byHeight}$
+is written only by the verified-QC fold.
+\end{corollary}
+\begin{proof}
+By Def.~\ref{def:nf-floor} the sign gate is a pure reader of $\varphi$;
+its only side effects are refusing a signature and (on a first bind)
+persisting the per-height slot --- neither touches $\mathsf{byHeight}$,
+$\mathsf{FinHeight}$, or the equivocation index. The floor reads the
+recovery hint's height only, never its identity, so it cannot synthesise
+a $\mathsf{byHeight}$ entry. Thus the fail-safe can only ever
+\emph{refuse more signing}; it cannot manufacture finality. This is the
+incident-1082814 PART-A invariant, preserved.
+\end{proof}
+
+\begin{remark}[Canonical keying]
+\label{rem:nf-canonical}
+Both certs in Def.~\ref{def:nf-double} are compared on their inner
+execution commitment $C = \mathsf{CanonicalID}$, not the proposervm
+outer envelope id. A block with no inner commitment (a bare,
+non-wrapped VM block) degrades to its own outer id, so the scheme is
+inert there and reduces exactly to pre-fix outer-id behaviour. Two
+outer envelopes wrapping the same $C$ (the literal 1082814 evidence:
+$A=2U2pR3D$, $B=wDMUyGy$ both wrapping inner $5DEgMudU$) are a
+\emph{duplicate alias}, and the equivocation detector --- which now runs
+the full verify-before-slash predicate before recording any evidence ---
+never fires on them; only a verified cert over a \emph{different} $C$ is
+recorded as a $\mathsf{DoubleVote}$, and the node rejects the second
+cert and keeps running rather than halting the fleet.
+\end{remark}
+
+\begin{remark}[Empirical validation]
+\label{rem:nf-storm}
+The construction was validated on a 5-node contested-finality storm
+(node v1.34.6, consensus v1.35.16): concurrent multi-proposer building
+drove certified finality past the height-10 fault point to height~76
+with exactly one canonical commitment per height fleet-wide, zero
+$\mathsf{reportCertEquivocation}$ events, byte-identical 5/5 convergence,
+and a DEX $\mathtt{0x9999}$ settlement fill at block~74. A
+rolling-restart \emph{mid-storm} reconverged cleanly, exercising the
+durable cross-restart floor of Lemma~\ref{lem:nf-oneper}. The in-repo
+regression is
+\texttt{engine/chain/finalize\_resign\_test.go}
+(\texttt{TestFinalizeThenResign\_DecidedHeightIsUnsignable}), which fails
+on the inclusive-prune / no-gate code and passes on the shipped fix,
+plus the \texttt{storm\_convergence\_test.go} safety assertion with the
+former \texttt{-race} skip removed.
+\end{remark}
 
 %% ==================================================================
 \section{Parallel Lane Liveness}

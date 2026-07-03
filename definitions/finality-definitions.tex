@@ -127,3 +127,130 @@ specifications must phrase this honestly: the Groth16 lane is a
 compatibility / compression / privacy adapter; PQ finality lives in
 ML-DSA and Pulsar.
 \end{remark}
+
+%% ============================================================
+%% Finality-admission model (incident-1082814 durable fix).
+%% Added 2026-07-02 to state the decided-height frontier that
+%% the no-double-finalization theorem (quasar-cert-soundness.tex,
+%% \S\ref{sec:nodoublefinal}) is proved over.
+%% ============================================================
+
+\subsection*{Two finality authorities and the decided-height frontier}
+
+The 1082814 mainnet fork and the height-10 devnet storm shared one
+root cause: a Lux chain runs \emph{two} decision state machines, and an
+early build let both write the irreversible-finality flag.
+
+\begin{definition}[Acceptance vs.\ certified finality]
+\label{def:two-authorities}
+A Lux chain carries two decision authorities over the same block DAG:
+\begin{description}[nosep,leftmargin=2em]
+  \item[Acceptance $\mathcal{A}$ (Nova / Snowman-style):] the local
+        preference / accept state machine. It tolerates siblings at a
+        height, admits mempool- and timestamp-nondeterminism, and its
+        output is \emph{never} irreversible on its own. It answers
+        ``which branch does this node build on.''
+  \item[Certified finality $\mathcal{F}$ (Quasar):] the map
+        $\mathsf{byHeight}$, where $\mathsf{byHeight}[H]$ is the
+        \emph{canonical execution commitment} finalized at height $H$.
+        An entry is written \textbf{only} by folding a quorum
+        certificate that passes $\mathsf{Prism}$
+        (Definition~\ref{def:prism}) over the exact frontier-extending
+        branch. It answers ``\emph{when} is a branch irreversible.''
+\end{description}
+The invariant violated in 1082814: some path other than a verified-QC
+fold advanced $\mathcal{F}$ (a locally accepted/preferred sibling
+crossed the finalized boundary). The durable fix restores
+$\mathcal{F} \Leftarrow$ \{verified-QC fold, bootstrap frontier-trust\}
+as the \emph{sole} writers of $\mathsf{byHeight}$, and adds a third,
+strictly \emph{fail-safe} object below --- the sign gate --- that can
+only ever \emph{refuse} to produce evidence for $\mathcal{F}$, never
+write it.
+\end{definition}
+
+\begin{definition}[Decided height and durable sign-gate floor]
+\label{def:decided-floor}
+Let $\mathsf{FinHeight}$ be the certified height:
+$\mathsf{FinHeight} = H$ iff $\mathsf{byHeight}$ is populated for a
+prefix through $H$, and $(0,\bot)$ before the first cert
+(incident-1082814 \emph{PART-A}: the recovery hint seeded from
+$\mathsf{vm.LastAccepted}$ is non-authoritative and never sets this).
+The \textbf{durable decided-floor} is
+\[
+  \varphi \;=\; \max\!\bigl(
+      \mathsf{FinHeight},\;
+      \mathsf{fsync}(\mathsf{finalizedThrough}),\;
+      \mathsf{height}(\mathsf{vm.LastAccepted})
+  \bigr),
+\]
+where $\mathsf{finalizedThrough}$ is a monotone counter persisted
+(fsync'd) in the vote-guard file at each finalize, and
+$\mathsf{vm.LastAccepted}$ is the node's applied head. $\varphi$ is
+\textbf{monotone}, \textbf{restart-surviving}, and a \textbf{sound lower
+bound on the decided height}: every one of its three arguments is a
+height the network has finalized (a block is VM-applied only after its
+cert finalizes; a state-sync import lands only on a finalized frontier),
+so $\varphi \le \mathsf{FinHeight}_{\text{network}}$ always.
+
+\emph{Hard constraint (PART-A non-interference).} $\varphi$ is read by
+the sign gate only. It never writes to $\mathsf{byHeight}$,
+$\mathsf{FinHeight}$, or the equivocation index, and it reads only the
+recovery hint's \emph{height}, never its (untrustworthy) identity. Thus
+it cannot manufacture a certified entry or an equivocation record; it
+can only cause the node to \emph{refuse more signing} --- the fail-safe
+direction.
+\end{definition}
+
+\begin{definition}[Sign admissibility]
+\label{def:sign-admissible}
+An honest validator may bind its single accept-signature to a block at
+height $H$ with canonical commitment $C$ only if both hold:
+\begin{enumerate}[nosep]
+  \item \textbf{Decided-height gate:} $H > \varphi$. (A decided height is
+        permanently unsignable --- the exact analog of the acceptance
+        machine's monotone last-accepted frontier, lifted onto the sign
+        path.)
+  \item \textbf{One-per-height / lock rule:} either no signature is yet
+        bound at $H$, or the request re-binds the identical $C$
+        (idempotent); a \emph{different} $C$ at an as-yet-undecided $H$
+        is refused outright (legacy single-phase path) or is governed by
+        the round-scoped lock rule --- at most one precommit per
+        $(H,\text{round})$, cross-round migration only on a
+        proof-of-lock (Tendermint/HotStuff view-change refinement, sound
+        when $2\alpha - n > f$).
+\end{enumerate}
+The gate is \emph{durably} enforced across restarts: at all times
+either the in-memory binding at $H$ survives (retained by a
+\emph{strictly-below} finalized-slot prune) \emph{or} $\varphi \ge H$;
+there is no window in which both are absent.
+\end{definition}
+
+\begin{definition}[Canonical commitment; duplicate vs.\ fork]
+\label{def:canonical-commitment}
+The consensus identity of a block is its \emph{inner execution
+commitment} $\mathsf{CanonicalID}$ (state root / payload root), not its
+transport/proposal wrapper (the proposervm outer id). A block that
+exposes no inner commitment (a bare, non-wrapped VM block) degrades to
+its own outer id, so the scheme is inert on such chains. Two certs at
+one height \emph{conflict} iff their canonical commitments differ:
+\begin{itemize}[nosep]
+  \item same $\mathsf{CanonicalID}$, different envelope $\Rightarrow$
+        \textbf{duplicate alias} (harmless);
+  \item different $\mathsf{CanonicalID}$ $\Rightarrow$ \textbf{fork
+        evidence / equivocation}.
+\end{itemize}
+Finality, equivocation, vote-locks, and the sign gate are all keyed on
+$\mathsf{CanonicalID}$; a locally derived wrapper id may never reach any
+of them.
+\end{definition}
+
+\begin{definition}[Observable double-finalization]
+\label{def:double-final}
+An \emph{observable double-finalization} at height $H$ is the existence
+of two quorum certificates $\mathsf{cert}_A, \mathsf{cert}_B$ that both
+pass $\mathsf{Prism}$ against the active validator set at $H$'s epoch and
+whose canonical commitments differ,
+$C_A \ne C_B$. This is the sole safety-fault the finality layer must
+render unreachable; it is exactly the fault the height-10 storm
+produced under the pre-fix (inclusive-prune) guard.
+\end{definition}

@@ -11,6 +11,7 @@
 \newtheorem{lemma}[theorem]{Lemma}
 \newtheorem{definition}[theorem]{Definition}
 \newtheorem{proposition}[theorem]{Proposition}
+\newtheorem{remark}[theorem]{Remark}
 
 \title{Post-Quantum Finality for Lux Quasar \\ {\large Replacing BLS Aggregation with ML-DSA + Corona}}
 \author{Zach Kelling \\
@@ -146,6 +147,155 @@ produced on the Z-chain proving:
 \]
 $\pi_{\text{era}}$ is $\leq 200$ bytes and verifies in $\sim 3$ ms.
 Light clients sync by downloading era proofs, not block certs.
+
+\section{Scheme-agnostic certificate and the signature registry}
+\label{sec:scheme-agnostic}
+
+The committee certificate of the previous section
+is written with $\mathsf{ML\text{-}DSA}\text{-}65$ as the per-signer
+primitive. In the shipped engine the primitive is \emph{not} baked into
+the consensus rule: the engine defines only the \emph{quorum predicate}
+(a stake-weighted $\tfrac23$ rule), and the node injects the per-signer
+signature scheme as a wire-tagged parameter. This decoupling is what
+makes the classical$\to$PQ migration a configuration flip rather than a
+protocol change, and it is the object this section formalises.
+
+\begin{definition}[Signature-scheme registry]
+\label{def:sigscheme-registry}
+A one-byte identifier $\mathsf{SigSchemeID} \in \{0,\dots,255\}$ names
+the scheme that produced a signature slot of a Quasar certificate. The
+registry (\texttt{config/pq\_mode.go}) is block-structured and
+open-ended:
+\[
+\begin{array}{ll}
+\texttt{0x00} & \text{none (BLS-only certs commit to no scheme)}\\
+\texttt{0x10} & \mathsf{BLS12\text{-}381}\ \text{aggregate (classical, day-1)}\\
+\texttt{0x20} & \text{Nasua / academic R\text{-}LWE threshold (BLAKE3 profile)}\\
+\texttt{0x30} & \mathsf{Pulsar.R}\ \text{production R\text{-}LWE threshold}\\
+\texttt{0x41/42/43} & \text{raw } \mathsf{ML\text{-}DSA}\text{-}44/65/87\ \text{(FIPS 204, single-party)}\\
+\texttt{0x51/52/53} & \mathsf{Pulsar\text{-}M}\text{-}44/65/87\ \text{(M\text{-}LWE threshold)}\\
+\end{array}
+\]
+$\texttt{0x52}$ ($\mathsf{Pulsar\text{-}M}\text{-}65$) is the production PQ
+default. The $\texttt{0x40}$ and $\texttt{0x50}$ blocks are kept distinct
+on purpose: both verify under the \emph{unmodified} FIPS 204
+$\mathsf{ML\text{-}DSA.Verify}$ relation, but the producing protocol
+differs (single-party vs.\ threshold), and the wire separates them so a
+receiver knows which kernel emitted the bytes. New entries claim the
+next free integer in their block and are pinned in a test vector before
+any code references them; a retired id is never reused.
+\end{definition}
+
+\begin{definition}[Scheme-parametric quorum predicate]
+\label{def:scheme-predicate}
+Let $s = \mathsf{SigSchemeID}$ and let $\mathsf{Verify}_s$ be its
+verification relation. A certificate
+$\mathsf{cert} = (s, \mathsf{pos}, \{(\mathsf{id}_i, \sigma_i)\}_{i\in T})$
+for position $\mathsf{pos}$ (chain, height, round, canonical commitment
+$C$, set-root) is accepted iff
+\[
+  \mathsf{Prism}_s(\mathsf{cert}) \;=\;
+  \Big[\ \textstyle\sum_{i\in T}\mathrm{stk}(\mathsf{id}_i)\ \ge\ \tau S\ \Big]
+  \ \wedge\
+  \bigwedge_{i\in T}\mathsf{Verify}_s\!\big(pk_{\mathsf{id}_i},\ \mu(\mathsf{pos},s),\ \sigma_i\big)
+  \ \wedge\ \Phi_{\mathrm{set}},
+\]
+where $\tau \ge 2/3$, $\Phi_{\mathrm{set}}$ asserts each $\mathsf{id}_i$
+is a distinct, current member of the validator set committed by
+$\mathsf{pos}$'s set-root, and $\mu(\mathsf{pos},s)$ is the signed
+transcript of Definition~\ref{def:transcript-binding}. The
+\emph{quorum rule} --- the bracketed stake test and $\Phi_{\mathrm{set}}$
+--- is independent of $s$; only the per-signer relation
+$\mathsf{Verify}_s$ and the transcript tag depend on it.
+\end{definition}
+
+\begin{definition}[Scheme-bound transcript]
+\label{def:transcript-binding}
+The message each signer signs binds the scheme id into the domain-
+separated transcript:
+\[
+  \mu(\mathsf{pos}, s) \;=\;
+  \mathsf{H}\big(\texttt{"LUX/chain/vote/v2"} \,\|\, \mathsf{chainID}
+    \,\|\, \mathsf{height} \,\|\, \mathsf{round} \,\|\, C
+    \,\|\, \mathsf{parentC} \,\|\, \mathsf{setRoot}
+    \,\|\, s \,\|\, \mathsf{hashSuite}\big),
+\]
+with $\mathsf{H}$ a domain-separated SHAKE256 sponge (FIPS 202). The
+scheme id $s$ and the hash-suite id are covered bytes, not envelope
+metadata.
+\end{definition}
+
+\begin{lemma}[Cross-suite confusion resistance]
+\label{lem:cross-suite}
+Let $s \ne s'$. An adversary who takes a certificate honestly produced
+under scheme $s$ and re-labels it $s'$ (or splices a scheme-$s'$
+signature into a scheme-$s$ position) produces a certificate that fails
+$\mathsf{Prism}_{s'}$ except with probability at most the EUF-CMA
+advantage against the underlying scheme.
+\end{lemma}
+\begin{proof}
+$\mathsf{Prism}_{s'}$ recomputes the transcript as $\mu(\mathsf{pos}, s')$
+and checks $\mathsf{Verify}_{s'}(pk_i, \mu(\mathsf{pos}, s'), \sigma_i)$.
+The honest signers signed $\mu(\mathsf{pos}, s)$, and $s$ is a covered
+input to $\mathsf{H}$, so $\mu(\mathsf{pos}, s') \ne \mu(\mathsf{pos}, s)$
+except for a collision of $\mathsf{H}$ (negligible under FIPS 202
+collision resistance). Thus $\sigma_i$ is a signature on a
+\emph{different} message than the one $\mathsf{Verify}_{s'}$ checks;
+producing a $\sigma_i$ that verifies on $\mu(\mathsf{pos}, s')$ under
+$pk_i$ is exactly an EUF-CMA forgery against scheme $s'$. The confusion
+attack therefore fails on \emph{signature verification}, not merely on a
+byte-equality tag check --- the defense is cryptographic, not
+syntactic.
+\end{proof}
+
+\begin{proposition}[PQ migration is a profile flip]
+\label{prop:profile-flip}
+Fix a validator set and stake distribution. Let
+$\mathsf{Prism}_s, \mathsf{Prism}_{s'}$ be the predicates of
+Definition~\ref{def:scheme-predicate} under schemes $s, s'$ (e.g.\
+$s=\texttt{0x10}$ classical BLS, $s'=\texttt{0x42}$ raw
+$\mathsf{ML\text{-}DSA}\text{-}65$, or $s'=\texttt{0x52}$
+$\mathsf{Pulsar\text{-}M}\text{-}65$). Then the safety analysis --- the
+quorum-intersection argument of Theorem~\ref{thm:soundness} and of the
+no-double-finalization theorem
+(\texttt{quasar-cert-soundness.tex}, \S``Finality Admission'') --- is
+\emph{invariant} under the substitution $s \mapsto s'$; only the
+per-signer forgery bound changes from $\epsilon_s$ to $\epsilon_{s'}$.
+\end{proposition}
+\begin{proof}
+Both theorems use only two facts about the per-signer scheme: (i) that
+$\mathsf{Prism}$ accepts iff signer stake $\ge \tau S$ over distinct
+current set members --- the quorum rule, which
+Definition~\ref{def:scheme-predicate} makes independent of $s$; and (ii)
+that an honest validator's signature on one transcript cannot be forged,
+i.e.\ $\mathsf{Verify}_s$ is EUF-CMA with advantage $\epsilon_s$. Fact
+(i) is unchanged by the substitution. Fact (ii) holds for every scheme
+in the registry (BLS under co-CDH; $\mathsf{ML\text{-}DSA}$ and
+$\mathsf{Pulsar\text{-}M}$ under MLWE/MSIS; the threshold variants under
+their SUF-CMA proofs), with the bound $\epsilon_{s'}$ substituted for
+$\epsilon_s$. No other property of the primitive enters either proof.
+Hence enabling the strict-PQ profile --- which pins the validator
+identity/finality scheme to $\mathsf{ML\text{-}DSA}\text{-}65/87$ or
+$\mathsf{Pulsar\text{-}M}\text{-}65/87$ and refuses classical schemes
+--- is a re-parameterisation that preserves every safety invariant and
+strictly improves the quantum-forgery bound (from the Shor-breakable
+$\epsilon_{\mathrm{BLS}}$ to the lattice $\epsilon_{\mathrm{MLWE,MSIS}}$).
+The flip is a \emph{value}, not a new protocol.
+\end{proof}
+
+\begin{remark}[Assumption diversity, honestly]
+\label{rem:assumption-diversity}
+$\mathsf{Pulsar}$ (R-LWE / M-LWE threshold) and $\mathsf{ML\text{-}DSA}$
+(M-LWE, FIPS 204) both rest on \emph{lattice} assumptions; a single
+sufficiently strong lattice cryptanalysis would dent both. The registry
+therefore also reserves the hash-based $\mathsf{SLH\text{-}DSA}$
+(FIPS 205) family for the recovery and high-value roots
+(\texttt{RecoverySchemeID} $\texttt{0x05}$--$\texttt{0x07}$): a stateless
+hash-based signature survives a total break of lattice assumptions and
+is the genuine cross-family diversifier, not a second lattice leg. Two
+lattice legs buy defense-in-depth against implementation faults, not
+independent hardness.
+\end{remark}
 
 \section{Security}
 
