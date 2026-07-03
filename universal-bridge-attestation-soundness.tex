@@ -1,0 +1,274 @@
+%% ===================================================================
+%% universal-bridge-attestation-soundness.tex
+%%
+%% The B-Chain (transport/relay) o M-Chain (M-of-N threshold
+%% attestation) composition, and why the M/T/F separation of concerns
+%% is a load-bearing security boundary (not cosmetic).
+%%
+%% Companion to:
+%%   - quasar-cert-soundness.tex  (source-chain finality; the
+%%     No-double-finalization theorem is the finality-soundness input)
+%%   - LP-6000 (B-Chain / bridgevm), LP-7100 (M-Chain / MPC ceremonies),
+%%     LP-8200 (F-Chain / FHE), LP-7050 (chain-topology supersession).
+%% ===================================================================
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage[margin=1in]{geometry}
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=blue,urlcolor=blue}
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{definition}[theorem]{Definition}
+\newtheorem{remark}[theorem]{Remark}
+
+\title{Universal Bridge Attestation Soundness\\
+{\large B-Chain $\circ$ M-Chain, and the M/T/F separation as a
+security boundary}}
+\author{Lux Industries, Inc.\\ \texttt{research@lux.network}}
+\date{2026-07-02}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The Lux universal bridge honours a cross-chain message only when an
+$M$-of-$N$ \emph{threshold attestation}, produced by the M-Chain over a
+message that is \emph{final on the source chain}, is presented on the
+destination chain. We formalise this composition and prove
+\emph{bridge attestation soundness}: forging acceptance of a message
+that was never source-finalised reduces to either a threshold-signature
+forgery or a source-chain finality violation. Both are negligible ---
+the first by the EUF-CMA security of the M-Chain signing scheme
+(CGGMP21 / FROST), the second by the QuasarCert
+\emph{No double-finalization} theorem
+(\texttt{quasar-cert-soundness.tex}~\S``Finality Admission''). We then
+show that this reduction \emph{depends on} the M/T/F separation of
+concerns (LP-7050, LP-7100, LP-8200): braiding the M-Chain signing
+shares with F-Chain FHE compute in one VM shares a fault domain between
+the bridge-custody key and the encrypted-compute path, silently
+weakening the unforgeability assumption the whole reduction rests on.
+Separation is therefore a security boundary, not an aesthetic one.
+\end{abstract}
+
+\section{Chains and concerns}
+\label{sec:chains}
+
+\begin{definition}[Concern-owning chains]
+\label{def:mtf}
+Per LP-134 / LP-7050 the roster is $P,C,X,Q,Z,A,B,M,F$, and each of the
+former T-Chain concerns has exactly one owner:
+\begin{description}[nosep,leftmargin=2em]
+  \item[M-Chain (MVM, LP-7100):] runs $M$-of-$N$ MPC signing ceremonies
+        (CGGMP21 threshold ECDSA, FROST threshold Schnorr, Pulsar-general)
+        for bridge custody of external-chain wallets. It \emph{attests};
+        it does not decide finality and does not compute on ciphertexts.
+  \item[F-Chain (FVM, LP-8200):] runs FHE (TFHE bootstrap-key DKG,
+        encrypted-EVM execution, no-reconstruct threshold decryption). It
+        \emph{computes on encrypted data}; it holds no bridge-custody
+        signing key.
+  \item[B-Chain (\texttt{bridgevm}, LP-6000):] transports and relays
+        cross-chain messages (teleport). It \emph{carries} attestations;
+        it mints no signature and finalises no source block.
+  \item[Source chain $S$ (any Lux L1/L2):] produces QuasarCert finality
+        over its own blocks (\S\ref{sec:source}).
+\end{description}
+The M-Chain and F-Chain \emph{share} the \texttt{thresholdvm} substrate
+library but are distinct chains; \S\ref{sec:separation} shows why the
+distinctness is load-bearing.
+\end{definition}
+
+\section{Source-chain finality (the input)}
+\label{sec:source}
+
+\begin{definition}[Source finality]
+\label{def:source-final}
+For an event slot $e$ on source chain $S$ (a height, or a
+height-and-log-index), let $\mathrm{Final}_S(e, m) = 1$ iff message $m$
+is committed at $e$ by a verified QuasarCert over the canonical
+execution commitment at $e$'s height.
+\end{definition}
+
+\begin{lemma}[Finality soundness of $S$]
+\label{lem:source-sound}
+Below $S/3$ Byzantine stake on $S$, for every event slot $e$ there is at
+most one $m$ with $\mathrm{Final}_S(e,m)=1$.
+\end{lemma}
+\begin{proof}
+Immediate from the QuasarCert \emph{No double-finalization} theorem
+(\texttt{quasar-cert-soundness.tex}~\S``Finality Admission''): two
+certificates at one height over different canonical commitments require
+an honest validator to have signed both, which the durable
+decided-height sign gate forbids. A single canonical commitment fixes a
+single $m$ at $e$.
+\end{proof}
+
+\section{The M-Chain attestation and the B-Chain relay}
+\label{sec:attest}
+
+\begin{definition}[Threshold attestation scheme]
+\label{def:ts}
+The M-Chain committee of size $N$ holds an $M$-of-$N$ threshold key with
+aggregate public key $\mathsf{apk}$ (established by a DKG; no party holds
+the secret). $\mathsf{TS}.\mathsf{Sign}$ is the interactive ceremony
+requiring $\ge M$ honest participants; $\mathsf{TS}.\mathsf{Verify}(
+\mathsf{apk}, x, \sigma)\to\{0,1\}$. $\mathsf{TS}$ is EUF-CMA: an
+adversary controlling $<M$ committee members and making chosen-message
+ceremony queries forges a signature on a fresh $x$ with advantage at
+most $\epsilon_{\mathsf{TS}}$ (CGGMP21 under enhanced-existential
+unforgeability of ECDSA; FROST under the OMDL / AGM analyses).
+\end{definition}
+
+\begin{definition}[Attested bridge message and acceptance]
+\label{def:accept}
+The M-Chain emits an attestation only after checking source finality:
+\[
+  x = (\mathsf{srcID}, e, m, \mathsf{finalityProof}),\quad
+  \sigma \leftarrow \mathsf{TS}.\mathsf{Sign}(x)
+  \ \text{iff}\ \mathrm{Final}_S(e,m)=1 .
+\]
+B-Chain relays $(x,\sigma)$ to destination $D$. $D$ \textbf{accepts} $m$
+for $e$ iff
+\[
+  \mathsf{TS}.\mathsf{Verify}(\mathsf{apk}, x, \sigma)=1
+  \ \wedge\ x.m = m
+  \ \wedge\ e \notin \mathsf{consumed}_D,
+\]
+and then records $e \in \mathsf{consumed}_D$ (single-spend / replay
+guard).
+\end{definition}
+
+\section{Soundness}
+\label{sec:soundness}
+
+\begin{theorem}[Bridge attestation soundness]
+\label{thm:bridge}
+Assume (i) fewer than $M$ of the $N$ M-Chain committee members are
+Byzantine, (ii) $S$ has $<S/3$ Byzantine stake, and (iii)
+$\mathsf{TS}$ is EUF-CMA with advantage $\epsilon_{\mathsf{TS}}$. Then
+the probability that destination $D$ accepts, for some event slot $e$,
+a message $m^\star$ with $\mathrm{Final}_S(e,m^\star)=0$ is at most
+$\epsilon_{\mathsf{TS}}$. Moreover $D$ accepts at most one $m$ per $e$,
+and that $m$ is the unique source-finalised message for $e$.
+\end{theorem}
+\begin{proof}
+Suppose $D$ accepts $m^\star$ for $e$. By
+Definition~\ref{def:accept} there is a $\sigma^\star$ with
+$\mathsf{TS}.\mathsf{Verify}(\mathsf{apk}, x^\star, \sigma^\star)=1$ and
+$x^\star.m = m^\star$. Consider the message $x^\star = (\mathsf{srcID},
+e, m^\star, \cdot)$.
+
+\emph{Case A: $x^\star$ was never signed by the honest ceremony.} Then
+$\sigma^\star$ is a valid signature on a message the honest committee
+never produced. By assumption (i) the adversary controls $<M$ members,
+so producing $\sigma^\star$ is exactly an EUF-CMA forgery against
+$\mathsf{TS}$; this occurs with probability $\le \epsilon_{\mathsf{TS}}$.
+
+\emph{Case B: $x^\star$ was signed by the honest ceremony.} By
+Definition~\ref{def:accept} the ceremony signs $x^\star$ only when
+$\mathrm{Final}_S(e, m^\star)=1$. Hence $m^\star$ \emph{is}
+source-finalised, contradicting the hypothesis
+$\mathrm{Final}_S(e,m^\star)=0$.
+
+So a wrongful acceptance implies Case~A, of probability
+$\le\epsilon_{\mathsf{TS}}$. For the uniqueness clause: any accepted $m$
+falls in Case~B, so $\mathrm{Final}_S(e,m)=1$; by
+Lemma~\ref{lem:source-sound} at most one such $m$ exists, and the
+$\mathsf{consumed}_D$ guard admits $e$ only once, so $D$ accepts exactly
+that unique $m$ and no replay. $\qed$
+\end{proof}
+
+\begin{remark}[Two disjoint trust hypotheses]
+\label{rem:two-hyp}
+Bridge soundness is the \emph{conjunction} of two independent
+assumptions living on two different chains: threshold honesty on the
+M-Chain (hypothesis i) and stake honesty on the source chain
+(hypothesis ii). Neither implies the other, and each is verified in its
+own domain --- exactly the ``one concern, one chain'' discipline of
+Definition~\ref{def:mtf}. A single actor cannot forge a bridge
+acceptance without either compromising $M$ M-Chain signers or breaking
+source finality.
+\end{remark}
+
+\section{Why separation of concerns is load-bearing}
+\label{sec:separation}
+
+Theorem~\ref{thm:bridge} rests on hypothesis (iii): $\mathsf{TS}$ is
+EUF-CMA. That, in turn, presumes the threshold \emph{signing shares} are
+confined to the M-Chain's fault domain --- an adversary that can read or
+fault-inject a share does not need $M$ colluding members.
+
+\begin{definition}[Fault domain]
+\label{def:fault-domain}
+A \emph{fault domain} is a unit of code + memory + accelerator state
+within which a fault (memory-disclosure bug, side channel, malicious
+GPU kernel, shared-address-space corruption) can move secret material.
+Two subsystems in the same VM/process share a fault domain.
+\end{definition}
+
+\begin{lemma}[Braiding enlarges the trusted surface]
+\label{lem:braid}
+Let $\mathsf{TS}$'s signing shares and an FHE evaluation engine reside
+in one VM (the overloaded \texttt{thresholdvm}: MPC signing $+$
+\texttt{vms/thresholdvm/fhe} in one address space). Then the
+unforgeability advantage against $\mathsf{TS}$ is bounded not by
+$\epsilon_{\mathsf{TS}}$ alone but by
+$\epsilon_{\mathsf{TS}} + \epsilon_{\mathrm{FHE\text{-}leak}}$, where
+$\epsilon_{\mathrm{FHE\text{-}leak}}$ is the probability that a fault in
+the FHE path (a bug in an encrypted-EVM opcode, a malicious bootstrap
+kernel, a decryption side channel) discloses or corrupts a signing
+share.
+\end{lemma}
+\begin{proof}
+An adversary now has two ways to obtain a forgery: the $M$-collusion
+path (bounded by $\epsilon_{\mathsf{TS}}$) \emph{or} exercising the FHE
+path to exfiltrate/fault a share and sign directly (bounded by
+$\epsilon_{\mathrm{FHE\text{-}leak}}$, since both live in one fault
+domain by Definition~\ref{def:fault-domain}). The advantage is the
+union bound $\epsilon_{\mathsf{TS}} + \epsilon_{\mathrm{FHE\text{-}leak}}$.
+The FHE surface is large (a full encrypted-EVM opcode set plus GPU
+bootstrap kernels), so $\epsilon_{\mathrm{FHE\text{-}leak}}$ is neither
+zero nor small a priori.
+\end{proof}
+
+\begin{corollary}[M/F separation is a security boundary]
+\label{cor:separation}
+Placing MPC signing (M-Chain, LP-7100) and FHE compute (F-Chain,
+LP-8200) in \emph{distinct} chains with \emph{disjoint} fault domains
+restores hypothesis (iii) to $\epsilon_{\mathsf{TS}}$ alone, and thus
+restores Theorem~\ref{thm:bridge} to its stated bound. The separation is
+therefore not cosmetic: it removes the $\epsilon_{\mathrm{FHE\text{-}leak}}$
+term from bridge soundness. The two chains may share the
+\texttt{thresholdvm} substrate \emph{library} and even
+\texttt{constants.ThresholdVMID} (disambiguated by
+\texttt{CreateChainTx.BlockchainName}, LP-134) without sharing a fault
+domain, provided the running instances do not co-reside signing shares
+with FHE evaluation state.
+\end{corollary}
+
+\begin{remark}[Implementation status]
+\label{rem:impl-status}
+As of 2026-07-02 the node has not yet performed the split: the genesis
+registry (\texttt{node/genesis/builder/registry.go}) lists a single
+overloaded \texttt{T-Chain} entry and no M/F rows, and the
+\texttt{thresholdvm} package still braids MPC signing with
+\texttt{vms/thresholdvm/fhe}. Corollary~\ref{cor:separation} is thus the
+\emph{target} security posture; LP-7050~\S8 tracks the migration. Until
+the split lands, bridge soundness carries the
+$\epsilon_{\mathrm{FHE\text{-}leak}}$ term of Lemma~\ref{lem:braid} and
+should be treated accordingly (keep the FHE surface off any node that
+holds live M-Chain custody shares).
+\end{remark}
+
+\section{Conclusion}
+The universal bridge is sound exactly when two disjoint honesty
+hypotheses hold on two different chains, and its soundness proof
+\emph{requires} the M/T/F separation to keep the threshold-signature
+assumption clean. Separation of concerns here is a theorem hypothesis,
+not a style preference.
+
+\end{document}
