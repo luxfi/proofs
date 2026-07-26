@@ -1,0 +1,966 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm,amsfonts}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{xcolor}
+\usepackage{geometry}
+\geometry{margin=1in}
+
+\hypersetup{colorlinks=true,linkcolor=black,citecolor=blue,urlcolor=blue}
+
+% Absorb the few overfull boxes from long unbreakable \texttt{} identifiers
+% (shieldedPoolTotal, RefuseUnderStrictPQ, MarkNullifierSpent) without
+% loosening normal lines.
+\emergencystretch=3em
+
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\newtheorem{proposition}[theorem]{Proposition}
+\theoremstyle{definition}
+\newtheorem{definition}{Definition}
+\newtheorem{assumption}{Assumption}
+\theoremstyle{remark}
+\newtheorem{remark}{Remark}
+
+% Status macros, identical in spirit to the LP-225 specification: every
+% claim is marked IMPLEMENTED (true of code today), DESIGN-ONLY (specified,
+% not yet wired), or CRYPTO-REVIEW (a cryptographic obligation gated on
+% sign-off). The proof is at the MODEL level; these macros keep the
+% model/implementation boundary honest on every line that touches code.
+\newcommand{\IMPL}{\textbf{[IMPLEMENTED]}}
+\newcommand{\DESIGN}{\textbf{[DESIGN-ONLY]}}
+\newcommand{\CRYPTO}{\textbf{[CRYPTO-REVIEW]}}
+
+% Notation for the value function and the per-asset pools.
+\newcommand{\Val}{\mathsf{V}}
+\newcommand{\spend}{\mathsf{S}}
+\newcommand{\lock}{\mathsf{L}}
+\newcommand{\commit}{\mathsf{C}}
+\newcommand{\pool}{\mathsf{P}}
+\newcommand{\total}{\mathrm{total}}
+\newcommand{\NF}{\mathsf{NF}}
+\newcommand{\CM}{\mathsf{CM}}
+
+\title{Double-Spend and Inflation Impossibility for the\\
+       X-Chain Settlement Spine with a Z-Chain Shielded Pool\\
+       {\large A model-level soundness proof, with the implementation
+       obligations it leaves open}}
+\author{Zach Kelling \\
+\textit{Lux Industries, Inc.}\\
+\texttt{research@lux.network}}
+\date{}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+The X-Chain Settlement Spine (XSS, LP-225) collapses Lux's parallel
+spendable ledgers into one visible UTXO ledger on X plus one shielded
+value pool on Z, joined by a shield/unshield bridge. This note proves,
+\emph{at the model level}, that the XSS state machine makes double-spend
+and inflation (unbounded mint) impossible \emph{provided} its primitives
+are implemented to specification, and it states exactly which
+cryptographic assumptions and proof obligations the implementation must
+discharge for the model to bind to the deployed system. We formalise the
+global state as a per-asset value function
+$\Val = \spend + \lock + \commit + \pool$ over the spendable, locked,
+committed, and shielded pools, and give the value-delta of every
+transition. \textbf{Theorem~1} (no double-spend): every UTXO and every
+shielded note is consumed at most once, from X's total order, the
+completeness and persistence of the consumed/nullifier sets, and an
+idempotent consume guard. \textbf{Theorem~2} (conservation / no
+inflation): $\Val$ is invariant under every transition except a single
+bounded, schedule-enforced \texttt{RewardMint}; in particular shield and
+unshield are value-neutral because X tracks a scalar
+\texttt{shieldedPoolTotal} that is debited and credited in lockstep.
+\textbf{Theorem~3} (the turnstile backstop, the headline result):
+\emph{even if the shielded validity-proof system is unsound}---an
+adversary forges shielded proofs at will---the value extractable from the
+shielded pool is bounded by \texttt{shieldedPoolTotal}, because X
+independently maintains that scalar and rejects, at execution, any
+unshield that would drive it negative. This converts the Zcash-class
+counterfeiting failure (the 2018 BCTV14 soundness flaw, CVE-2019-7167,
+which permitted \emph{unbounded} counterfeiting of shielded value below
+the layer at which per-pool monitoring acts) into a bounded, contained
+failure, by making the pool-total balance a first-class
+\emph{consensus-layer transition precondition} rather than a monitoring
+heuristic. We are explicit about scope: \textbf{the shield/unshield
+execution is design-only today} (LP-225; the ZKVM handlers are stubs),
+so what is proven is the implication ``spec-faithful primitives $\Rightarrow$
+safety,'' not a claim about the current stubbed code. The five assumptions
+A1--A5 and their discharge sites are tabulated; Theorem~3 is precisely the
+statement that the safety floor degrades \emph{gracefully} under failure
+of the strongest assumption (A4).
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+%% ===================================================================
+\section{Scope, and what is and is not claimed}
+\label{sec:scope}
+
+This is a \textbf{design-level soundness proof}. It proves a conditional:
+\begin{quote}
+\emph{If} the XSS primitives are implemented faithfully to the LP-225
+specification and the assumptions A1--A5 of Section~\ref{sec:assumptions}
+hold, \emph{then} the safety properties ``no double-spend'' (Theorem~1)
+and ``no inflation'' (Theorem~2) hold, and the contingency bound
+(Theorem~3) holds.
+\end{quote}
+It does \emph{not} claim that the current implementation has these
+properties. Per LP-225~\cite{lp225}, the shield/unshield \emph{execution}
+is a stub (\texttt{lux/chains/zkvm/handlers.go} returns
+\texttt{"Not implemented"} on the proof-generation and conversion paths),
+and \textbf{no code tracks the cross-pool total} that Theorems~2 and~3
+depend on: a search of the ZKVM and precompile trees finds no
+visible-plus-shielded accounting. The scalar this proof calls
+\texttt{shieldedPoolTotal} is therefore a \DESIGN{} object; establishing
+and enforcing it is the central new obligation the proof identifies.
+
+What \emph{is} implemented, and what the proof builds on as ground truth,
+is the X-side conservation primitive and the Z-side note/nullifier
+objects:
+\begin{itemize}[leftmargin=2em,nosep]
+\item \IMPL{} X's syntactic conservation rule
+  $\mathrm{inputs}\ge\mathrm{outputs}+\mathrm{fee}$, per asset, applied to
+  every xvm transaction type through \texttt{lux.VerifyTx}
+  (\texttt{node/vms/xvm/txs/\allowbreak executor/\allowbreak syntactic\_verifier.go},
+  calling
+  \texttt{node/vms/components/\allowbreak lux/transferables.go:209}; the
+  per-asset flow check is \texttt{FlowChecker.Verify} in
+  \texttt{node/vms/components/\allowbreak lux/flow\_checker.go}).
+\item \IMPL{} the Z note model: \texttt{Note} with \texttt{Commitment} and
+  \texttt{Nullifier}, the \texttt{TransactionTypeShield} /
+  \texttt{TransactionTypeUnshield} enum members, and persistent
+  spent-nullifier tracking
+  (\texttt{node/chains/zkvm/transaction.go:28--29,108--120};
+  \texttt{node/chains/zkvm/nullifier\_db.go},
+  \texttt{MarkNullifierSpent}/\texttt{IsNullifierSpent}).
+\item \IMPL{} the commitment and nullifier primitives: a
+  \texttt{CommitmentScheme} interface with Poseidon2 (PQ-safe,
+  hash-based) and Pedersen instantiations, and a nullifier derived as
+  $\textsf{Poseidon2.NullifierHash}(\textit{nk},$ $\textit{commitment},$
+  $\textit{leafIndex})$
+  (\texttt{node/precompile/\allowbreak zk/commitment.go:15--75,156--163}).
+\item \IMPL{} the two validity verifiers XSS composes at the boundary:
+  P3Q (ML-DSA-65 / FIPS-204~\cite{fips204}, precompile \texttt{0x012205},
+  \texttt{node/precompile/p3q/contract.go}; verifier core is
+  \texttt{mldsa.VerifySignatureCtx}) and starkfri (STARK/FRI, precompile
+  \texttt{0x012220}, magic header \texttt{"P3Q1"},
+  \texttt{node/precompile/starkfri/contract.go}).
+\end{itemize}
+
+\noindent We mark every model object with its status as we use it. The
+reader should treat an \IMPL{} citation as ``this mechanism exists and the
+model reuses it,'' a \DESIGN{} mark as ``this mechanism is specified but
+not yet wired---the proof is conditional on it being wired to spec,'' and
+a \CRYPTO{} mark as ``this is a cryptographic obligation gated on
+sign-off (Section~\ref{sec:assumptions}).''
+
+%% ===================================================================
+\section{The model}
+\label{sec:model}
+
+We mirror the LP-225 model (\cite{lp225}, \S2, \S5, \S9) and make its
+state machine precise enough to carry value-deltas. We fix a single asset
+$a$ throughout; all sums are per-asset and all transitions preserve the
+asset, so the multi-asset statement is the conjunction over assets (the
+implemented \texttt{FlowChecker} is itself per-asset).
+
+\subsection{State}
+
+\begin{definition}[Global state]
+\label{def:state}
+A state $\Sigma$ consists of:
+\begin{enumerate}[leftmargin=2em,nosep]
+\item A finite \textbf{UTXO set} $U$. Each UTXO $u$ has a value
+  $\mathrm{val}(u)\in\mathbb{N}$ (a \texttt{uint64} amount in code) and a
+  \textbf{state} $\mathrm{st}(u)\in\{\textsc{spendable},\textsc{locked},
+  \textsc{consumed}\}$. \IMPL{} for \textsc{spendable}/\textsc{consumed}
+  (an xvm UTXO either exists and is spendable, or has been consumed as a
+  transaction input); \DESIGN{} for \textsc{locked} (the \texttt{XLock}
+  output type does not exist in xvm today, LP-225~\S3).
+\item A set of \textbf{commitment objects} $K$ (the \texttt{XLock} and
+  \texttt{XAppCommitment} of LP-225 \S3--\S3b). Each $\kappa\in K$ carries
+  an amount $\mathrm{amt}(\kappa)$, a target $(\mathrm{chain},
+  \mathrm{module})$ scope, and a Boolean \texttt{consumed} flag, set true
+  at most once. \DESIGN{}.
+\item A \textbf{shielded pool} on Z: a commitment set $\CM$ (the note
+  commitment tree), a spent-nullifier set $\NF$, and---this is the new
+  object---a scalar \texttt{shieldedPoolTotal}, written $\pool\in\mathbb{N}$,
+  \emph{maintained on X}. $\CM,\NF$ are \IMPL{}
+  (\texttt{state\_tree.go}, \texttt{nullifier\_db.go}); $\pool$ is
+  \DESIGN{} (no code tracks it, \S\ref{sec:scope}).
+\end{enumerate}
+\end{definition}
+
+\begin{definition}[Pool sums and the value function]
+\label{def:V}
+For a state $\Sigma$, define the per-asset pool sums
+\begin{align*}
+\spend(\Sigma) &= \!\!\sum_{\substack{u\in U\\ \mathrm{st}(u)=\textsc{spendable}}}\!\!\mathrm{val}(u)
+  &&\text{(spendable visible value),}\\
+\lock(\Sigma) &= \!\!\sum_{\substack{u\in U\\ \mathrm{st}(u)=\textsc{locked}}}\!\!\mathrm{val}(u)
+  &&\text{(value inside live UTXO locks),}\\
+\commit(\Sigma) &= \!\!\sum_{\substack{\kappa\in K\\ \neg\,\kappa.\texttt{consumed}}}\!\!\mathrm{amt}(\kappa)
+  &&\text{(value inside live commitments),}\\
+\pool(\Sigma) &= \texttt{shieldedPoolTotal}
+  &&\text{(X's scalar mirror of shielded value).}
+\end{align*}
+The \textbf{total value function} is
+\[
+  \Val(\Sigma) \;=\; \spend(\Sigma) + \lock(\Sigma) + \commit(\Sigma) + \pool(\Sigma).
+\]
+\end{definition}
+
+\begin{remark}[$\pool$ is a scalar, not a sum over notes]
+\label{rem:scalar}
+The decisive design choice is that $\pool$ is a single scalar X maintains,
+\emph{not} a quantity X recomputes by summing note values inside the
+shielded pool. X cannot read note values---they are hidden. X instead
+tracks the pool total by \emph{bookkeeping the boundary}: every shield
+credits $\pool$ by the (public) burned amount, every unshield debits
+$\pool$ by the (public) minted amount. The shielded supply
+$\sum_{\text{live notes}}\mathrm{val}$ is private and lives on Z; the
+scalar $\pool$ is its public, X-enforced upper bound. The entire strength
+of Theorem~3 comes from this: X's $\pool$ does not trust the proof system
+to be sound; it trusts only its own arithmetic on public boundary
+amounts. The \emph{soundness} of the proof system governs whether
+$\pool=\sum_{\text{live notes}}\mathrm{val}$ holds with equality
+(no \emph{internal} shielded inflation); its \emph{failure} can at worst
+make the shielded side believe it holds more than $\pool$, and that excess
+is exactly what the turnstile refuses to let out.
+\end{remark}
+
+\subsection{Transitions}
+\label{sec:transitions}
+
+A transition $t:\Sigma\to\Sigma'$ is one of the following. For each we
+give its precondition, its effect, and its value-delta
+$\Delta\Val(t)=\Val(\Sigma')-\Val(\Sigma)$. We write $\mathrm{val}$ of a
+set of UTXOs for the sum of their values, $f\ge 0$ for the burned fee.
+
+\begin{description}[leftmargin=1.5em,style=nextline]
+
+\item[\textsc{spend}] Consume spendable inputs $I\subseteq U$, create
+  spendable outputs $O$. \textbf{Precondition (P-conserve):}
+  $\mathrm{val}(I) = \mathrm{val}(O) + f$, and every $u\in I$ is
+  \textsc{spendable}. \textbf{Effect:} each $u\in I$ becomes
+  \textsc{consumed}; $O$ are added \textsc{spendable}. The fee $f$ is
+  burned (leaves the asset's circulating value; we account for it
+  below). \IMPL{}: this is exactly \texttt{lux.VerifyTx} +
+  consume-once on inputs. $\Delta\Val = -(\mathrm{val}(I)) +
+  \mathrm{val}(O) = -f \le 0$.
+
+\item[\textsc{lock}] Consume spendable inputs $I$; create one live
+  commitment $\kappa$ with $\mathrm{amt}(\kappa)=\mathrm{val}(I)-f$ (or,
+  in the \texttt{XLock} variant where the lock is the sole output and
+  carries the full amount, $\mathrm{amt}(\kappa)=\mathrm{val}(I)$ with
+  $f=0$). \textbf{Precondition:} P-conserve with $\kappa$ as the output;
+  $I$ all \textsc{spendable}. \textbf{Effect:} $I\to\textsc{consumed}$;
+  $\kappa$ live. \DESIGN{} (LP-225 \texttt{LockTx}). $\Delta\Val=-f\le0$
+  ($\spend$ down by $\mathrm{val}(I)$, $\commit$ up by
+  $\mathrm{val}(I)-f$).
+
+\item[\textsc{settle}] Consume a set of live commitments
+  $\{\kappa_i\}$ \emph{gated by an accepted proof}; create spendable
+  outputs $O$ and/or shielded outputs (handled by composing
+  \textsc{shield}, below). \textbf{Precondition:} (i) each $\kappa_i$ is
+  live and shares the one $(\mathrm{chain},\mathrm{module})$ the proof is
+  scoped to; (ii) the proof verifies under \texttt{VerifyChainCommitment}
+  (P3Q and/or starkfri); (iii) \textbf{settlement conservation}
+  $\sum_i\mathrm{amt}(\kappa_i) = \mathrm{val}(O) +
+  (\text{shielded outputs})$. \textbf{Effect:} each $\kappa_i.\texttt{consumed}
+  \gets\textsc{true}$; $O$ added \textsc{spendable}; shielded outputs go
+  through \textsc{shield}. \DESIGN{} (LP-225 \texttt{SettleTx}); verifiers
+  \IMPL{}. With no shielded leg, $\Delta\Val = 0$ ($\commit$ down,
+  $\spend$ up, equal). (With a shielded leg the delta is that of the
+  composed \textsc{shield}, i.e.\ still $0$.)
+
+\item[\textsc{shield}] Burn a spendable amount $v$ on X; add a commitment
+  $C$ to $\CM$ on Z; credit $\pool \gets \pool + v$. \textbf{Precondition:}
+  a named spendable UTXO (or settlement leg) of value $v$ exists; a
+  validity proof binds $C$ to value exactly $v$ of the asset.
+  \textbf{Effect:} the named visible value is consumed
+  ($\spend$ down by $v$); $C\in\CM$; $\pool\gets\pool+v$.
+  \DESIGN{} execution (handler stub); model objects \IMPL{}.
+  $\Delta\Val = -v + v = 0$.
+
+\item[\textsc{unshield}] Spend a live Z note of value $v$: publish its
+  nullifier $N$; \emph{debit} $\pool \gets \pool - v$; mint a spendable
+  UTXO of value $v$ on X. \textbf{Precondition (U1--U3):} (U1) $N\notin\NF$;
+  (U2) a validity proof asserts the note was live and committed to value
+  $v$; (U3) \textbf{turnstile floor} $\pool \ge v$. \textbf{Effect:}
+  $N$ added to $\NF$ (the note is nullified); $\pool\gets\pool-v$; a
+  spendable UTXO of value $v$ added ($\spend$ up by $v$).
+  \DESIGN{} execution; $\NF$ tracking \IMPL{}; (U3) and $\pool$ \DESIGN{}.
+  $\Delta\Val = -v + v = 0$.
+
+\item[\textsc{rewardMint}] The \emph{only} value-increasing transition.
+  Create a spendable amount $r$ where $r = \mathrm{Sched}(h)$ is the
+  amount the deterministic, X-enforced monetary schedule prescribes at
+  height $h$. \textbf{Precondition:} $r$ equals the scheduled amount for
+  $h$ and the per-height issuance has not already been minted.
+  \textbf{Effect:} $\spend$ up by $r$. \DESIGN{} as an \emph{X-level}
+  primitive (LP-225 \S10 flags that P's reward minting today lives on the
+  wrong chain and must move to an X-settled, schedule-gated result).
+  $\Delta\Val = +r$, with $r$ a bounded, deterministic function of
+  consensus height.
+\end{description}
+
+\begin{remark}[On the fee]
+\label{rem:fee}
+The fee $f$ is value removed from the asset's circulating supply (burned).
+It makes \textsc{spend}/\textsc{lock} value-\emph{decreasing} by $f$, never
+increasing. For the conservation theorem we treat the burned fee as a
+distinguished sink: define the conserved quantity as $\Val(\Sigma) +
+\mathrm{Burned}(\Sigma)$ where $\mathrm{Burned}$ accumulates fees. Then
+$\Delta(\Val+\mathrm{Burned}) = 0$ for \textsc{spend}/\textsc{lock}. Inflation
+is the property that $\Val$ never \emph{rises} except by \textsc{rewardMint};
+fees can only lower it, so they never threaten the no-inflation bound and we
+fold them into the ``$\le$'' direction without further comment. (In code the
+fee burn is \texttt{fc.Produce(feeAssetID, feeAmount)} in \texttt{VerifyTx}:
+the fee is counted on the produced/output side, so $\mathrm{inputs}\ge
+\mathrm{outputs}+\mathrm{fee}$ is what \texttt{FlowChecker.Verify} enforces.)
+\end{remark}
+
+\subsection{Execution semantics}
+\label{sec:exec}
+
+\begin{definition}[Ledger execution]
+\label{def:ledger}
+The ledger is the sequence of states $\Sigma_0,\Sigma_1,\dots$ where
+$\Sigma_0$ is genesis and $\Sigma_{j+1}$ results from applying the
+transitions of block $j$, in the block's order, each only if its
+precondition holds in the then-current state (a transition whose
+precondition fails is \emph{rejected}: it is not applied and
+$\Sigma$ is unchanged by it). X's consensus fixes a single total order on
+all blocks and hence on all applied transitions (Assumption~A1).
+\end{definition}
+
+This is the operational content of LP-225's ``X owns the total ordering of
+all asset movements'' and ``other chains compute, X settles'': every
+state-moving transition is an X transition, applied in X's order, gated by
+an X-checked precondition. Computing modules (P, D, B, C, Q) produce only
+\emph{proofs} and \emph{settlement requests}; the value movement is the
+\textsc{settle} transition on X (LP-225 \S2, property S3).
+
+%% ===================================================================
+\section{Assumptions and proof obligations}
+\label{sec:assumptions}
+
+The theorems are proven relative to the following assumptions. Each is the
+implementation contract for one mechanism; each names where it must be
+discharged and flags what is \DESIGN{} today. The numbering A1--A5 is
+referenced throughout.
+
+\begin{assumption}[Total order and atomic apply]
+\label{a:order}
+X consensus assigns all applied transitions a single total order, and each
+transition is applied atomically: its precondition is evaluated against
+the unique pre-state and, if it holds, its entire effect is applied before
+the next transition; if it fails, none of its effect is applied. No two
+conflicting histories are both finalised (no fork double-apply).
+\\\textbf{Discharge:} Lux consensus safety/finality (proven separately:
+\texttt{lean/Consensus/Safety.lean}, \texttt{Finality.lean}, BFT quorum
+intersection; QuasarCert soundness~\cite{quasarsound}). Within a single
+chain, transaction application is sequential and atomic (xvm block
+execution). \IMPL{} (consensus + xvm execution).
+\end{assumption}
+
+\begin{assumption}[Consumed-set / nullifier-set completeness and persistence]
+\label{a:sets}
+(i) The set of consumed UTXO references is complete and persistent: a UTXO
+consumed by any applied transition is, at every later height, recorded as
+consumed and unavailable as an input. (ii) The spent-nullifier set $\NF$ is
+complete and persistent: a nullifier published by any applied
+\textsc{unshield} (or Z-internal spend) is, at every later height, in
+$\NF$. (iii) Both are checked \emph{before} a consume is permitted.
+\\\textbf{Discharge:} UTXO consume-once is \IMPL{} (xvm input semantics;
+the DEX atomic rail's \texttt{MarkConsumed}/\texttt{IsConsumed} persisted
+set, \texttt{node/chains/dexvm/atomic.go}). Nullifier persistence is
+\IMPL{} (\texttt{node/chains/zkvm/nullifier\_db.go} writes each spent
+nullifier to the backing \texttt{database.Database}; \texttt{IsNullifierSpent}
+reads it). \textbf{Cross-boundary completeness}---that the \emph{same} $\NF$
+is the arbiter for both X-side unshield and Z-side spend, with no partition
+admitting two consumptions---is \CRYPTO{}/\DESIGN{} (LP-225 \S10 item 2, S4).
+\end{assumption}
+
+\begin{assumption}[Commitment scheme: binding and hiding]
+\label{a:commit}
+The note commitment scheme is computationally \emph{binding} (no efficient
+adversary opens one commitment $C$ to two distinct $(v,\cdot)$ pairs) and
+\emph{hiding} (a commitment reveals nothing about $v$). The nullifier is
+\emph{deterministically and uniquely} derived from a note (one live note
+$\Rightarrow$ exactly one nullifier), and \emph{unforgeable} (cannot
+produce a valid nullifier for a note one cannot open).
+\\\textbf{Discharge:} \texttt{CommitmentScheme} with Poseidon2 (binding
+under collision-resistance of the Poseidon2 sponge; PQ-safe) and Pedersen
+(binding under discrete-log; hiding information-theoretically)
+(\texttt{node/precompile/zk/commitment.go:15--75}). Nullifier
+determinism is \IMPL{} in form
+($\textsf{NullifierHash}(\textit{nk},C,\textit{leafIndex})$,
+\texttt{commitment.go:156--163}). \textbf{Binding/hiding as deployed},
+and the unforgeability of the nullifier under the chosen $\textit{nk}$
+derivation, are \CRYPTO{} (LP-225 \S10 item 1; the scheme must be pinned
+and reviewed).
+\end{assumption}
+
+\begin{assumption}[Validity-proof soundness]
+\label{a:proof}
+The shielded validity-proof system (the STARK/FRI AIR verified by starkfri,
+and/or the P3Q attestation) is \emph{sound}: an accepting proof implies the
+asserted statement is true (the note was live and committed to value $v$;
+the settled state transition was valid and the deltas are exactly the
+claimed ones), except with negligible probability.
+\\\textbf{Discharge:} starkfri verifies a STARK/FRI proof
+(\texttt{node/precompile/starkfri/contract.go}); P3Q verifies an ML-DSA-65
+attestation (\texttt{node/precompile/p3q/contract.go}). \textbf{The
+settlement/shield AIR does not exist yet} and must be specified and
+reviewed; the P3Q attestation's soundness reduces to honesty of the
+attesting set (a trusted-operator assumption). Both are \CRYPTO{}
+(LP-225 \S10 items 4--5). \textbf{Theorem~3 is precisely the statement
+that the safety floor survives the failure of this assumption.}
+\end{assumption}
+
+\begin{assumption}[Collision-resistant hash]
+\label{a:hash}
+The hash used for UTXO identifiers, commitment-tree nodes, and nullifiers
+is collision-resistant, so distinct objects have distinct identifiers
+(no UTXO/note aliasing) except with negligible probability.
+\\\textbf{Discharge:} the hash families in use (Poseidon2 for the shielded
+side; the xvm UTXO id hashing on the visible side). Standard assumption;
+the specific instantiations are \CRYPTO{}-pinned with the commitment scheme.
+\end{assumption}
+
+\begin{remark}[Why A4 is special]
+\label{rem:a4special}
+A1, A2, A5 are discharged by mechanisms that exist and are largely
+\IMPL{}. A3 is a standard, well-understood primitive obligation. A4 is the
+\emph{hardest and least settled}: the settlement/shield AIR is not yet
+written, and the P3Q attestation path is an explicit trusted-operator
+assumption. A system whose safety \emph{rests entirely} on A4 is exactly a
+system with the Zcash failure mode: an A4 break is a counterfeiting break.
+The architectural thesis of XSS, formalised in Theorem~3, is that the
+turnstile (U3 plus X's independent $\pool$) bounds the damage of an A4
+failure to $\pool$---so A4 governs \emph{privacy-pool internal} correctness
+and the equality $\pool = \sum_{\text{live notes}}\mathrm{val}$, but not the
+\emph{global} no-inflation floor.
+\end{remark}
+
+%% ===================================================================
+\section{Theorem 1: No double-spend}
+\label{sec:t1}
+
+\begin{theorem}[No double-spend]
+\label{thm:double}
+Under A1 (total order, atomic apply), A2 (consumed/nullifier set
+completeness, persistence, check-before-consume), and A5 (collision
+resistance), every UTXO and every shielded note can be consumed by at most
+one applied transition over the entire ledger history. Equivalently: no
+applied transition consumes a UTXO already \textsc{consumed} or a
+commitment already \texttt{consumed}, and no applied \textsc{unshield} (or
+Z-spend) publishes a nullifier already in $\NF$.
+\end{theorem}
+
+\begin{proof}
+Fix a UTXO $u$ (the note case is identical with ``nullifier $N$ in $\NF$''
+in place of ``$\mathrm{st}(u)=\textsc{consumed}$'', and ``commitment
+$\kappa$ with $\kappa.\texttt{consumed}$'' for the lock case). By A5,
+$u$ has a unique identifier, so ``the same UTXO'' is well defined: two
+references with the same id are the same object, and no two distinct
+objects collide.
+
+Suppose for contradiction that two applied transitions $t_1,t_2$ each
+consume $u$. By A1 the applied transitions are totally ordered; without
+loss of generality $t_1$ precedes $t_2$. Consider the moment $t_2$ is
+evaluated. By the atomic-apply clause of A1, $t_1$'s \emph{entire} effect
+was applied before $t_2$ is evaluated, and by A2(i) the consume effect of
+$t_1$ is recorded and \emph{persistent}: at the height of $t_2$, $u$ is
+recorded \textsc{consumed} (resp.\ $N\in\NF$, resp.\
+$\kappa.\texttt{consumed}=\textsc{true}$). By A2(iii) the consume guard
+checks this set \emph{before} permitting the consume: $t_2$'s precondition
+requires its inputs be \textsc{spendable} (for \textsc{spend}/\textsc{lock}),
+its commitments be live (for \textsc{settle}), or $N\notin\NF$ (for
+\textsc{unshield}). Each of these fails for $u$ (resp.\ $\kappa$, $N$).
+Hence $t_2$'s precondition is false; by Definition~\ref{def:ledger} a
+transition with a false precondition is rejected and applies no effect.
+This contradicts the assumption that $t_2$ is an \emph{applied} transition
+consuming $u$.
+
+Therefore at most one applied transition consumes $u$ (resp.\ $\kappa$,
+$N$). As $u$ was arbitrary, this holds for every UTXO, every commitment,
+and every note. $\qed$
+\end{proof}
+
+\begin{remark}[The three pillars are each necessary]
+\label{rem:t1pillars}
+The proof uses exactly three facts, and each is load-bearing:
+(i) \emph{total order + atomicity} (A1) is what lets us speak of ``$t_1$
+before $t_2$'' and guarantees $t_1$ fully landed before $t_2$ is judged---
+a fork that finalised two conflicting histories would let both consume $u$,
+which is why Theorem~1 \emph{reduces} double-spend safety to consensus
+safety; (ii) \emph{completeness + persistence} (A2 i,ii) is what makes the
+record of $t_1$'s consume visible at $t_2$'s height---a consumed-set that
+forgot, or that lived only in one partition, would not block $t_2$; (iii)
+\emph{check-before-consume} (A2 iii) is the idempotent guard---the
+precondition reads the set and refuses. Drop any one and the proof fails,
+which is the precise sense in which these are the implementation
+obligations for double-spend safety. The cross-boundary case (a note both
+unshielded on X and re-spent on Z) is the statement that A2(ii) holds for a
+\emph{single} $\NF$ shared across the seam; LP-225 \S10(2) flags this as the
+specific \CRYPTO{} obligation, and it is the hypothesis the theorem makes
+explicit, not one it discharges.
+\end{remark}
+
+%% ===================================================================
+\section{Theorem 2: Conservation and no inflation}
+\label{sec:t2}
+
+\begin{theorem}[Conservation / no inflation]
+\label{thm:conserve}
+Under A1, the value function $\Val$ of Definition~\ref{def:V} satisfies, for
+every applied transition $t$,
+\[
+  \Delta\Val(t) =
+  \begin{cases}
+    +\,\mathrm{Sched}(h) & t = \textsc{rewardMint at height } h,\\
+    -\,f \le 0 & t \in \{\textsc{spend},\textsc{lock}\}\ \text{(fee } f \ge 0),\\
+    0 & t \in \{\textsc{settle},\textsc{shield},\textsc{unshield}\}.
+  \end{cases}
+\]
+Consequently, over any run $\Sigma_0\to\cdots\to\Sigma_n$,
+\[
+  \Val(\Sigma_n) \;=\; \Val(\Sigma_0)
+    \;+\; \sum_{\substack{j:\ t_j=\textsc{rewardMint}}}\!\!\mathrm{Sched}(h_j)
+    \;-\; \sum_{\substack{j:\ t_j\in\{\textsc{spend},\textsc{lock}\}}}\!\! f_j.
+\]
+In particular $\Val$ never increases except by \textsc{rewardMint}, and the
+total increase up to height $H$ is exactly
+$\sum_{h\le H}\mathrm{Sched}(h)$, a bounded, deterministic, X-enforced
+quantity. No transition admits unbounded or out-of-schedule mint.
+\end{theorem}
+
+\begin{proof}
+We compute $\Delta\Val$ transition-by-transition, using
+Definition~\ref{def:V} ($\Val=\spend+\lock+\commit+\pool$) and the effects
+of Section~\ref{sec:transitions}. By A1 each applied transition's effect is
+applied atomically to a unique pre-state, so the deltas compose additively
+along the run, giving the displayed telescoping sum once the per-transition
+deltas are established.
+
+\emph{\textsc{spend}.} Inputs $I$ (\textsc{spendable}) become
+\textsc{consumed}: $\spend$ decreases by $\mathrm{val}(I)$. Outputs $O$
+added \textsc{spendable}: $\spend$ increases by $\mathrm{val}(O)$. The
+precondition P-conserve forces $\mathrm{val}(I)=\mathrm{val}(O)+f$. Hence
+$\Delta\spend = \mathrm{val}(O)-\mathrm{val}(I) = -f$; $\lock,\commit,\pool$
+unchanged. $\Delta\Val=-f\le0$. \emph{This is the implemented invariant:}
+\texttt{FlowChecker.Verify} rejects unless $\mathrm{produced}\le
+\mathrm{consumed}$ per asset, i.e.\ $\mathrm{val}(O)+f\le\mathrm{val}(I)$,
+so a spend can never make $\Val$ rise.
+
+\emph{\textsc{lock}.} $I$ (\textsc{spendable}) $\to$ \textsc{consumed}:
+$\spend$ down by $\mathrm{val}(I)$. One commitment $\kappa$ with
+$\mathrm{amt}(\kappa)=\mathrm{val}(I)-f$ becomes live: $\commit$ up by
+$\mathrm{val}(I)-f$. $\Delta\Val = -\mathrm{val}(I)+(\mathrm{val}(I)-f)
+= -f\le0$. (Value moves spendable~$\to$~committed, less the burned fee.)
+
+\emph{\textsc{settle} (no shielded leg).} Commitments $\{\kappa_i\}$ go
+\texttt{consumed}: $\commit$ down by $\sum_i\mathrm{amt}(\kappa_i)$. Outputs
+$O$ added \textsc{spendable}: $\spend$ up by $\mathrm{val}(O)$. Precondition
+(iii) settlement-conservation forces $\sum_i\mathrm{amt}(\kappa_i)=
+\mathrm{val}(O)$. $\Delta\Val = -\sum_i\mathrm{amt}(\kappa_i)+\mathrm{val}(O)
+= 0$. (With a shielded leg, the shielded portion is realised by composing
+\textsc{shield}, whose delta is $0$ by the next case; settlement-conservation
+then reads $\sum_i\mathrm{amt}(\kappa_i)=\mathrm{val}(O)+v_{\text{shielded}}$,
+and the total delta is still $0$.) X checks the sum directly and does
+\emph{not} re-execute the module---this is the LP-224 ``agree on the result,
+check the sum'' discipline.
+
+\emph{\textsc{shield}.} A visible $v$ is burned: $\spend$ down by $v$. A
+commitment $C$ is added to $\CM$ and $\pool\gets\pool+v$: $\pool$ up by $v$.
+$\commit,\lock$ unchanged. $\Delta\Val = -v + v = 0$. This is the turnstile
+entry: the value does not vanish from $\Val$, it moves from the visible
+term $\spend$ into the scalar term $\pool$. (Note the proof system is
+\emph{not} invoked to compute the delta: the burned $v$ is a public X
+amount, and $\pool$ is credited by that same public $v$. A4 governs only
+whether $C$ \emph{inside} the pool is a faithful commitment to $v$, not the
+$\Delta\Val=0$ accounting.)
+
+\emph{\textsc{unshield}.} A note of value $v$ is nullified and $\pool\gets
+\pool-v$: $\pool$ down by $v$ (and U3 guarantees $\pool\ge v$ beforehand, so
+$\pool$ stays in $\mathbb{N}$). A spendable UTXO of value $v$ is minted:
+$\spend$ up by $v$. $\Delta\Val = -v + v = 0$. The turnstile exit: value
+moves from $\pool$ back to $\spend$, conserving $\Val$. Again the debit uses
+the \emph{public} minted amount $v$, matched to the credit on $\spend$.
+
+\emph{\textsc{rewardMint}.} A spendable $r=\mathrm{Sched}(h)$ is created:
+$\spend$ up by $r$. No pool is debited. $\Delta\Val = +r$. By precondition,
+$r$ is exactly the schedule's per-height amount and the per-height issuance
+is minted at most once, so the cumulative increase to height $H$ is
+$\sum_{h\le H}\mathrm{Sched}(h)$, bounded and deterministic.
+
+Summing along the run (the deltas compose by A1's atomic apply) gives the
+displayed equation. Every term except the \textsc{rewardMint} sum is
+$\le 0$, so $\Val$ never rises except by \textsc{rewardMint}; and that rise
+is the bounded schedule total. $\qed$
+\end{proof}
+
+\begin{corollary}[Boundary turnstile is value-neutral; visible $+$ shielded $=$ const]
+\label{cor:turnstile}
+Restricting to runs with no \textsc{rewardMint} and no fees (or folding fees
+into $\mathrm{Burned}$ per Remark~\ref{rem:fee}), the LP-225 boundary
+invariant holds: for every height $h$,
+\[
+  \underbrace{[\,\spend(\Sigma_h)+\lock(\Sigma_h)+\commit(\Sigma_h)\,]}_{\text{visible}}
+  \;+\; \underbrace{\pool(\Sigma_h)}_{\text{shielded (X's scalar)}}
+  \;=\; \total(a),\quad\text{constant in }h.
+\]
+\end{corollary}
+\begin{proof}
+Immediate from Theorem~\ref{thm:conserve}: with no \textsc{rewardMint} and
+no fee sink, every $\Delta\Val=0$, so $\Val=\spend+\lock+\commit+\pool$ is
+constant; set $\total(a):=\Val(\Sigma_0)$. \textsc{shield}/\textsc{unshield}
+shift mass between the visible terms and $\pool$ without changing the sum.
+$\qed$
+\end{proof}
+
+\begin{remark}[What ``no inflation'' does and does not assert]
+\label{rem:t2scope}
+Theorem~\ref{thm:conserve} is an \emph{accounting} statement about $\Val$,
+which uses the scalar $\pool$, \emph{not} the private sum of note values. It
+proves: no XSS transition raises the total except the scheduled mint. It
+does \emph{not} by itself prove that the shielded pool's \emph{internal}
+contents are consistent ($\pool=\sum_{\text{live notes}}\mathrm{val}$); that
+equality is what A4 (proof soundness) buys, and its failure is the subject
+of Theorem~3. The separation is deliberate and is the whole point: global
+no-inflation is provable from \emph{arithmetic X enforces on public boundary
+amounts} (A1 alone, modulo the schedule), independent of the proof system.
+\end{remark}
+
+%% ===================================================================
+\section{Theorem 3: The turnstile backstop (why XSS $>$ Zcash)}
+\label{sec:t3}
+
+This is the headline. Theorems~1 and~2 assume the proof system is sound
+(A4). Theorem~3 \emph{drops} A4 and bounds the damage.
+
+\subsection{The Zcash counterfeiting class}
+\label{sec:zcash}
+
+In 2018, Ariel Gabizon discovered a soundness flaw in the BCTV14 zk-SNARK
+construction used by Zcash's original Sprout shielded pool: a spurious
+element in the proving key allowed an attacker to produce \emph{accepting
+proofs of false statements}, i.e.\ to forge a shielded ``spend'' of value
+that was never deposited. Disclosed as CVE-2019-7167 and remediated by the
+2018 Sapling upgrade, the flaw permitted---in principle---\emph{unbounded,
+undetectable} counterfeiting of shielded value, because the only thing
+standing between a forged proof and minted value was the soundness of the
+proof system itself~\cite{ecc2019,zfnd2019}. Electric Coin Company found no
+evidence the flaw was exploited.
+
+The structural lesson: in the Sprout design, the proof system's soundness
+was the \emph{sole} line of defence for the integrity of the shielded
+supply. A break at that layer is a break of the whole supply. Zcash later
+operated per-pool value-balance (``turnstile'') tracking, and ECC's own
+analysis is that such tracking \emph{bounds} the damage of an undetected
+break to the size of the affected pool---but in the relevant era this was
+a monitoring/alerting mechanism layered \emph{above} the proof system, not a
+hard per-transaction consensus reject derived from an independently
+maintained pool total.
+
+\begin{remark}[Honest framing of the contrast]
+\label{rem:honestzcash}
+We do \emph{not} claim Zcash had no turnstile. We claim a precise structural
+difference: XSS makes the pool-total balance a \textbf{consensus-layer
+precondition U3 of the unshield transition itself}---an unshield that would
+drive X's independently maintained $\pool$ negative is \emph{rejected at
+execution}, fail-closed, by the same X check that enforces
+$\mathrm{inputs}\ge\mathrm{outputs}+\mathrm{fee}$ (Theorem~\ref{thm:conserve},
+the \texttt{FlowChecker} discipline). The bound is therefore not a heuristic
+that detects an anomaly after the fact; it is an invariant that no valid
+state transition can violate. Where Zcash's defence-in-depth for the
+\emph{integrity of supply} ultimately rested on A4, XSS's
+\emph{global no-inflation floor} rests on A1 (X's arithmetic), with A4
+demoted to governing only the pool's internal correctness.
+\end{remark}
+
+\subsection{The backstop theorem}
+
+\begin{theorem}[Turnstile backstop under unsound proofs]
+\label{thm:backstop}
+Assume A1, A2, A5, and the turnstile precondition U3 (an \textsc{unshield}
+of value $v$ requires $\pool \ge v$, and atomically sets
+$\pool\gets\pool-v$), with $\pool$ maintained on X by the
+\textsc{shield}/\textsc{unshield} bookkeeping of Section~\ref{sec:transitions}.
+\textbf{Drop A4 entirely}: allow the adversary to produce accepting
+shielded validity proofs for arbitrary (including false) statements. Then
+over any run, the total value ever moved out of the shielded pool into the
+visible ledger is bounded by the total value ever legitimately moved in:
+\[
+  \sum_{\textsc{unshield}} v_{\text{out}}
+  \;\;\le\;\;
+  \pool(\Sigma_0) \;+\; \sum_{\textsc{shield}} v_{\text{in}},
+\]
+and at every height $\pool(\Sigma_h)\ge 0$. In particular the visible
+supply $\spend+\lock+\commit$ can never exceed
+$\total(a) = \Val(\Sigma_0) + (\text{scheduled mint})$: \textbf{a shielded
+proof forgery cannot inflate the visible supply, and cannot extract from the
+pool more than was put in.}
+\end{theorem}
+
+\begin{proof}
+Track the scalar $\pool$ as an integer over the run. It changes only on
+\textsc{shield} ($\pool\gets\pool+v_{\text{in}}$) and \textsc{unshield}
+($\pool\gets\pool-v_{\text{out}}$); these updates are by A1 atomic and
+applied in a single total order. By precondition U3, an applied
+\textsc{unshield} of value $v_{\text{out}}$ requires
+$\pool\ge v_{\text{out}}$ in the pre-state; hence after it $\pool\ge 0$.
+\textsc{shield} only increases $\pool$. By induction over the totally
+ordered run, $\pool(\Sigma_h)\ge 0$ for all $h$.
+
+Now sum the updates. After the run,
+\[
+  \pool(\Sigma_n) = \pool(\Sigma_0) + \sum_{\textsc{shield}}v_{\text{in}}
+    - \sum_{\textsc{unshield}}v_{\text{out}} \;\ge\; 0,
+\]
+which rearranges to exactly
+$\sum_{\textsc{unshield}}v_{\text{out}}\le\pool(\Sigma_0)+
+\sum_{\textsc{shield}}v_{\text{in}}$.
+
+Crucially, \emph{nothing in this argument used A4}. The bound U3 is a check
+X performs on its \emph{own} scalar $\pool$ against the \emph{public} minted
+amount $v_{\text{out}}$; the adversary's forged proof may convince the
+shielded side that some note is spendable, but it cannot change the value of
+X's integer $\pool$, and it cannot make X's U3 comparison
+$\pool\ge v_{\text{out}}$ pass when it would otherwise fail. The forgery's
+power is confined to the shielded pool's internal belief about which notes
+are live; the moment value attempts to \emph{leave} via \textsc{unshield},
+it meets X's pool-total floor.
+
+Finally, by Theorem~\ref{thm:conserve} every \textsc{unshield} has
+$\Delta\Val=0$ \emph{regardless of A4} (its delta is the public
+$-v_{\text{out}}$ on $\pool$ plus $+v_{\text{out}}$ on $\spend$), so the
+visible supply rises by exactly what $\pool$ falls, and $\pool$ never goes
+negative; hence the visible supply is bounded by $\total(a)$ as stated.
+$\qed$
+\end{proof}
+
+\begin{corollary}[Graceful degradation; the failure is contained, not catastrophic]
+\label{cor:degrade}
+Under an A4 break, the worst an adversary can achieve is to redistribute
+\emph{within the shielded pool's $\pool$ budget}---e.g.\ unshield value that,
+inside the pool, ``belonged'' to another user---stealing up to $\pool$ from
+honest shielded holders, but \textbf{minting zero net new supply}. The blast
+radius of a total proof-soundness failure is therefore at most $\pool$, the
+shielded pool total, and is borne as a redistribution among shielded users,
+never as inflation of the asset. Contrast the Zcash-Sprout class, where the
+same break is \emph{unbounded} counterfeiting of new supply.
+\end{corollary}
+\begin{proof}
+By Theorem~\ref{thm:backstop}, total unshielded value $\le\pool(\Sigma_0)+
+\sum v_{\text{in}}$, the value legitimately placed in the pool. An adversary
+who can forge proofs can direct unshields to itself up to that ceiling,
+draining at most the pool's contents; it cannot exceed the ceiling, so net
+new supply is zero. The honest-user loss is bounded by $\pool$. $\qed$
+\end{proof}
+
+\begin{remark}[Where this leaves A4]
+\label{rem:a4role}
+Theorem~3 does not make A4 unnecessary---A4 is what guarantees that the
+\emph{distribution} of value inside the pool is correct (your notes are
+yours; the equality $\pool=\sum_{\text{live notes}}\mathrm{val}$ holds), and
+hence that an honest shielded user is not robbed by a forger. It makes A4
+\emph{non-catastrophic}: its failure is a bounded theft within the pool, not
+an unbounded mint that debases every holder of the asset. This is the
+precise sense in which the XSS turnstile, as a consensus invariant, is
+strictly stronger than relying on proof soundness alone, and is the
+soundness argument for ``XSS contains the Zcash counterfeiting class.''
+\end{remark}
+
+%% ===================================================================
+\section{Model-level results vs.\ implementation obligations}
+\label{sec:honest}
+
+\subsection{What is proven, and at what layer}
+
+\begin{itemize}[leftmargin=2em]
+\item \textbf{Proven at the model level} (Theorems~1--3, from A1--A5 as
+  stated): given spec-faithful primitives, double-spend is impossible,
+  inflation is impossible beyond the scheduled mint, and a total
+  shielded-proof-soundness failure is contained to the shielded pool total
+  (no visible inflation, bounded intra-pool redistribution). These are
+  theorems about the \emph{state machine}, and they are unconditional given
+  the assumptions.
+\item \textbf{Grounded in implemented code}: the visible-side conservation
+  primitive ($\mathrm{inputs}\ge\mathrm{outputs}+\mathrm{fee}$ via
+  \texttt{lux.VerifyTx}/\texttt{FlowChecker}), UTXO consume-once, the Z
+  note/commitment/nullifier objects and persistent $\NF$, the commitment
+  and nullifier primitives, and the P3Q and starkfri verifiers all exist
+  today. Theorem~1's machinery (A1, A2) is largely \IMPL{}.
+\item \textbf{Design-only, and required before the model binds to the
+  system}: the items below. Until they are implemented to spec, the
+  theorems are statements about XSS-as-specified, not about the running
+  code.
+\end{itemize}
+
+\subsection{The implementation obligations, enumerated}
+\label{sec:obligations}
+
+\begin{enumerate}[leftmargin=2em]
+\item \textbf{The scalar $\pool$ (\texttt{shieldedPoolTotal}) must be
+  implemented and X-enforced.} \DESIGN{}. This is the linchpin of Theorems~2
+  and~3 and \emph{no code tracks it today} (\S\ref{sec:scope}; LP-225 \S5,
+  \S9b/P2). The shield path must credit it by the public burned amount, the
+  unshield path must debit it by the public minted amount and enforce U3
+  ($\pool\ge v$) as a hard, fail-closed precondition---in the same place and
+  with the same discipline as the existing \texttt{FlowChecker} conservation
+  check. Without U3, Theorem~3 is vacuous.
+
+\item \textbf{The shield/unshield execution must be implemented.} \DESIGN{}.
+  The ZKVM handlers are stubs
+  (\texttt{node/chains/zkvm/handlers.go}: ``Not implemented'' / ``Would
+  implement shield proof generation''). The model's \textsc{shield} and
+  \textsc{unshield} transitions are conditional on these existing and
+  performing exactly the burn-credit and nullify-debit-mint effects above.
+
+\item \textbf{A2 cross-boundary completeness (S4) must be discharged.}
+  \CRYPTO{}/\DESIGN{}. Theorem~1 assumes a \emph{single} $\NF$ arbitrates
+  both X-side unshield and Z-side spend with no partition admitting two
+  consumptions (LP-225 \S10 item 2). The persistent $\NF$ exists; the
+  cross-seam single-arbiter property must be designed and reviewed.
+
+\item \textbf{A3 binding/hiding and nullifier unforgeability must be pinned
+  and reviewed as deployed.} \CRYPTO{}. The \texttt{CommitmentScheme}
+  interface and the Poseidon2/Pedersen instances exist; the deployed choice
+  and parameters require cryptographer sign-off (LP-225 \S10 item 1).
+
+\item \textbf{A4 soundness: the settlement/shield AIR must be specified and
+  reviewed.} \CRYPTO{}. starkfri verifies a STARK/FRI proof but the
+  settlement-validity AIR does not yet exist (LP-225 \S10 items 4--5); the
+  P3Q attestation is an explicit trusted-operator assumption with a policy
+  boundary (when is attestation acceptable vs.\ when is a STARK mandatory?)
+  to be defined. \textbf{Theorem~3 is the reason an A4 gap is survivable,
+  not the reason it can be ignored}: A4 still governs intra-pool correctness
+  (Corollary~\ref{cor:degrade}, Remark~\ref{rem:a4role}).
+
+\item \textbf{\textsc{rewardMint} must be moved to an X-level,
+  schedule-gated primitive.} \DESIGN{}. Today P mints rewards on its own
+  chain (LP-225 \S9/S3, \S10 item 2), contradicting ``X settles.''
+  Theorem~2's ``only value-increasing transition is bounded by an X-enforced
+  schedule'' holds only once issuance is an X-settled, deterministic,
+  per-height-once primitive.
+\end{enumerate}
+
+\subsection{Mapping to the LP-225 validation properties}
+
+The three theorems are the formal core of LP-225's safety properties
+S1--S5 and validation checklist P1--P8:
+
+\begin{center}
+\begin{tabular}{@{}l l p{4.6cm}@{}}
+\toprule
+This proof & LP-225 property & Status of the underlying mechanism \\
+\midrule
+Thm~1 (no double-spend)          & S1, S4, S5; P1, P8   & A1/A2 mostly \IMPL{}; S4 seam \CRYPTO{} \\
+Thm~2 (conservation/no inflation)& S2; P2               & visible \IMPL{}; $\pool$ \DESIGN{} \\
+Thm~3 (turnstile backstop)       & S2 shielded term; P2 & U3 $+$ $\pool$ \DESIGN{} (the new obligation) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\noindent The single most important deliverable the proof identifies is
+obligation~1: \textbf{implement and X-enforce \texttt{shieldedPoolTotal}
+with the fail-closed U3 check}. It is the mechanism that turns the
+Zcash-class failure from catastrophic (unbounded mint) into contained
+(bounded intra-pool redistribution), and it costs one scalar and one
+comparison, enforced in the same code path that already enforces visible
+conservation. Everything else in the shielded design (A3, A4) then governs
+\emph{who} holds the shielded value, never \emph{how much} can leave the
+pool.
+
+%% ===================================================================
+\section{Conclusion}
+\label{sec:conclusion}
+
+We have proven, at the model level, that the XSS unified-settlement model
+with a Z-Chain shielded pool makes double-spend and inflation impossible
+under explicit, enumerated assumptions, and---the headline---that even a
+total failure of the shielded validity-proof system (the assumption that
+breaks Zcash-class designs) cannot inflate the asset or extract more than
+the pool holds, because X maintains the shielded pool total as a scalar and
+refuses, at the consensus layer and fail-closed, any unshield that would
+drive it negative. The proof is honestly conditional: the shield/unshield
+execution and the \texttt{shieldedPoolTotal} scalar are design-only today
+(LP-225), and the cryptographic assumptions A3--A4 require sign-off. What
+the proof establishes is the implication---\emph{spec-faithful primitives
+$\Rightarrow$ safety, with graceful degradation under the hardest
+assumption}---together with the exact contract (obligations~1--6) the
+implementation must discharge for the running system to inherit the model's
+guarantees.
+
+\begin{thebibliography}{9}
+
+\bibitem{lp225}
+Lux Industries.
+\emph{LP-225: XSS --- The X-Chain Settlement Spine: One Economic Ledger,
+Many Computing Chains.} Lux Improvement Proposal, 2026.
+(Design specification; \texttt{\textasciitilde/work/lux/papers/lp-225-xss-x-chain-settlement-spine}.)
+
+\bibitem{nakamoto2008}
+S. Nakamoto.
+\emph{Bitcoin: A Peer-to-Peer Electronic Cash System.} 2008.
+(The UTXO model and the inputs-equal-outputs conservation rule.)
+
+\bibitem{sapling2018}
+S. Bowe, A. Gabizon, et al.
+\emph{Zcash Protocol Specification (Sapling).} 2018.
+(Shielded notes, commitments, nullifiers, and the spend/output circuit.)
+
+\bibitem{ecc2019}
+Electric Coin Company.
+\emph{Zcash Counterfeiting Vulnerability Successfully Remediated.}
+Disclosure of CVE-2019-7167, the BCTV14 soundness flaw in the Sprout
+shielded pool (discovered 2018-03-01 by A.\ Gabizon, remediated in the
+Sapling upgrade 2018-10-28).
+\url{https://electriccoin.co/blog/zcash-counterfeiting-vulnerability-successfully-remediated/}, 2019.
+
+\bibitem{zfnd2019}
+Zcash Foundation.
+\emph{Concerning the Sprout Vulnerability CVE-2019-7167.}
+\url{https://zfnd.org/concerning-the-sprout-vulnerability-cve-2019-7167/}, 2019.
+
+\bibitem{fips204}
+NIST.
+\emph{FIPS 204: Module-Lattice-Based Digital Signature Standard (ML-DSA).}
+2024. (The verifier core of the P3Q precompile, \texttt{0x012205}.)
+
+\bibitem{lp218}
+Lux Industries.
+\emph{LP-218: ZAP P3Q Post-Quantum Rollup.} 2026.
+
+\bibitem{lp221}
+Lux Industries.
+\emph{LP-221: STARK-FRI Verifier.} 2026.
+(The starkfri precompile, \texttt{0x012220}.)
+
+\bibitem{lp224}
+Lux Industries.
+\emph{LP-224: D-Chain Deposit/Withdraw Consensus-Wire Activation.} 2026.
+(The ``agree on the result, check the sum'' settlement discipline.)
+
+\bibitem{quasarsound}
+Z. Kelling, Lux Industries.
+\emph{QuasarCert Soundness: Canonical Formal Specification, Quasar 3.0.}
+2025. (X-consensus safety/finality; companion proof
+\texttt{quasar-cert-soundness.tex}.)
+
+\end{thebibliography}
+
+\end{document}
