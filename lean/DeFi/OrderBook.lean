@@ -7,7 +7,7 @@
 
   Maps to:
   - lux/exchange: on-chain DEX contracts
-  - lux/node: order routing across subnets
+  - lux/node: order routing across chains
 
   Properties:
   - Price-time priority: best price executes first, ties by time

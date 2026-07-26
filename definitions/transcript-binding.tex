@@ -95,6 +95,7 @@ $0x02$ and binds:
 \end{align*}
 The Pulse signs $H_T(\mathsf{sourceChainID}, \mathsf{payload},
 \mathsf{sourceNebulaRoot}, \mathsf{sourceKeyEraID},
-\mathsf{sourceGeneration})$. v1 verifiers reject envelope byte $0x02$
-(forward-only; no v1↔v2 negotiation per LP-105 deprecation timeline).
+\mathsf{sourceGeneration})$. A pre-Warp-2.0 verifier rejects the
+leading envelope byte $0x02$ (forward-only; there is no version
+negotiation).
 \end{definition}

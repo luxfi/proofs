@@ -1,7 +1,7 @@
 /-
   Warp Message Security
 
-  Warp is the cross-subnet messaging protocol. Messages are
+  Warp is the cross-chain messaging protocol. Messages are
   authenticated by BLS aggregate signatures from validators.
 
   Maps to:
@@ -23,8 +23,8 @@ namespace Warp.Security
 
 /-- Warp message with authentication -/
 structure WarpMessage where
-  sourceChain : Nat      -- originating subnet ID
-  destChain : Nat        -- destination subnet ID
+  sourceChain : Nat      -- originating chain ID
+  destChain : Nat        -- destination chain ID
   nonce : Nat            -- replay protection
   payload : Nat          -- message content hash
   signerCount : Nat      -- number of validator signatures
@@ -34,8 +34,8 @@ structure WarpMessage where
 def isAuthenticated (m : WarpMessage) : Bool :=
   m.signerCount ≥ m.quorum
 
-/-- Message is cross-subnet (not same-chain) -/
-def isCrossSubnet (m : WarpMessage) : Bool :=
+/-- Message is cross-chain (not same-chain) -/
+def isCrossChain (m : WarpMessage) : Bool :=
   m.sourceChain != m.destChain
 
 /-- AUTHENTICATION: Quorum signatures required -/
