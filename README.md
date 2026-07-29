@@ -17,10 +17,14 @@ not say whether it rests on standard hardness or on an unfinished mechanisation.
 `#print axioms` on a headline result settles it in one line and is not yet used
 here.
 
-Two figures CI prints alongside the build, neither visible in a green result:
-**55 declarations state `True`** (provable by `trivial`, so they assume and
-establish nothing — `lean/vacuity.py` lists them), and **10 modules are in no
-library** and are therefore never compiled.
+CI answers that on every run. `lean/axioms.py` runs `#print axioms` over the
+corpus: **594 of 715 theorems are proved outright**, resting on Lean's ambient
+logic alone, and 121 are conditional on axioms the report names and ranks by how
+many theorems stand on them. Two more figures accompany the build, neither
+visible in a green result: **75 declarations carry no content** (`lean/vacuity.py`
+lists each, and why — it states `True`, or is provable by `rfl`, or restates a
+hypothesis), and **10 modules are in no library** and are therefore never
+compiled.
 
 ## Inventory
 

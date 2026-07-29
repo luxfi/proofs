@@ -7,8 +7,15 @@ artifacts. 116 Lean files: **760 theorems and lemmas, 504 axioms, 0 `sorry`**.
 lakefile declares. Lean confirms each proof follows from what it is given; 504
 of those givens are axioms.
 
-Three numbers CI prints on every run, because none is visible in a green build:
+Four numbers CI prints on every run, because none is visible in a green build:
 
+- **594 of 715 theorems are proved outright.** `lean/axioms.py` runs
+  `#print axioms` over the corpus. Lean's own `propext`, `Classical.choice` and
+  `Quot.sound` are the ambient logic rather than assumptions about our systems,
+  so a theorem resting on those alone is proved and anything else it names is
+  load-bearing. The remaining 121 are conditional, and the report ranks the
+  axioms by how many theorems stand on them — which is where the corpus's
+  weight actually sits.
 - **504 axioms.** Cryptographic hardness must be assumed somewhere, so an axiom
   is not a defect. The count is what separates an assumption from a result.
 - **75 declarations carry no content.** `lean/vacuity.py` names three ways a
