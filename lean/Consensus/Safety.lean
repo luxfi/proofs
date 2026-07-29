@@ -96,18 +96,30 @@ axiom finalized_preference_stable :
     hasFinalized s i v → s'.round > s.round → hasFinalized s' i v
 
 /-
-  Key invariant: finalization requires beta consecutive rounds with
-  alpha-threshold majority. If alpha > 2k/3 and honest majority holds,
-  then at most one value can achieve alpha threshold in any round.
+  At most one value reaches the alpha threshold in a round.
 
-  This is the crux: with k samples from n nodes where f < n/3 are Byzantine,
-  at most one value can get alpha >= ceil(2k/3) votes in a single round,
-  because honest nodes have a single preference.
+  `honestPreferring` counts over `Finset.univ`, i.e. the whole validator
+  set rather than the k-sample, so the hypothesis needed here is
+  `2 * alpha > n`: two disjoint sets of honest supporters, each of size at
+  least alpha, cannot both fit in n nodes. `Consensus.ThresholdProof`
+  proves exactly that as `unique_threshold_proven`.
+
+  Without it the statement is false. Take n = 1000, f = 100, k = 20,
+  alpha = 14 — legal under all four Params constraints — with 900 honest
+  nodes split 450/450 between v1 and v2. Then honestCount = 900 > 2f, and
+  alpha = 14 > 2*k/3 = 13, and both values clear alpha, so the conclusion
+  would give v1 = v2.
+
+  The hypothesis is severe and honestly so: with alpha ≤ k ≤ n it forces
+  k > n/2, which is to sample more than half the network every round. In
+  the sub-sampled regime the protocol actually runs, safety is
+  probabilistic, and no deterministic theorem of this shape holds.
 -/
 axiom unique_threshold :
   ∀ (p : Params) (s : ConsensusState p) (v1 v2 : ValueId) (round : Nat),
     honestCount s > 2 * p.f →
     p.alpha > 2 * p.k / 3 →
+    2 * p.alpha > p.n →
     -- If both values achieved alpha threshold in the same round,
     -- they must be the same value
     honestPreferring s v1 ≥ p.alpha →
@@ -192,10 +204,11 @@ theorem safety
     (hfj : hasFinalized s j v2)
     (hbft : honestCount s > 2 * p.f)
     (halpha : p.alpha > 2 * p.k / 3)
+    (hmaj : 2 * p.alpha > p.n)
     : v1 = v2 := by
   obtain ⟨s_overlap, hov1, hov2, hcount⟩ :=
     finalization_windows_overlap p s i j v1 v2 hfi hfj
   exact unique_threshold p s_overlap v1 v2 s_overlap.round
-    (hcount ▸ hbft) halpha hov1 hov2
+    (hcount ▸ hbft) halpha hmaj hov1 hov2
 
 end Consensus

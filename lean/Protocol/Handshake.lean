@@ -37,16 +37,12 @@ structure KeyExchange where
   mlkemSS : Nat          -- ML-KEM-768 shared secret
   transcriptHash : Nat   -- hash of full handshake transcript
 
-/-- Derive session key from both shared secrets + transcript -/
-def deriveSessionKey (kex : KeyExchange) : Nat :=
-  -- HKDF(x25519_ss || mlkem_ss || transcript)
-  kex.x25519SS + kex.mlkemSS + kex.transcriptHash
-
-/-- HYBRID: Session key depends on BOTH shared secrets -/
-theorem hybrid_both_contribute (kex : KeyExchange)
-    (_h_x : kex.x25519SS > 0) (h_m : kex.mlkemSS > 0) :
-    deriveSessionKey kex > kex.x25519SS := by
-  simp [deriveSessionKey]; omega
+/-- HKDF over both shared secrets and the transcript.
+    Opaque: a KDF is a hash, and its only modelled property is the
+    collision resistance assumed below. Any concrete definition here is a
+    different function with different properties — as `+` was, which made
+    `forward_secrecy` false by ⟨1,1,1⟩ and ⟨1,0,2⟩ colliding at 3. -/
+opaque deriveSessionKey (kex : KeyExchange) : Nat
 
 /-- FORWARD SECRECY: Each session uses fresh ephemeral keys.
     Compromising long-term keys doesn't reveal past sessions. -/
@@ -59,13 +55,12 @@ axiom forward_secrecy :
 theorem transcript_binding (kex1 kex2 : KeyExchange)
     (h : kex1.transcriptHash ≠ kex2.transcriptHash)
     (h_same_key : deriveSessionKey kex1 = deriveSessionKey kex2) :
-    -- If transcript differs but key is same, then shared secrets compensate
-    -- (this is ruled out by forward_secrecy axiom in practice)
     kex1.x25519SS + kex1.mlkemSS ≠ kex2.x25519SS + kex2.mlkemSS ∨
-    kex1.transcriptHash = kex2.transcriptHash := by
-  left
-  simp only [deriveSessionKey] at h_same_key
-  omega
+    kex1.transcriptHash = kex2.transcriptHash :=
+  -- Distinct transcripts give distinct keys, so the hypotheses cannot both
+  -- hold. Previously this unfolded the KDF and closed the goal by `omega`,
+  -- which proved a fact about addition rather than about a hash.
+  absurd h_same_key (forward_secrecy kex1 kex2 h)
 
 /-- FAILED IS TERMINAL -/
 theorem failed_terminal (reason : String) :

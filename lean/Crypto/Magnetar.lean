@@ -66,26 +66,28 @@ theorem magnetar_empty_accepted (ps : ParamSet) :
     magnetar_batch_verify ps [] = true :=
   magnetar_batch_empty ps
 
-/-- Hash-family disjointness from lattice schemes. SLH-DSA rests on
+/- Hash-family disjointness from lattice schemes. SLH-DSA rests on
     hash collision + preimage resistance (SHA-2 / SHAKE), not on any
     lattice assumption (Module-LWE / Module-SIS, of which Ring-LWE is
     the rank-1 special case). Modelled as: a lattice oracle does not
     yield a hash oracle. This is what makes Magnetar the only true
     cross-family leg of the Polaris cert profile (Pulsar ‖ Corona ‖
     Magnetar) in LP-0120 — Pulsar and Corona are both Module-LWE, so
-    Magnetar (hash) is the sole family-disjoint signature primitive. -/
-axiom magnetar_hash_disjoint_from_mlwe :
-  ∀ (mlwe_oracle : Nat → Nat),
-    ∃ (hash_instance : Nat),
-      mlwe_oracle hash_instance ≠ hash_instance
+    Magnetar (hash) is the sole family-disjoint signature primitive.
 
-/-- The same disjointness against the rank-1 (Ring-LWE) special case of
-    Module-LWE; retained as a general lattice statement (Corona itself
-    is instantiated at module rank ~7-8, i.e. Module-LWE, not rank 1). -/
-axiom magnetar_hash_disjoint_from_rlwe :
-  ∀ (rlwe_oracle : Nat → Nat),
-    ∃ (hash_instance : Nat),
-      rlwe_oracle hash_instance ≠ hash_instance
+    Family disjointness is stated here and is not axiomatised.
+
+    Two axioms stood here, each of the shape
+
+      ∀ (oracle : Nat → Nat), ∃ (x : Nat), oracle x ≠ x
+
+    which the identity function refutes: it yields `∃ x, x ≠ x`, so each
+    proved `False` and made every theorem in the corpus derivable. Neither
+    had a user.
+
+    `Nat → Nat` cannot express "these two problems share no reduction":
+    that claim quantifies over adversaries and advantages, not over
+    integers. -/
 
 /-- MPC threshold-signing byte-equality (axiomatic). Magnetar's
     threshold-SLH-DSA output over a Pedersen-DKG-issued group secret
