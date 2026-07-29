@@ -43,21 +43,51 @@ jobs:
 
       - name: lake build
         working-directory: lean
-        run: lake build
+        # Every declared library, not the default target. `@[default_target]`
+        # marks one of sixteen here, so a bare `lake build` compiles that one
+        # library's import closure and reports success for the whole corpus.
+        # The list comes from the lakefile so it cannot drift from it.
+        run: |
+          set -euo pipefail
+          libs=$(sed -n 's/^lean_lib[[:space:]]\+\([A-Za-z0-9_]\+\).*/\1/p' lakefile.lean | tr '\n' ' ')
+          echo "libraries: ${libs}"
+          lake build ${libs}
 
-      - name: Count what the corpus assumes
-        # An axiom is an assumption, and the axiom count is the first number a
-        # reader should see — it separates "proved" from "assumed, pending".
+      - name: Files the build never compiled
+        # Asked of the build's own output rather than of an import parser: a
+        # source file with no .olean was not checked, whatever the lakefile
+        # claims. A file in no library is invisible to CI while looking covered.
         if: always()
         working-directory: lean
         run: |
           set -euo pipefail
-          ax=$(grep -rc '^axiom' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
-          th=$(grep -rc '^theorem\|^lemma' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
-          so=$(grep -rc 'sorry' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
-          echo "theorems and lemmas: ${th}"
-          echo "axioms:              ${ax}"
-          echo "sorry:               ${so}"
+          find . -name '*.lean' ! -name 'lakefile.lean' -not -path './.lake/*' \
+            | sed 's|^\./||; s|\.lean$||; s|/|.|g' | sort > /tmp/source
+          find .lake/build/lib -name '*.olean' 2>/dev/null \
+            | sed 's|.*\.lake/build/lib/||; s|\.olean$||; s|/|.|g' | sort > /tmp/built
+          missed=$(comm -23 /tmp/source /tmp/built)
+          n=$(printf '%s' "${missed}" | grep -c . || true)
+          echo "source modules: $(wc -l < /tmp/source), compiled: $(wc -l < /tmp/built), never compiled: ${n}"
+          [ "${n}" -gt 0 ] && printf '%s\n' "${missed}"
+          {
+            echo "### Never compiled"
+            echo ""
+            echo "${n} of $(wc -l < /tmp/source) modules are in no library."
+            [ "${n}" -gt 0 ] && printf '%s\n' "${missed}" | sed 's/^/- `/; s/$/`/'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: What the corpus assumes
+        # An axiom is an assumption; a vacuous one is not even that. Both counts
+        # go in every run's summary so the trend is visible rather than
+        # rediscovered by an audit. See lean/vacuity.py.
+        if: always()
+        working-directory: lean
+        run: |
+          set -euo pipefail
+          ax=$(grep -rhc '^axiom' --include='*.lean' . | awk '{s+=$1} END {print s+0}')
+          th=$(grep -rhc '^theorem\|^lemma' --include='*.lean' . | awk '{s+=$1} END {print s+0}')
+          python3 vacuity.py . | tail -3
+          vac=$(python3 vacuity.py . | sed -n 's/^vacuous declarations: \([0-9]*\).*/\1/p')
           {
             echo "### Lean corpus"
             echo ""
@@ -65,5 +95,5 @@ jobs:
             echo "|---|---:|"
             echo "| theorems and lemmas | ${th} |"
             echo "| axioms | ${ax} |"
-            echo "| \`sorry\` | ${so} |"
+            echo "| stating \`True\` | ${vac} |"
           } >> "$GITHUB_STEP_SUMMARY"
