@@ -87,10 +87,15 @@ lean_lib Crypto where
     `Crypto.Pulsar.OutputInterchange,
     `Crypto.Pulsar.Shamir,
     `Crypto.Pulsar.Unforgeability,
-    `Crypto.Pulsar.dkg2,
     `Crypto.Pulsar.BoundaryClearance,
     `Crypto.Pulsar.NoLeakAggregate,
-    `Crypto.Corona.NoLeakAggregate
+    `Crypto.Corona.NoLeakAggregate,
+    `Crypto.Corona.Unforgeability,
+    `Crypto.Corona.Shamir,
+    `Crypto.Corona.OutputInterchange,
+    `Crypto.Magnetar.Unforgeability,
+    `Crypto.Magnetar.OutputInterchange,
+    `Crypto.Precompile.P3Q
   ]
 
 @[default_target]
@@ -133,7 +138,8 @@ lean_lib Build where
 lean_lib Compute where
   srcDir := "."
   roots := #[
-    `Compute.CrossChain
+    `Compute.CrossChain,
+    `Compute.AIMint
   ]
 
 @[default_target]
@@ -198,6 +204,11 @@ lean_lib Vault where
   roots := #[
     `Vault.KeyIsolation
   ]
+
+@[default_target]
+lean_lib Main where
+  srcDir := "."
+  roots := #[`Main]
 
 @[default_target]
 lean_lib StrictE2EPQ where
