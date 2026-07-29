@@ -1,0 +1,69 @@
+name: proofs
+
+# Builds the Lean corpus. The other workflow here compiles LaTeX, which confirms
+# the documents typeset and says nothing about whether the proofs hold — so a
+# theorem that stopped compiling broke no build.
+#
+# The result is allowed to be bad. A red build is information we did not have.
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'lean/**'
+      - '.hanzo/workflows/proofs.yml'
+  workflow_dispatch:
+
+concurrency:
+  group: proofs-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lake-build:
+    runs-on: [lux-build-linux-amd64]
+    # Mathlib is the long pole even with the cache; a cold run is most of an hour.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install elan
+        # The toolchain comes from lean/lean-toolchain, so elan installs no
+        # default and lake resolves the pinned version from the project.
+        run: |
+          set -euo pipefail
+          curl -sSfL https://elan.lean-lang.org/elan-init.sh -o elan-init.sh
+          sh elan-init.sh -y --default-toolchain none
+          echo "$HOME/.elan/bin" >> "$GITHUB_PATH"
+
+      - name: Fetch prebuilt Mathlib
+        working-directory: lean
+        # Building Mathlib from source is hours; the upstream cache is the
+        # difference between a job that runs on every push and one that never does.
+        run: lake exe cache get
+
+      - name: lake build
+        working-directory: lean
+        run: lake build
+
+      - name: Count what the corpus assumes
+        # An axiom is an assumption, and the axiom count is the first number a
+        # reader should see — it separates "proved" from "assumed, pending".
+        if: always()
+        working-directory: lean
+        run: |
+          set -euo pipefail
+          ax=$(grep -rc '^axiom' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
+          th=$(grep -rc '^theorem\|^lemma' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
+          so=$(grep -rc 'sorry' --include='*.lean' . | awk -F: '{s+=$2} END {print s+0}')
+          echo "theorems and lemmas: ${th}"
+          echo "axioms:              ${ax}"
+          echo "sorry:               ${so}"
+          {
+            echo "### Lean corpus"
+            echo ""
+            echo "| | count |"
+            echo "|---|---:|"
+            echo "| theorems and lemmas | ${th} |"
+            echo "| axioms | ${ax} |"
+            echo "| \`sorry\` | ${so} |"
+          } >> "$GITHUB_STEP_SUMMARY"
