@@ -84,8 +84,8 @@ jobs:
         working-directory: lean
         run: |
           set -euo pipefail
-          ax=$(grep -rhc '^axiom' --include='*.lean' . | awk '{s+=$1} END {print s+0}')
-          th=$(grep -rhc '^theorem\|^lemma' --include='*.lean' . | awk '{s+=$1} END {print s+0}')
+          ax=$(grep -rhc '^axiom' --include='*.lean' --exclude-dir=.lake . | awk '{s+=$1} END {print s+0}')
+          th=$(grep -rhc '^theorem\|^lemma' --include='*.lean' --exclude-dir=.lake . | awk '{s+=$1} END {print s+0}')
           python3 vacuity.py . | tail -3
           vac=$(python3 vacuity.py . | sed -n 's/^vacuous declarations: \([0-9]*\).*/\1/p')
           {

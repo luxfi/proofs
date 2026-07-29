@@ -62,7 +62,10 @@ def main() -> int:
     strict = "--strict" in sys.argv
     found, open_goals = [], []
     for path in sorted(root.rglob("*.lean")):
-        if path.name == "lakefile.lean":
+        # .lake holds the fetched dependencies. Counting Mathlib's declarations
+        # as ours inflates every number here, and only after a build — so the
+        # figure differs before and after CI runs, which is how this was found.
+        if path.name == "lakefile.lean" or ".lake" in path.parts:
             continue
         rel = path.relative_to(root)
         for line, kind, name, body in declarations(path):
