@@ -5,19 +5,13 @@
 See [LP-105 §Claims and evidence](https://github.com/luxfi/lps/blob/main/LP-105-lux-stack-lexicon.md#claims-and-evidence) for the canonical claims/evidence table and the ten architectural commitments — single source of truth.
 
 Proof scripts, protocol specifications, and property tests for the Lux consensus
-stack: **756 theorems and lemmas against 503 axioms**, with no `sorry`, across
+stack: **760 theorems and lemmas against 504 axioms**, with no `sorry`, across
 115 Lean files.
 
 `lake build` runs on every push (`.hanzo/workflows/proofs.yml`) over every
 library the lakefile declares. Lean confirms each proof follows from what it is
-given; 503 of those givens are axioms, so the axiom count is the number to read
-first. Cryptographic hardness has to be assumed somewhere — the note below that
-the crypto proofs assume DLP and LWE is exactly that — but a theorem's name does
-not say whether it rests on standard hardness or on an unfinished mechanisation.
-`#print axioms` on a headline result settles it in one line and is not yet used
-here.
-
-CI answers that on every run. `lean/axioms.py` runs `#print axioms` over the
+given, and a theorem's name does not say whether it was given standard hardness
+or an unfinished mechanisation. `lean/axioms.py` runs `#print axioms` over the
 corpus: **594 of 715 theorems are proved outright**, resting on Lean's ambient
 logic alone, and 121 are conditional on axioms the report names and ranks by how
 many theorems stand on them. Two more figures accompany the build, neither
@@ -58,7 +52,7 @@ cd tamarin && tamarin-prover QuasarConsensus.spthy
 cd property && GOWORK=off go test ./...
 ```
 
-## Lean 4 Proofs (72 files)
+## Lean 4 Proofs (115 files)
 
 ### Consensus (11)
 
