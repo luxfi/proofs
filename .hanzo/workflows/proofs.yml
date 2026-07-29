@@ -60,12 +60,12 @@ jobs:
           missed=$(comm -23 /tmp/source /tmp/built)
           n=$(printf '%s' "${missed}" | grep -c . || true)
           echo "source modules: $(wc -l < /tmp/source), compiled: $(wc -l < /tmp/built), never compiled: ${n}"
-          [ "${n}" -gt 0 ] && printf '%s\n' "${missed}"
+          if [ "${n}" -gt 0 ]; then printf '%s\n' "${missed}"; fi
           {
             echo "### Never compiled"
             echo ""
             echo "${n} of $(wc -l < /tmp/source) modules are in no library."
-            [ "${n}" -gt 0 ] && printf '%s\n' "${missed}" | sed 's/^/- `/; s/$/`/'
+            if [ "${n}" -gt 0 ]; then printf '%s\n' "${missed}" | sed 's/^/- `/; s/$/`/'; fi
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: What each theorem rests on
