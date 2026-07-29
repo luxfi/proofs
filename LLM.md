@@ -4,39 +4,24 @@ Lean proof scripts for the Lux consensus stack, plus TLA+, Tamarin and Halmos
 artifacts. 115 Lean files: **756 theorems and lemmas, 503 axioms, 0 `sorry`**.
 
 `lake build` runs in CI (`.hanzo/workflows/proofs.yml`) over every library the
-lakefile declares, so Lean checks the corpus on every push. Say "checked"
-precisely: Lean confirms each proof follows from what it is given, and 503 of
-those givens are axioms. 55 declarations state `True`, which `trivial` proves,
-so they assume nothing and establish nothing — `lean/vacuity.py` lists them and
-CI prints the count next to the build that cannot see them.
+lakefile declares. Lean confirms each proof follows from what it is given; 503
+of those givens are axioms.
 
-Ten modules are in no library and are never compiled, among them
-`Crypto/Corona/Unforgeability.lean` and `Main.lean`. CI prints that list too,
-derived from the build's own output rather than from the lakefile.
+Three numbers CI prints on every run, because none is visible in a green build:
+
+- **503 axioms.** Cryptographic hardness must be assumed somewhere, so an axiom
+  is not a defect. The count is what separates an assumption from a result.
+- **55 declarations state `True`**, which `trivial` proves — they assume nothing
+  and establish nothing. `lean/vacuity.py` lists them.
+- **10 modules are in no library** and so are never compiled, among them
+  `Crypto/Corona/Unforgeability.lean` and `Main.lean`. The list comes from the
+  build's own output: a source file with no `.olean` was not checked.
 
 Read the file before calling a result proved. Several headline theorems are
-short compositions of axioms declared directly above them and say so in their
+short compositions of axioms declared directly above them, and say so in their
 own comments.
 
-## Post-E2E-PQ State (current)
-
-Lean 4 + Tamarin + Halmos artifacts back the post-E2E-PQ proposal set.
-Quasar soundness, Pulsar-M output-interchangeability, and Z-Chain key
-registry safety are the three active proof tracks.
-
-### Recent significant commits
-
-| SHA | Impact |
-|-----|--------|
-| `07d01da` | Remove downstream-tenant branding cross-contamination |
-| `ef3c3df` | M/F/Z-Chain canonical naming per LP-134 |
-| `aaee863` | Scrub Avalabs IP brand refs |
-| `c5d805f` | Lux liquidity protocol adoption + Quasar refs + Pulsar naming |
-| `562beb9` | Fix Lean 4.14 / Mathlib v4.14 compatibility in DAG consensus proofs |
-| `c29e738` | `sequential_worldview_preserved` proved (was axiom) |
-| `0e20c6d` | DAG-EVM, DAG-Z-Chain, PQZ parallelism, TLA+ specs, Tamarin, Halmos, property tests |
-
-### Active proof tracks
+## Active proof tracks
 
 Axiom and theorem counts are per file, measured. A track resting on axioms is
 not thereby wrong — cryptographic hardness has to be assumed somewhere — but the
@@ -56,16 +41,19 @@ count is what separates an assumption from a result, so it is the status.
 | Corona unforgeability | `lean/Crypto/Corona/Unforgeability.lean` | — | — | In no library; never compiled |
 | Z-Chain key registry safety | TBD (HIP-0078 §4) | — | — | Open |
 
-The three `lean/Crypto/Pulsar_M/…` paths this table used to cite do not exist;
-the files are under `lean/Crypto/Pulsar/`.
+## What the artifacts verify
 
-### Cross-repo coherence
-- `lean/` tracks `~/work/lux/papers/` theorem numbers 1:1.
-- `tamarin/` mirrors the auth-permit protocol from
+Each tool checks a *model*, written here, against properties stated here. None
+of them reads the production implementation, so agreement between a model and
+the code it cites is maintained by hand.
+
+- `lean/` — the models above. Files carry a `Maps to:` block naming the Go,
+  Rust or Solidity source they model.
+- `tamarin/` — the auth-permit protocol, modelling
   `luxfi/consensus/protocol/auth/permit.go`.
-- `halmos/` mirrors invariants on `luxfi/contracts/src/pqauth/`.
-
----
+- `halmos/` — Solidity invariants. The harnesses import `forge-std/Test.sol`
+  only and re-state the contract logic inline, so they verify the restatement,
+  not the deployed contract. `HalmosYieldVault.t.sol` says so in its own header.
 
 ## Structure
 

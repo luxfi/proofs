@@ -20,7 +20,7 @@ namespace StrictE2EPQ
 
 /-- Signature scheme identifier (matches SigSchemeID in Go).
     The byte values follow the HIP-0077 §2 block layout:
-    0x40+ = ML-DSA, 0x50+ = Pulsar-M, 0x80+ = SLH-DSA. -/
+    0x40+ = ML-DSA, 0x50+ = Pulsar, 0x80+ = SLH-DSA. -/
 inductive SigSchemeID where
   | none      : SigSchemeID  -- zero-value-invalid
   | mldsa44   : SigSchemeID  -- 0x42 (devnet only)
@@ -129,7 +129,7 @@ structure ChainSecurityProfile where
 /-! ## Strict-PQ classification -/
 
 /-- A signature scheme is PQ-safe iff it is in the M-LWE / lattice
-    family (ML-DSA, Pulsar-M) or the FIPS 205 SLH-DSA family. -/
+    family (ML-DSA, Pulsar) or the FIPS 205 SLH-DSA family. -/
 def isPQScheme : SigSchemeID → Bool
   | .mldsa44      => true
   | .mldsa65      => true

@@ -5,34 +5,34 @@
 See [LP-105 §Claims and evidence](https://github.com/luxfi/lps/blob/main/LP-105-lux-stack-lexicon.md#claims-and-evidence) for the canonical claims/evidence table and the ten architectural commitments — single source of truth.
 
 Proof scripts, protocol specifications, and property tests for the Lux consensus
-stack: **755 theorems and lemmas alongside 503 axioms** across the Lean corpus.
+stack: **756 theorems and lemmas against 503 axioms**, with no `sorry`, across
+115 Lean files.
 
-**Not machine-checked in CI.** The one workflow here fresh-clones the repository
-and compiles every `.tex` with `latexmk` — it verifies that the documents build,
-not that the proofs hold. No prover runs, so a theorem that stopped compiling
-would not fail anything. Calling these machine-checked, as this line did,
-claimed a guarantee the repository does not currently provide; the honest word
-is proof *scripts*, and the fix is to run `lake build` here rather than to
-soften the sentence further.
+`lake build` runs on every push (`.hanzo/workflows/proofs.yml`) over every
+library the lakefile declares. Lean confirms each proof follows from what it is
+given; 503 of those givens are axioms, so the axiom count is the number to read
+first. Cryptographic hardness has to be assumed somewhere — the note below that
+the crypto proofs assume DLP and LWE is exactly that — but a theorem's name does
+not say whether it rests on standard hardness or on an unfinished mechanisation.
+`#print axioms` on a headline result settles it in one line and is not yet used
+here.
 
-The axiom count is the number to read first. Five hundred and three assumptions
-is not a scandal — cryptographic hardness has to be assumed somewhere, and the
-existing note below that crypto proofs assume DLP and LWE is exactly right. It
-does mean a reader cannot tell, from a theorem's name, whether it rests on
-standard hardness or on an unfinished mechanisation, and `#print axioms` on the
-headline results is what would settle that. It is not yet used anywhere here.
+Two figures CI prints alongside the build, neither visible in a green result:
+**55 declarations state `True`** (provable by `trivial`, so they assume and
+establish nothing — `lean/vacuity.py` lists them), and **10 modules are in no
+library** and are therefore never compiled.
 
 ## Inventory
 
 | Tool | Files | Path |
 |------|------:|------|
-| Lean 4 | 74 | `lean/` |
-| TLA+ | 24 | `tla/` |
+| Lean 4 | 115 | `lean/` |
+| TLA+ | 28 | `tla/` |
 | Halmos | 10 | `halmos/` |
 | Tamarin | 6 | `tamarin/` |
-| Go property tests | 5 | `property/` |
+| Go property tests | 6 | `property/` |
 | LaTeX soundness | 1 | `strict-e2e-pq/strict-e2e-pq-soundness.tex` |
-| **Total** | **120** | |
+| **Total** | **166** | |
 
 ## Build and Run
 

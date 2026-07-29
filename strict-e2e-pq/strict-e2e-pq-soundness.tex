@@ -41,7 +41,7 @@ This note carries the formal soundness statement for the
 \texttt{luxfi/papers/lp-stricte2epq}. We state the four soundness claims (1)
 ML-DSA-65 transaction authorisation, (2) SHA3-384 Merkle inclusion in the
 Z-Chain registry, (3) collision-resistance of the Q-Chain
-\texttt{ComputeRoundDigest}, and (4) Pulsar-M finality under Module-LWE. The
+\texttt{ComputeRoundDigest}, and (4) Pulsar finality under Module-LWE. The
 machine-checked counterparts live in Lean 4 (\texttt{StrictE2EPQ/}), TLA+
 (\texttt{tla/StrictPQProfile.tla}), and Go property tests
 (\texttt{property/strict\_pq\_test.go}).
@@ -68,8 +68,8 @@ A locked profile $P$ is \emph{strict-PQ} iff:
 \begin{align*}
 & P.\texttt{HashSuiteID}            && = \texttt{SHA3-384/cSHAKE256}, \\
 & P.\texttt{IdentitySchemeID}       && = \texttt{ML-DSA-65}, \\
-& P.\texttt{FinalitySchemeID}       && = \texttt{Pulsar-M-65}, \\
-& P.\texttt{HighValueSchemeID}      && \in \{\texttt{Pulsar-M-65}, \texttt{Pulsar-M-87}\}, \\
+& P.\texttt{FinalitySchemeID}       && = \texttt{Pulsar-65}, \\
+& P.\texttt{HighValueSchemeID}      && \in \{\texttt{Pulsar-65}, \texttt{Pulsar-87}\}, \\
 & P.\texttt{ProofPolicyID}          && = \texttt{ProofPolicy128bitPQ}, \\
 & P.\texttt{AllowedProofBackends}   && \subseteq \{\texttt{p3q}, \texttt{Plonky3-SHA3}\}, \\
 & P.\texttt{MinSoundnessBits}       && \ge 128, \\
@@ -93,7 +93,7 @@ A locked profile $P$ is \emph{strict-PQ} iff:
 The strict-PQ profile is unique up to the choice of
 \texttt{HighValueSchemeID} ($65$ or $87$). The production canonical at
 \texttt{luxfi/consensus@12097034} pins
-\texttt{ProfileLuxStrictPQ} with \texttt{HighValueSchemeID = Pulsar-M-87}
+\texttt{ProfileLuxStrictPQ} with \texttt{HighValueSchemeID = Pulsar-87}
 and golden digest \texttt{93efd103\ldots323bfcd0}.
 \end{remark}
 
@@ -194,12 +194,12 @@ $\textsc{cSHAKE256}$ domain. Quantum security of $\textsc{cSHAKE256}$ at
 output length 48 bytes (384 bits) is Grover-bounded at $2^{-192}$.
 \end{proof}
 
-\subsection{PULSAR-M-SOUND: finality signature soundness}
+\subsection{PULSAR-SOUND: finality signature soundness}
 
-\begin{theorem}[PULSAR-M-SOUND]
-\label{thm:pulsar-m-sound}
-Let $P$ be a strict-PQ profile. Let $\Sigma$ be a Pulsar-M-65 aggregate
-signature accepted by \texttt{Pulsar-M.Verify}$(\textsc{gpk}, m, \Sigma)$
+\begin{theorem}[PULSAR-SOUND]
+\label{thm:pulsar-sound}
+Let $P$ be a strict-PQ profile. Let $\Sigma$ be a Pulsar-65 aggregate
+signature accepted by \texttt{Pulsar.Verify}$(\textsc{gpk}, m, \Sigma)$
 where \textsc{gpk} is the group public key for the committee bound in
 $\texttt{QBlock.ValidatorSetRoot}$ and $m$ is
 $\texttt{QBlock.ComputeRoundDigest}()$. Then either (i) at least 43 of
@@ -214,7 +214,7 @@ unforgeability for Round 1 authentication.
 \end{theorem}
 
 \begin{proof}[Proof sketch]
-Pulsar-M aggregates linearly: a verifier-accepting aggregate signature
+Pulsar aggregates linearly: a verifier-accepting aggregate signature
 reconstructs $\mathbf{A} z - \tilde{\mathbf{b}} c$ in $R_\nu$ under the
 hint bound. By the two-round threshold ML-DSA argument
 \cite{dttf2024,thresholdraccoon}, soundness reduces to M-LWE.
@@ -236,11 +236,11 @@ to end, to FIPS 203 / 204 / 205 primitives and the SHA3 family, via:
     the registry lookup.
   \item ROUND-DIGEST-CR (Thm.~\ref{thm:round-digest-cr}) for the
     QBlock binding.
-  \item PULSAR-M-SOUND (Thm.~\ref{thm:pulsar-m-sound}) for the
+  \item PULSAR-SOUND (Thm.~\ref{thm:pulsar-sound}) for the
     finality cert.
 \end{enumerate}
 A Shor-capable adversary against the stack reduces to breaking one of:
-ML-DSA-65 (EUF-CMA / M-LWE), Pulsar-M-65 (M-LWE), cSHAKE256
+ML-DSA-65 (EUF-CMA / M-LWE), Pulsar-65 (M-LWE), cSHAKE256
 (collision-resistance), or the SHA3 family at $\ge 384$-bit output.
 \end{theorem}
 

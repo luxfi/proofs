@@ -103,7 +103,7 @@ inductive Surface where
   | zchainCommit        : Surface  -- 8.  ZRegistryRoots
   | execVerifyAuth      : Surface  -- 9.  VerifyAuthPassed
   | finalityBind        : Surface  -- 10. ComputeRoundDigest
-  | finalitySign        : Surface  -- 11. Pulsar-M
+  | finalitySign        : Surface  -- 11. Pulsar
   | proofVerify         : Surface  -- 12. p3q
   | p2pTransport        : Surface  -- 13. ML-KEM + ML-DSA
   | bridgeAdmit         : Surface  -- 14. BridgeProfile
