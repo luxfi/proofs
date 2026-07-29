@@ -23,6 +23,7 @@ lean_lib Consensus where
     `Consensus.PQZParallel
   ]
 
+@[default_target]
 lean_lib Protocol where
   srcDir := "."
   roots := #[
@@ -38,6 +39,7 @@ lean_lib Protocol where
     `Protocol.Handshake
   ]
 
+@[default_target]
 lean_lib Crypto where
   srcDir := "."
   roots := #[
@@ -91,6 +93,7 @@ lean_lib Crypto where
     `Crypto.Corona.NoLeakAggregate
   ]
 
+@[default_target]
 lean_lib Storage where
   srcDir := "."
   roots := #[
@@ -98,6 +101,7 @@ lean_lib Storage where
     `Storage.ZapDB
   ]
 
+@[default_target]
 lean_lib Warp where
   srcDir := "."
   roots := #[
@@ -106,6 +110,7 @@ lean_lib Warp where
     `Warp.Security
   ]
 
+@[default_target]
 lean_lib Trust where
   srcDir := "."
   roots := #[
@@ -114,6 +119,7 @@ lean_lib Trust where
     `Trust.Revocation
   ]
 
+@[default_target]
 lean_lib Build where
   srcDir := "."
   roots := #[
@@ -123,12 +129,14 @@ lean_lib Build where
     `Build.Reproducibility
   ]
 
+@[default_target]
 lean_lib Compute where
   srcDir := "."
   roots := #[
     `Compute.CrossChain
   ]
 
+@[default_target]
 lean_lib DeFi where
   srcDir := "."
   roots := #[
@@ -142,18 +150,21 @@ lean_lib DeFi where
     `DeFi.Governance
   ]
 
+@[default_target]
 lean_lib Network where
   srcDir := "."
   roots := #[
     `Network.PeerDiscovery
   ]
 
+@[default_target]
 lean_lib Compliance where
   srcDir := "."
   roots := #[
     `Compliance.ERC3643
   ]
 
+@[default_target]
 lean_lib Bridge where
   srcDir := "."
   roots := #[
@@ -164,6 +175,7 @@ lean_lib Bridge where
     `Bridge.YieldVault
   ]
 
+@[default_target]
 lean_lib GPU where
   srcDir := "."
   roots := #[
@@ -173,18 +185,21 @@ lean_lib GPU where
     `GPU.DEXScaling
   ]
 
+@[default_target]
 lean_lib Quasar where
   srcDir := "."
   roots := #[
     `Quasar.Consensus
   ]
 
+@[default_target]
 lean_lib Vault where
   srcDir := "."
   roots := #[
     `Vault.KeyIsolation
   ]
 
+@[default_target]
 lean_lib StrictE2EPQ where
   srcDir := "."
   roots := #[

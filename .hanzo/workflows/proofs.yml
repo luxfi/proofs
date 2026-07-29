@@ -1,10 +1,9 @@
 name: proofs
 
-# Builds the Lean corpus. The other workflow here compiles LaTeX, which confirms
-# the documents typeset and says nothing about whether the proofs hold — so a
-# theorem that stopped compiling broke no build.
+# Builds the Lean corpus and reports what a green build cannot show: the axiom
+# count, the declarations that state `True`, and the files no library compiles.
 #
-# The result is allowed to be bad. A red build is information we did not have.
+# The result is allowed to be bad. A red build is information.
 
 on:
   push:
@@ -43,15 +42,8 @@ jobs:
 
       - name: lake build
         working-directory: lean
-        # Every declared library, not the default target. `@[default_target]`
-        # marks one of sixteen here, so a bare `lake build` compiles that one
-        # library's import closure and reports success for the whole corpus.
-        # The list comes from the lakefile so it cannot drift from it.
-        run: |
-          set -euo pipefail
-          libs=$(sed -n 's/^lean_lib[[:space:]]\+\([A-Za-z0-9_]\+\).*/\1/p' lakefile.lean | tr '\n' ' ')
-          echo "libraries: ${libs}"
-          lake build ${libs}
+        # The whole corpus: every library in lakefile.lean is a default target.
+        run: lake build
 
       - name: Files the build never compiled
         # Asked of the build's own output rather than of an import parser: a
