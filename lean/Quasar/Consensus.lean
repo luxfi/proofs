@@ -19,15 +19,19 @@
 
   Axiom budget:
     - AdvBreak (adversary capability predicate)
+    - HonestlyProduced, ProducedBy (certificate provenance predicates)
+    - protocol_correctness (the protocol emits certificates that verify)
     - bls_unforgeable, corona_unforgeable, mldsa_rollup_unforgeable
-      (each: assumption holds => forgery of that layer is impossible)
+      (each: assumption holds => the adversary cannot produce that layer)
 
   All theorems proved by contradiction against the unforgeability axioms.
   Zero sorry gaps.
 
   Maps to:
-  - lux/consensus/protocol/quasar/quasar.go: TripleSignRound1, VerifyQuasarCert
-  - lux/consensus/protocol/quasar/types.go: QuasarCert
+  - lux/consensus/protocol/quasar/quasar.go:389: (*signer).TripleSignRound1
+  - lux/consensus/protocol/quasar/types.go:68: QuasarCert
+  - lux/consensus/protocol/quasar/types.go:190: (*QuasarCert).VerifyWithRealKeys,
+    the verifier engine/pq/engine.go:131 calls on a decoded certificate
 
   Authors: Zach Kelling, Woo Bin
   Lux Industries Inc
@@ -83,17 +87,59 @@ structure QuasarCert where
 -- 3. Adversary Model
 -- ============================================================================
 
-/-- An adversary forges a QuasarCert if it produces a certificate where
-    all three layers verify, without honest participation.
+-- A certificate's three verification bits do not say who produced it: a
+-- forgery and an honestly finalized certificate carry identical fields,
+-- which is exactly why unforgeability is a statement about production
+-- rather than about the wire format. Provenance is therefore a separate
+-- predicate, and the security definition below is relative to it.
 
-    "Without honest participation" is implicit: the adversary controls
-    the inputs to all three signature components. If any component
-    required honest signers, the adversary could not have produced it
-    alone -- that is what the unforgeability axioms capture. -/
-def AdvForge (_adv : Adversary) (cert : QuasarCert) : Prop :=
+/-- The certificate was assembled by an honest quorum running
+    `(*signer).TripleSignRound1` (`protocol/quasar/quasar.go:389`).
+    Opaque: honest production is a protocol event, not a function of the
+    certificate's fields. -/
+axiom HonestlyProduced : QuasarCert → Prop
+
+/-- This adversary produced the certificate. Opaque for the same reason
+    as HonestlyProduced. -/
+axiom ProducedBy : Adversary → QuasarCert → Prop
+
+/-- The adversary produced this certificate and no honest quorum did.
+    The second conjunct is the freshness condition of the EUF-CMA game:
+    replaying a certificate the honest signers emitted is not a forgery,
+    so a scheme cannot be broken by echoing its own output. -/
+def AdvProduced (adv : Adversary) (cert : QuasarCert) : Prop :=
+  ProducedBy adv cert ∧ ¬HonestlyProduced cert
+
+/-- An adversary forges a QuasarCert if it produces a fresh certificate
+    on which all three layers verify.
+
+    The provenance conjunct is load-bearing. Without it the predicate is
+    satisfied by any certificate whose three bits are set -- including
+    every honestly finalized one -- so every adversary would "forge"
+    every finalized block and the theorems below would hold vacuously.
+    `honest_cert_not_forgery` and `forge_not_implied_by_validity` state
+    that this is no longer the case. -/
+def AdvForge (adv : Adversary) (cert : QuasarCert) : Prop :=
+  AdvProduced adv cert ∧
   cert.blsValid = true ∧
   cert.coronaValid = true ∧
   cert.mldsaValid = true
+
+/-- Correctness of the scheme: the protocol emits certificates on which
+    all three layers verify. Pairs with the unforgeability axioms below
+    the way correctness pairs with EUF-CMA in a signature-scheme
+    definition -- security over an empty set of valid certificates says
+    nothing, so this is what gives the theorems below content.
+
+    Models `(*QuasarCert).VerifyWithRealKeys`
+    (`protocol/quasar/types.go:190`) accepting the output of
+    `(*signer).TripleSignRound1` (`protocol/quasar/quasar.go:389`). -/
+axiom protocol_correctness :
+  ∃ cert : QuasarCert,
+    HonestlyProduced cert ∧
+    cert.blsValid = true ∧
+    cert.coronaValid = true ∧
+    cert.mldsaValid = true
 
 -- ============================================================================
 -- 4. Signature Unforgeability Axioms
@@ -112,6 +158,7 @@ def AdvForge (_adv : Adversary) (cert : QuasarCert) : Prop :=
     H(m)^sk without knowing sk. -/
 axiom bls_unforgeable :
   ∀ (adv : Adversary) (cert : QuasarCert),
+    AdvProduced adv cert →
     ¬AdvBreak adv .DiscreteLog →
     cert.blsValid = false
 
@@ -124,6 +171,7 @@ axiom bls_unforgeable :
     verification equation A * z = t mod q with ||z|| < beta. -/
 axiom corona_unforgeable :
   ∀ (adv : Adversary) (cert : QuasarCert),
+    AdvProduced adv cert →
     ¬AdvBreak adv .ModuleSIS →
     cert.coronaValid = false
 
@@ -143,6 +191,7 @@ axiom corona_unforgeable :
     We axiomatize: ModuleLWE => no valid mldsaValid. -/
 axiom mldsa_rollup_unforgeable :
   ∀ (adv : Adversary) (cert : QuasarCert),
+    AdvProduced adv cert →
     ¬AdvBreak adv .ModuleLWE →
     cert.mldsaValid = false
 
@@ -157,37 +206,85 @@ axiom mldsa_rollup_unforgeable :
 
     Proof: by contradiction on each component.
     For each assumption X, suppose the adversary has NOT broken X.
-    Then by X_unforgeable, the X-component of cert is false.
-    But AdvForge requires it to be true. Contradiction. -/
+    Then by X_unforgeable, applied to the same adversary that produced
+    the certificate, the X-component of cert is false. But AdvForge
+    requires it to be true. Contradiction. -/
 theorem quasar_triple_defense
     (adv : Adversary) (cert : QuasarCert)
     (h_forge : AdvForge adv cert) :
     AdvBreak adv .DiscreteLog ∧
     AdvBreak adv .ModuleLWE ∧
     AdvBreak adv .ModuleSIS := by
-  obtain ⟨h_bls, h_rt, h_mldsa⟩ := h_forge
+  obtain ⟨h_prod, h_bls, h_rt, h_mldsa⟩ := h_forge
   refine ⟨?_, ?_, ?_⟩
   -- Case 1: DiscreteLog must be broken.
   -- If not broken, bls_unforgeable gives cert.blsValid = false.
   -- But h_bls says cert.blsValid = true. Contradiction.
   · by_contra h_not_dl
-    have := bls_unforgeable adv cert h_not_dl
+    have := bls_unforgeable adv cert h_prod h_not_dl
     rw [h_bls] at this
     exact absurd this (by decide)
   -- Case 2: ModuleLWE must be broken.
   -- If not broken, mldsa_rollup_unforgeable gives cert.mldsaValid = false.
   -- But h_mldsa says cert.mldsaValid = true. Contradiction.
   · by_contra h_not_lwe
-    have := mldsa_rollup_unforgeable adv cert h_not_lwe
+    have := mldsa_rollup_unforgeable adv cert h_prod h_not_lwe
     rw [h_mldsa] at this
     exact absurd this (by decide)
   -- Case 3: ModuleSIS must be broken.
   -- If not broken, corona_unforgeable gives cert.coronaValid = false.
   -- But h_rt says cert.coronaValid = true. Contradiction.
   · by_contra h_not_sis
-    have := corona_unforgeable adv cert h_not_sis
+    have := corona_unforgeable adv cert h_prod h_not_sis
     rw [h_rt] at this
     exact absurd this (by decide)
+
+/-- An honestly finalized certificate is not a forgery, for any
+    adversary. Immediate from the freshness conjunct of AdvProduced.
+
+    This is the property the three verification bits alone cannot
+    express: under a fields-only definition of forgery, every finalized
+    block is a forgery by every adversary, and `quasar_triple_defense`
+    then hands out `AdvBreak adv a` for every adversary and every
+    assumption. -/
+theorem honest_cert_not_forgery
+    (adv : Adversary) (cert : QuasarCert)
+    (h_honest : HonestlyProduced cert) :
+    ¬AdvForge adv cert := by
+  intro h_forge
+  exact h_forge.1.2 h_honest
+
+/-- There is a certificate on which all three layers verify and which no
+    adversary forges. Composes correctness with the previous theorem. -/
+theorem valid_cert_not_universally_forged :
+    ∃ cert : QuasarCert,
+      cert.blsValid = true ∧
+      cert.coronaValid = true ∧
+      cert.mldsaValid = true ∧
+      ∀ adv : Adversary, ¬AdvForge adv cert := by
+  obtain ⟨cert, h_honest, h_bls, h_rt, h_mldsa⟩ := protocol_correctness
+  exact ⟨cert, h_bls, h_rt, h_mldsa,
+         fun adv => honest_cert_not_forgery adv cert h_honest⟩
+
+/-- Certificate validity does not imply forgery: the three verification
+    bits being set is not sufficient for AdvForge.
+
+    Stated as the negation of the implication so that it fails to
+    compile if AdvForge is ever weakened back to a predicate over the
+    certificate's fields. Every theorem below takes AdvForge as a
+    hypothesis, so their content rests on this: an AdvForge hypothesis
+    cannot be discharged by exhibiting a certificate with three true
+    bits. -/
+theorem forge_not_implied_by_validity :
+    ¬ ∀ (adv : Adversary) (cert : QuasarCert),
+        cert.blsValid = true →
+        cert.coronaValid = true →
+        cert.mldsaValid = true →
+        AdvForge adv cert := by
+  intro h_all
+  obtain ⟨cert, h_bls, h_rt, h_mldsa, h_no_forge⟩ :=
+    valid_cert_not_universally_forged
+  exact h_no_forge ⟨0⟩ (h_all ⟨0⟩ cert h_bls h_rt h_mldsa)
 
 -- ============================================================================
 -- 6. Corollaries

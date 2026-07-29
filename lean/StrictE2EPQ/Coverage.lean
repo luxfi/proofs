@@ -36,7 +36,7 @@ lemma isE2EPQ_highValue {p : ChainSecurityProfile} (h : IsE2EPQ p) :
     isPQScheme p.highValueSchemeID = true := h.2.2.2.1
 
 lemma isE2EPQ_proofPolicy {p : ChainSecurityProfile} (h : IsE2EPQ p) :
-    p.proofPolicyID = .pq128 := h.2.2.2.2.1
+    p.proofPolicyID = .starkFRISHA3PQ := h.2.2.2.2.1
 
 lemma isE2EPQ_backends {p : ChainSecurityProfile} (h : IsE2EPQ p) :
     ∀ b ∈ p.allowedProofBackends, isStrictPQBackend b = true :=

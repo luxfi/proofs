@@ -1,18 +1,20 @@
 # Lux Formal Verification
 
 Lean proof scripts for the Lux consensus stack, plus TLA+, Tamarin and Halmos
-artifacts. 115 Lean files: **756 theorems and lemmas, 503 axioms, 0 `sorry`**.
+artifacts. 116 Lean files: **760 theorems and lemmas, 504 axioms, 0 `sorry`**.
 
 `lake build` runs in CI (`.hanzo/workflows/proofs.yml`) over every library the
-lakefile declares. Lean confirms each proof follows from what it is given; 503
+lakefile declares. Lean confirms each proof follows from what it is given; 504
 of those givens are axioms.
 
 Three numbers CI prints on every run, because none is visible in a green build:
 
-- **503 axioms.** Cryptographic hardness must be assumed somewhere, so an axiom
+- **504 axioms.** Cryptographic hardness must be assumed somewhere, so an axiom
   is not a defect. The count is what separates an assumption from a result.
-- **55 declarations state `True`**, which `trivial` proves — they assume nothing
-  and establish nothing. `lean/vacuity.py` lists them.
+- **75 declarations carry no content.** `lean/vacuity.py` names three ways a
+  statement can be empty and lists every instance: it `states True`, which
+  `trivial` proves; it `is provable by rfl`, as `∃ x, e = x` is; or it
+  `restates a hypothesis`.
 - **10 modules are in no library** and so are never compiled, among them
   `Crypto/Corona/Unforgeability.lean` and `Main.lean`. The list comes from the
   build's own output: a source file with no `.olean` was not checked.
@@ -33,7 +35,9 @@ count is what separates an assumption from a result, so it is the status.
 | Quasar modes | `lean/Consensus/Quasar.lean` | 0 | 11 | Proved, no axioms |
 | ML-DSA boundary clearance | `lean/Crypto/Pulsar/BoundaryClearance.lean` | 1 | 16 | Proved; real hint arithmetic |
 | Shamir scaling | `lean/Crypto/Pulsar/Shamir.lean` | 1 | 5 | Proved (algebraic) + empirical (Go tests) |
-| Quasar triple defence | `lean/Quasar/Consensus.lean` | 4 | 14 | Modus tollens against 4 hardness axioms |
+| Quasar triple defence | `lean/Quasar/Consensus.lean` | 7 | 17 | Modus tollens against 3 hardness axioms, relative to certificate provenance |
+| Strict-PQ profile gate | `lean/StrictE2EPQ/Profile.lean` | 0 | 5 | Proved, no axioms; wire bytes checked against the Go tables, not commented |
+| Strict-PQ 14-surface coverage | `lean/StrictE2EPQ/Coverage.lean` | 0 | 27 | Proved, no axioms; decomposition of `IsE2EPQ` |
 | Pulsar unforgeability (TS-UF) | `lean/Crypto/Pulsar/Unforgeability.lean` | 3 | 6 | Reduction stated; `TSUFBound` is defined as `True` |
 | Pulsar output-interchangeability | `lean/Crypto/Pulsar/OutputInterchange.lean` | 2 | 1 | Reduction stated |
 | DAG-EVM safety | `lean/Consensus/Safety.lean` | 3 | 2 | `safety` composes two axioms; the proved window lemma beside it is unused |
@@ -46,6 +50,18 @@ count is what separates an assumption from a result, so it is the status.
 Each tool checks a *model*, written here, against properties stated here. None
 of them reads the production implementation, so agreement between a model and
 the code it cites is maintained by hand.
+
+Where a model names a wire constant, it also carries that constant's byte and
+proves the value, so `lake build` catches the drift a stale comment hides.
+Three `luxfi/consensus` packages declare overlapping scheme-ID tables and they
+disagree: `pkg/wire/candidate.go:346-352` assigns Pulsar-M the 0x41/0x42/0x43
+bytes that `config/pq_mode.go:305-310` assigns to raw ML-DSA, while requiring
+the two tables to be identical; and byte 0x10 is `ContractAuthZChainProof`
+(post-quantum) in `config/pq_mode.go:871` and `ContractAuthECDSASecp256k1Legacy`
+(classical) in `protocol/auth/scheme_ids.go:202`. `StrictE2EPQ/Profile.lean`
+follows `config` and `protocol/auth`, records the divergence on the enums it
+affects, and refuses any byte the two readings disagree about. Reconciling the
+Go tables is open work in `luxfi/consensus`, not here.
 
 - `lean/` — the models above. Files carry a `Maps to:` block naming the Go,
   Rust or Solidity source they model.

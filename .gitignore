@@ -15,3 +15,4 @@ out/
 *.synctex.gz
 .claude/worktrees/
 states/
+__pycache__/

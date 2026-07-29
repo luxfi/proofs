@@ -117,8 +117,12 @@ def main() -> int:
 
     deps = parse(run.stdout)
     if not deps:
-        print("no axiom output; is the corpus built? run `lake build`", file=sys.stderr)
-        print(run.stderr[-2000:], file=sys.stderr)
+        # On stdout, not stderr: a runner that drops stderr turns a precise
+        # error into "it failed", and the usual cause here is precise — two
+        # modules declaring the same name cannot be imported together, so the
+        # corpus does not load as a whole.
+        print("no axiom output. Lean said:\n")
+        print((run.stdout + run.stderr)[-3000:])
         return 1
 
     # A theorem is proved when it rests on the ambient logic alone.
