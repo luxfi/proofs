@@ -1,6 +1,22 @@
 # Lux Formal Verification
 
-Machine-checked proofs for the Lux consensus stack and Solidity contract invariants.
+Lean proof scripts for the Lux consensus stack, plus TLA+, Tamarin and Halmos
+artifacts. 115 Lean files: **756 theorems and lemmas, 503 axioms, 0 `sorry`**.
+
+`lake build` runs in CI (`.hanzo/workflows/proofs.yml`) over every library the
+lakefile declares, so Lean checks the corpus on every push. Say "checked"
+precisely: Lean confirms each proof follows from what it is given, and 503 of
+those givens are axioms. 55 declarations state `True`, which `trivial` proves,
+so they assume nothing and establish nothing — `lean/vacuity.py` lists them and
+CI prints the count next to the build that cannot see them.
+
+Ten modules are in no library and are never compiled, among them
+`Crypto/Corona/Unforgeability.lean` and `Main.lean`. CI prints that list too,
+derived from the build's own output rather than from the lakefile.
+
+Read the file before calling a result proved. Several headline theorems are
+short compositions of axioms declared directly above them and say so in their
+own comments.
 
 ## Post-E2E-PQ State (current)
 
@@ -22,17 +38,26 @@ registry safety are the three active proof tracks.
 
 ### Active proof tracks
 
-| Track | Files | Status |
-|-------|-------|--------|
-| Quasar soundness | `lean/Consensus/Quasar.lean` + `~/work/lux/papers/lp-020-quasar-consensus.tex` Thm 7.5 | Proved |
-| Pulsar-M unforgeability (TS-UF) | `pulsar-m/unforgeability.tex` + `lean/Crypto/Pulsar_M/Unforgeability.lean` | Reduction stated, mechanization in flight |
-| Pulsar-M output-interchangeability (Class N1) | `pulsar-m/output-interchangeability.tex` + `lean/Crypto/Pulsar_M/OutputInterchange.lean` | Reduction stated, mechanization in flight |
-| Pulsar-M Shamir scaling to N=1,111,111 | `pulsar-m/scaling.tex` + `lean/Crypto/Pulsar_M/Shamir.lean` | Proved (algebraic) + empirical (Go tests) |
-| Pulsar-M DKG soundness + privacy | `pulsar-m/dkg-soundness.tex` | Reduction stated |
-| Pulsar-M reshare pk-invariance + soundness + privacy | `pulsar-m/reshare-preservation.tex` | Reduction stated |
-| Z-Chain key registry safety | TBD (HIP-0078 §4) | Open |
-| DAG-EVM safety | `lean/Consensus/Safety.lean` | Proved |
-| BFT quorum intersection | `lean/Consensus/BFT.lean` | Proved |
+Axiom and theorem counts are per file, measured. A track resting on axioms is
+not thereby wrong — cryptographic hardness has to be assumed somewhere — but the
+count is what separates an assumption from a result, so it is the status.
+
+| Track | File | ax | thm | Status |
+|-------|------|---:|----:|--------|
+| BFT quorum intersection | `lean/Consensus/BFT.lean` | 0 | 5 | Proved, no axioms |
+| Quasar modes | `lean/Consensus/Quasar.lean` | 0 | 11 | Proved, no axioms |
+| ML-DSA boundary clearance | `lean/Crypto/Pulsar/BoundaryClearance.lean` | 1 | 16 | Proved; real hint arithmetic |
+| Shamir scaling | `lean/Crypto/Pulsar/Shamir.lean` | 1 | 5 | Proved (algebraic) + empirical (Go tests) |
+| Quasar triple defence | `lean/Quasar/Consensus.lean` | 4 | 14 | Modus tollens against 4 hardness axioms |
+| Pulsar unforgeability (TS-UF) | `lean/Crypto/Pulsar/Unforgeability.lean` | 3 | 6 | Reduction stated; `TSUFBound` is defined as `True` |
+| Pulsar output-interchangeability | `lean/Crypto/Pulsar/OutputInterchange.lean` | 2 | 1 | Reduction stated |
+| DAG-EVM safety | `lean/Consensus/Safety.lean` | 3 | 2 | `safety` composes two axioms; the proved window lemma beside it is unused |
+| Liveness | `lean/Consensus/Liveness.lean` | 10 | 1 | The theorem applies the axioms that are the argument |
+| Corona unforgeability | `lean/Crypto/Corona/Unforgeability.lean` | — | — | In no library; never compiled |
+| Z-Chain key registry safety | TBD (HIP-0078 §4) | — | — | Open |
+
+The three `lean/Crypto/Pulsar_M/…` paths this table used to cite do not exist;
+the files are under `lean/Crypto/Pulsar/`.
 
 ### Cross-repo coherence
 - `lean/` tracks `~/work/lux/papers/` theorem numbers 1:1.
