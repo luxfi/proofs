@@ -16,6 +16,8 @@
     DeviceKey = HMAC(UserDEK,   "device:" ++ deviceID)
 -/
 
+namespace Vault.KeyIsolation
+
 -- Model HMAC as a PRF: deterministic, collision-resistant, independent outputs
 -- for independent inputs.
 axiom PRF : List UInt8 → List UInt8 → List UInt8
@@ -129,3 +131,5 @@ theorem collection_compromise_safe
   rw [hguess]
   simp only [colDEK, deriveCollectionDEK]
   exact prf_output_ne_key userDEK ("collection:" ++ colName).toUTF8.toList
+
+end Vault.KeyIsolation

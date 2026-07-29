@@ -27,6 +27,8 @@
   5. Derivation determinism: same inputs always produce same DEK
 -/
 
+namespace Crypto.DEKDerivation
+
 -- Model HMAC as a PRF: deterministic, collision-resistant, independent outputs
 -- for independent inputs. Same axiom style as Vault/KeyIsolation.lean.
 axiom PRF : List UInt8 → List UInt8 → List UInt8
@@ -226,3 +228,5 @@ theorem org_dek_isolation
   apply prf_collision_resistant
   intro heq
   exact h (String.toUTF8_injective (by simpa using heq))
+
+end Crypto.DEKDerivation

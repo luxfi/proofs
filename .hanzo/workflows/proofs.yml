@@ -68,6 +68,24 @@ jobs:
             [ "${n}" -gt 0 ] && printf '%s\n' "${missed}" | sed 's/^/- `/; s/$/`/'
           } >> "$GITHUB_STEP_SUMMARY"
 
+      - name: What each theorem rests on
+        # `#print axioms` per theorem, which is the only thing that
+        # distinguishes a proof from an assumption handed to itself. A theorem
+        # resting on propext / Classical.choice / Quot.sound alone is proved;
+        # anything else it names is load-bearing. See lean/axioms.py.
+        if: always()
+        working-directory: lean
+        run: |
+          set -euo pipefail
+          python3 axioms.py . | tee /tmp/axioms.txt
+          {
+            echo "### What each theorem rests on"
+            echo ""
+            echo '```'
+            tail -28 /tmp/axioms.txt
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: What the corpus assumes
         # An axiom is an assumption; a vacuous one is not even that. Both counts
         # go in every run's summary so the trend is visible rather than
@@ -87,5 +105,5 @@ jobs:
             echo "|---|---:|"
             echo "| theorems and lemmas | ${th} |"
             echo "| axioms | ${ax} |"
-            echo "| stating \`True\` | ${vac} |"
+            echo "| carrying no content | ${vac} |"
           } >> "$GITHUB_STEP_SUMMARY"
