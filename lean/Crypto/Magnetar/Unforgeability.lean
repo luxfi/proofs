@@ -78,11 +78,14 @@ theorem shamirPrime_is_prime : Nat.Prime shamirPrime := by decide
 -- foundation the security argument rests on.
 -- ===========================================================================
 
-/-- An adversary's advantage against a hardness problem. Modelled as
-    Unit-like to avoid carrying probability tooling into the algebraic
-    layer; the TS-UF reduction composes these as a sum upper-bound. -/
-opaque HardnessAdvantage : Type :=
-  Unit
+/-- An adversary's advantage against a hardness problem, as a nonnegative
+    quantity in units of 2^-k.
+
+    Ordered and additive, which is what a bound of the form
+    `adv ≤ a + b + c + d` requires. The previous model was `Unit`, in which
+    every advantage is equal to every other and no bound is expressible — which
+    is why the TS-UF statement below concluded `True`. -/
+abbrev HardnessAdvantage := Nat
 
 /-- SHAKE256 / cSHAKE256 collision resistance. NIST FIPS 202 + SP
     800-185 establish this as the standard hash-function security
@@ -129,60 +132,57 @@ theorem magnetar_shamir_correct
 -- TS-UF advantage bound for Magnetar.
 -- ===========================================================================
 
-/-- A Magnetar TS-UF advantage bound: there exists an upper bound on
-    the adversary's advantage expressed as a sum of the four named
-    hardness advantages (SHAKE collision + preimage + FIPS 205 EUF-CMA
-    + aggregator-TCB caveat). This abstract statement carries the
-    composition structure. -/
-def MagnetarTSUFBound (_fp : FipsSlhParams) (_tp : ThresholdParams) : Prop :=
-  ∃ (_a : HardnessAdvantage),
-    -- The TS-UF advantage decomposes into the four named hardness
-    -- advantages plus a negligible RO programming penalty. The
-    -- decomposition theorem is the standard reveal-and-aggregate
-    -- reduction modulo the aggregator-TCB caveat.
-    True
+/-- The advantage of the best adversary against Magnetar's threshold strong
+    unforgeability at these parameters. Opaque: its value is whatever the
+    reduction computes. -/
+opaque magnetarTSUFAdv (fp : FipsSlhParams) (tp : ThresholdParams) :
+    HardnessAdvantage
+
+/-- The four named hardness advantages, summed. Free of `ThresholdParams` by
+    construction — that is the substance of n-independence below. -/
+noncomputable def MagnetarTSUFBound (fp : FipsSlhParams) : HardnessAdvantage :=
+  SHAKECollisionAdv fp + SHAKEPreimageAdv fp + SLHDSAEUFCMAAdv fp
+    + AggregatorTCBCaveat
 
 /-- **TS-UF security of Magnetar.**
 
-    The advantage of any PPT adversary against threshold strong
-    unforgeability is bounded by a sum of the four hardness advantages
-    above plus the RO programming penalty.
+    Assumed, not proved here. `magnetar/PROOF-CLAIMS.md` §0 states that
+    "Magnetar has no mechanized proof of any threshold property", and this
+    corpus does not have one either — so the reduction's conclusion is recorded
+    as an axiom, which is what an unmechanised reduction is.
 
-    Maps to magnetar/SPEC.md §7 (the v0.1 trust model). -/
-theorem magnetar_tsuf (fp : FipsSlhParams) (tp : ThresholdParams) :
-    MagnetarTSUFBound fp tp :=
-  ⟨SLHDSAEUFCMAAdv fp, trivial⟩
+    Maps to magnetar/SPEC.md §7 (the v0.1 trust model), whose aggregator-TCB
+    caveat is the fourth summand. -/
+axiom magnetar_tsuf (fp : FipsSlhParams) (tp : ThresholdParams) :
+    magnetarTSUFAdv fp tp ≤ MagnetarTSUFBound fp
 
 /-- **n-independence of the TS-UF bound.**
 
-    For any two threshold parameter sets at the same FIPS level, the
-    `MagnetarTSUFBound` proposition holds equally — the advantage is
-    structural in the FIPS parameters and the RO programming,
-    independent of n. -/
+    The bound does not mention `ThresholdParams`, so one bound covers every
+    threshold parameter set at a fixed FIPS level. This is the claim
+    "the advantage is structural in the FIPS parameters, independent of n",
+    and it follows from the shape of `MagnetarTSUFBound` rather than from
+    re-wrapping the hypothesis. -/
 theorem magnetar_tsuf_n_independent
-    (fp : FipsSlhParams) (tp1 tp2 : ThresholdParams)
-    (h1 : MagnetarTSUFBound fp tp1) : MagnetarTSUFBound fp tp2 := by
-  obtain ⟨a, _⟩ := h1
-  exact ⟨a, trivial⟩
+    (fp : FipsSlhParams) (tp1 tp2 : ThresholdParams) :
+    magnetarTSUFAdv fp tp1 ≤ MagnetarTSUFBound fp ∧
+    magnetarTSUFAdv fp tp2 ≤ MagnetarTSUFBound fp :=
+  ⟨magnetar_tsuf fp tp1, magnetar_tsuf fp tp2⟩
 
-/-- **Corollary: Magnetar is hardness-disjoint from Pulsar.**
+/- Hardness-family disjointness from Pulsar.
 
-    Magnetar's TS-UF bound reduces to SHAKE collision/preimage
-    resistance (hash family), while Pulsar's TS-UF bound reduces to
-    MLWE/MSIS hardness (lattice family). The hardness families are
-    independent — a quantum oracle for SHAKE collision does not give
-    an MLWE oracle and vice versa.
+   `MagnetarTSUFBound` sums SHAKE collision resistance, SHAKE preimage
+   resistance, FIPS 205 EUF-CMA and the aggregator-TCB caveat. No lattice
+   advantage appears in it, while Pulsar's bound reduces to MLWE and MSIS. That
+   is the cryptographic reason the Polaris profile (Pulsar || Corona ||
+   Magnetar) is worth having: Pulsar and Corona are both Module-LWE, so Magnetar
+   is its only family-disjoint leg.
 
-    This is the cryptographic reason the Polaris cert profile
-    (Pulsar || Corona || Magnetar) is meaningful: an adversary must
-    break ALL THREE independent hardness families to forge a Polaris
-    cert. -/
-theorem magnetar_hardness_disjoint_from_lattice
-    (fp_mag : FipsSlhParams) (tp : ThresholdParams)
-    (mag_bound : MagnetarTSUFBound fp_mag tp) :
-    -- The Magnetar bound holds regardless of any lattice-assumption
-    -- state; this is a structural property of the reduction.
-    MagnetarTSUFBound fp_mag tp :=
-  mag_bound
+   Not a theorem here. A theorem stood in this place of the form
+   `(h : Bound) : Bound := h`, which returns its own hypothesis and so proves
+   nothing about disjointness. Stating it properly quantifies over adversaries
+   and reductions between problems; this model has neither, and the bound's
+   independence from lattice hardness is visible in its definition instead.
+-/
 
 end Crypto.Magnetar

@@ -3,8 +3,10 @@
   Hash-based twin of Pulsar (FIPS 204 ML-DSA / Module-LWE).
 
   This file mechanises the *batch-verify* dispatcher (production today).
-  The MPC-signing layer (LP-0120 slot 0x012207) is axiomatic here; full
-  GKMM 2024/447 reduction in `proofs/lean/Crypto/Magnetar_MPC.lean`.
+  The MPC-signing layer (LP-0120 slot 0x012207) is axiomatic here. There is no
+  mechanised GKMM 2024/447 reduction — `magnetar/PROOF-CLAIMS.md` §0 states
+  that "Magnetar has no mechanized proof of any threshold property", and this
+  corpus does not add one.
 
   Maps to:
   - luxfi/crypto:slhdsa (gpu.go: VerifyBatch / VerifyBatchGPU)
@@ -92,8 +94,8 @@ theorem magnetar_empty_accepted (ps : ParamSet) :
 /-- MPC threshold-signing byte-equality (axiomatic). Magnetar's
     threshold-SLH-DSA output over a Pedersen-DKG-issued group secret
     `sk` is byte-equal to the standard FIPS 205 signature on `(sk, msg)`.
-    Full GKMM 2024/447 reduction mechanised in
-    `Crypto.Magnetar_MPC.threshold_byte_equality`. Upgrading from
+    The GKMM 2024/447 reduction is not mechanised; see
+    `magnetar/PROOF-CLAIMS.md` §0. Upgrading from
     per-validator individual sigs to a single threshold sig (LP-0120
     0x012207) requires no verifier change. -/
 axiom magnetar_mpc_threshold_correct :
@@ -106,8 +108,8 @@ axiom magnetar_mpc_threshold_correct :
 /-
   Shipping layers: GPU batch verify of single-party SLH-DSA (live,
   Metal + CUDA + WGSL); public-DKG + MPC threshold signing (LP-0120
-  0x012207; Lean reduction in `Crypto.Magnetar_MPC`). Architecture:
-  `~/work/lux/threshold/study/magnetar.md`.
+  0x012207). Assurance vocabulary and what is and is not proved:
+  `magnetar/PROOF-CLAIMS.md`.
 -/
 
 end Crypto.Magnetar
