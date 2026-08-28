@@ -10,7 +10,7 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@hanzo/font": "^1.8.1",
+    "@hanzo/font": "1.9.2",
     "next": "^16.0.0",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
