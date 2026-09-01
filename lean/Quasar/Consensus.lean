@@ -29,7 +29,7 @@
   - lux/consensus/protocol/quasar/quasar.go: TripleSignRound1, VerifyQuasarCert
   - lux/consensus/protocol/quasar/types.go: QuasarCert
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
 -/
 

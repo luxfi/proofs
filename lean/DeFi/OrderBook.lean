@@ -16,7 +16,7 @@
   - Deterministic: same order sequence → same fills
   - Permissionless: no KYC gate (pure DeFi)
 
-  Authors: Zach Kelling (Dec 2025), Woo Bin (Mar 2026)
+  Authors: Lux Research (Dec 2025), Woo Bin (Mar 2026)
 -/
 
 import Mathlib.Data.Nat.Defs

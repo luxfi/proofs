@@ -20,7 +20,7 @@
   - Anchor: knowing the head hash is sufficient to verify all history
   - WORM: the chain is append-only; old blocks cannot be modified
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
 -/
 

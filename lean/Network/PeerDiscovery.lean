@@ -14,7 +14,7 @@
   - Bounded degree: max peer connections prevent resource exhaustion
   - Gossip convergence: information reaches all nodes in O(log n) rounds
 
-  Author: Zach Kelling
+  Author: Lux Research
 -/
 
 import Mathlib.Data.Nat.Defs

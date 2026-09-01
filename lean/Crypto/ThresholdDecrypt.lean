@@ -15,7 +15,7 @@
   - luxfi/fhe: threshold decryption for TFHE ciphertexts
   - lux/mpc: threshold signing key shares
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
 -/
 

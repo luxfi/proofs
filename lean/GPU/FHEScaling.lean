@@ -15,7 +15,7 @@
   4. Batch FHE amortizes bootstrap cost across ciphertexts
   5. Threshold FHE decryption scales with validator count
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Zoo Labs Foundation
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/

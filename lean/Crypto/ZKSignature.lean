@@ -10,7 +10,7 @@
   - Without revealing the signature itself
   - The verifier learns nothing beyond the statement's truth
 
-  Authors: Zach Kelling, Lux Industries
+  Authors: Lux Research, Lux Industries
 -/
 
 import Mathlib.Data.Nat.Defs

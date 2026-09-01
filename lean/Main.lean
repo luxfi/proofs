@@ -19,7 +19,7 @@
   sequential_worldview_preserved is now a theorem (proved via topo_equivalence).
   Crypto axioms (verify, batch_sound, fheAdd) model external hardness assumptions.
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/

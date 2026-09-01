@@ -14,7 +14,7 @@
   4. Validator set scaling with GPU batch verification
   5. Block production pipelining with GPU precomputation
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Zoo Labs Foundation
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/

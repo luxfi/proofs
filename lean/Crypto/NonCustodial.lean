@@ -25,7 +25,7 @@
   - Operator cannot move assets unilaterally
   - User cannot bypass compliance unilaterally
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
 -/
 
