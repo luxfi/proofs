@@ -33,7 +33,7 @@
   - lux/consensus/protocol/quasar/types.go:190: (*QuasarCert).VerifyWithRealKeys,
     the verifier engine/pq/engine.go:131 calls on a decoded certificate
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Lux Industries Inc
 -/
 

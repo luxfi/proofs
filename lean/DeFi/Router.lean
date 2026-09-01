@@ -9,7 +9,7 @@
   - Splitting: large orders split across pools for less slippage
   - Atomic: multi-pool route executes atomically or not at all
 
-  Author: Zach Kelling
+  Author: Lux Research
 -/
 
 import Mathlib.Data.Nat.Defs

@@ -13,7 +13,7 @@
   - Proof size: O(depth) elements, each O(1) (vs Merkle O(log n))
   - Batch proofs: multiple values in one proof
 
-  Author: Zach Kelling
+  Author: Lux Research
 -/
 
 import Mathlib.Data.Nat.Defs

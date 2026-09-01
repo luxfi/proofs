@@ -16,7 +16,7 @@
   - No impermanent loss on single-sided staking
   - Compounding: rewards auto-compound into staking position
 
-  Author: Zach Kelling (December 2025)
+  Author: Lux Research (December 2025)
 -/
 
 import Mathlib.Data.Nat.Defs

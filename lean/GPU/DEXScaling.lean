@@ -15,7 +15,7 @@
   4. Price oracle aggregation: median computation on GPU
   5. ZAP binary protocol: GPU-native serialization
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Zoo Labs Foundation
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/

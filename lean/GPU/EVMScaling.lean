@@ -17,7 +17,7 @@
   These are the foundational scaling laws for any modern chain
   using GPU-accelerated smart contract execution.
 
-  Authors: Zach Kelling, Woo Bin
+  Authors: Lux Research, Woo Bin
   Zoo Labs Foundation
   ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 -/
