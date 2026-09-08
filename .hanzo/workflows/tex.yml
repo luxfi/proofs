@@ -48,7 +48,7 @@ concurrency:
 jobs:
   latexmk:
     name: Compile every .tex
-    runs-on: [lux-build-linux-amd64]
+    runs-on: [linux-amd64]
     container:
       image: ubuntu:24.04
     timeout-minutes: 60

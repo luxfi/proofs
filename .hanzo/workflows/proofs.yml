@@ -19,7 +19,7 @@ concurrency:
 
 jobs:
   lake-build:
-    runs-on: [lux-build-linux-amd64]
+    runs-on: [linux-amd64]
     # Mathlib is the long pole even with the cache; a cold run is most of an hour.
     timeout-minutes: 120
     steps:
