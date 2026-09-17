@@ -41,7 +41,7 @@ correspondence map.
 | `quasar/l1-l2-covalidation.tex` | L1 / L2 co-validation invariants |
 | `quasar/warp-pq-soundness.tex` | Warp PQ-messaging soundness |
 
-### `fhe/` — Threshold FHE (4 documents)
+### `fhe/` — Threshold FHE (5 documents)
 
 | File | Property |
 |---|---|
@@ -49,6 +49,7 @@ correspondence map.
 | `fhe/dual-runtime-equivalence.tex` | CPU == GPU equivalence on FHE primitives |
 | `fhe/nebula-binding.tex` | Nebula chain binding for FHE ciphertexts |
 | `fhe/parameter-security.tex` | Parameter selection ↔ NIST cat 3/5 |
+| `fhe/threshold-custody.tex` | t-of-n custody of the M-Chain threshold-FHE lane |
 
 ### `lss/` — Linear Shamir's Secret Sharing (3 documents)
 

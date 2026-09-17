@@ -1,0 +1,437 @@
+%% ============================================================
+%% fhe/threshold-custody.tex
+%% ============================================================
+%%
+%% Custody property of the threshold-FHE scheme as deployed in the
+%% M-Chain wiring: no member, and no coalition below the threshold,
+%% ever holds or can reconstruct the FHE secret key, across key
+%% generation and decryption. Also fixes which secret-sharing
+%% object the scheme uses and why it is not the one the threshold
+%% signature schemes use. Papers cite this; do not redefine.
+%% ============================================================
+
+\subsection*{Threshold-FHE custody in the M-Chain wiring}
+
+\begin{definition}[Threshold-FHE committee]
+\label{def:tfhe-committee}
+A \emph{threshold-FHE committee} is a tuple
+$\mathcal{K} = (t, n, \mathsf{pk}, \{\sigma_j\}_{j=1}^{n})$ over the LWE
+parameter set $\mathsf{ParameterSetID}$ of
+Theorem~\ref{thm:lwe-parameter-security}, where $n$ is the committee size,
+$1 \le t \le n$ the threshold, $\mathsf{pk} = (p, a)$ the collective LWE
+encryption key, and $\sigma_j$ the share held by the member at position $j$.
+Writing $R_q = \mathbb{Z}_q[X]/(X^N+1)$ for the LWE ring, the committee is
+\emph{well formed} when there exists $s \in R_q$ and a degree-$(t-1)$ family
+$\{f_i\}_{i<N}$ over $\mathbb{Z}_q$ with $f_i(0) = s[i]$ and
+$\sigma_j[i] = f_i(j)$ for every $i$ and $j$, and $p = -a s + e$ for an error
+$e$ drawn from the parameter set's error distribution.
+
+The value $s$ is the \emph{collective secret}. It is a well-defined element of
+$R_q$, determined by any $t$ of the shares; the claim of this section is about
+where it does and does not exist as a value in the protocol.
+\end{definition}
+
+\begin{definition}[Custody]
+\label{def:tfhe-custody}
+Let $\Pi$ be a protocol realising Definition~\ref{def:tfhe-committee}, run
+over authenticated point-to-point and broadcast channels, and let
+$\mathsf{view}_S(\Pi)$ denote the joint view of a coalition $S \subseteq [n]$:
+the coalition's own inputs and random tapes, every broadcast message, and
+every point-to-point message addressed to a member of $S$. $\Pi$ has
+\emph{$t$-custody} when, for every $S$ with $|S| \le t - 1$,
+\[
+  \mathsf{view}_S(\Pi) \;\approx\; \mathsf{view}_S^{\mathsf{sim}}(\Pi),
+\]
+where the simulator $\mathsf{view}^{\mathsf{sim}}_S$ is given
+$\mathsf{pk}$, the coalition's own contributions, and the plaintexts of the
+ciphertexts the committee decrypts during the run, but not $s$. The relation
+$\approx$ is computational indistinguishability for the key-generation
+transcript and statistical indistinguishability for the decryption transcript.
+
+$t$-custody is strictly stronger than the statement that no \emph{single}
+member holds $s$: it also excludes any coalition of $t-1$ members
+reconstructing $s$, and it quantifies over the whole run, so a protocol that
+avoids materialising $s$ at generation time but reassembles it at decryption
+time does not satisfy it.
+\end{definition}
+
+\begin{theorem}[Custody of the deployed wiring]
+\label{thm:tfhe-mchain-custody}
+Let $\Pi_{\mathrm{MPC}}$ be the threshold-FHE lane as deployed: the scheme
+$\mathsf{tfhe}$ of \texttt{github.com/luxfi/threshold/protocols/tfhe} ---
+dealerless key generation (\texttt{keygen.go}), the partial-decrypt
+kernel (\texttt{partial.go}) and the committee layer
+(\texttt{committee.go}, \texttt{decrypt.go}) --- driven across nodes by
+\texttt{luxfi/mpc/pkg/mpc/tfhe\_session.go} and consumed by the encrypted-policy
+gate \texttt{luxfi/mpc/pkg/policy/fhe\_threshold\_decryptor.go}. Then
+$\Pi_{\mathrm{MPC}}$ has $t$-custody in the sense of
+Definition~\ref{def:tfhe-custody}, under
+\begin{enumerate}[nosep]
+  \item the decisional RLWE assumption at the deployed parameter set
+        (Theorem~\ref{thm:lwe-parameter-security}),
+  \item the privacy of Shamir sharing over $\mathbb{Z}_q$ at degree $t-1$, and
+  \item the smudging bound of $\mathsf{Sigma}$, namely
+        $\Delta \sqrt{t}\,\cdot 6\sigma \le q/16$ with $\Delta = n!$ --- a
+        ceiling now conservative by a factor of $\Delta$ relative to what
+        recombination needs (Remark~\ref{rem:tfhe-modular-inverse-gap}), and so
+        available with room to spare.
+\end{enumerate}
+\end{theorem}
+
+\begin{proof}
+Fix $S$ with $|S| \le t-1$ and let $H = [n] \setminus S$ be the honest
+members. The transcript decomposes into the two phases.
+
+\emph{Key generation.} Each member $j$ samples its own contribution $s_j$
+locally and publishes $p_j = -a\,s_j + e_j$, where $a$ is the common
+reference polynomial. The coalition's view of an honest $j \in H$ therefore
+contains: $p_j$, and the single Shamir evaluation $\sigma_{j \to k}[i] =
+f_{j,i}(k)$ for each $k \in S$, where $f_{j,i}$ is a fresh degree-$(t-1)$
+polynomial with $f_{j,i}(0) = s_j[i]$.
+
+The $|S| \le t-1$ evaluations of a degree-$(t-1)$ polynomial at distinct
+non-zero points are uniform on $\mathbb{Z}_q^{|S|}$ and independent of
+$f_{j,i}(0)$; this is the privacy half of Shamir sharing, applied
+coefficientwise, and it is information-theoretic. The published $p_j$ is an
+RLWE sample under $s_j$ and is computationally indistinguishable from uniform
+by assumption~(1). Hence the coalition's view of each honest contribution is
+simulatable from $\mathsf{pk}$ alone, and so is its view of
+$s = \sum_{j} s_j$, of which the coalition contributes only
+$\sum_{j \in S} s_j$.
+
+The share the coalition ends up holding is
+$\sigma_k[i] = \sum_{j} f_{j,i}(k) = \bigl(\sum_j f_{j,i}\bigr)(k)$, an
+evaluation of a degree-$(t-1)$ polynomial whose value at $0$ is $s[i]$. The
+coalition holds $|S| \le t-1$ such evaluations, which again determine nothing
+about $s[i]$. At no point in this phase does any party receive another
+party's contribution, and no party computes $\sum_j s_j$: the sum exists only
+as the constant term of a polynomial nobody evaluates at $0$.
+
+\emph{Decryption.} An honest member $j$ answers a decryption request with
+$d_j = c_1 \sigma_j + e_j'$, where $e_j'$ is smudging noise at standard
+deviation $\sigma$ from $\mathsf{Sigma}(t,n)$. By the noise-flooding
+argument of Asharov et al.\ (EUROCRYPT 2012), $d_j$ is statistically close to
+a value determined by $c_1$, the plaintext, and the coalition's own shares,
+provided the bound in assumption~(3) holds; the coalition therefore learns
+nothing about $\sigma_j$ beyond the plaintext it is entitled to. Combination
+computes
+\[
+  \mathsf{pt} \;=\; c_0 \;+\; \sum_{j \in Q} \lambda_j^{Q} d_j
+  \qquad (|Q| = t),
+\]
+with the integer Lagrange coefficients of
+Definition~\ref{def:tfhe-recombinable-quorum}. The secret $s$ appears only as
+the coefficient of the public $c_1$ inside the masked aggregate; it is never
+isolated, so the decryption phase does not reconstruct what the generation
+phase declined to form.
+
+Composing the two phases gives $t$-custody.
+\end{proof}
+
+\begin{corollary}[No member holds the key]
+\label{cor:tfhe-no-member-holds-key}
+For $t \ge 2$, no single member of $\Pi_{\mathrm{MPC}}$ holds or can compute
+$s$, at any point in the committee's life. This is the $|S| = 1$ case of
+Theorem~\ref{thm:tfhe-mchain-custody}.
+\end{corollary}
+
+\begin{remark}[Where the property is enforced, not merely claimed]
+\label{rem:tfhe-custody-enforcement}
+Three code-level facts carry the hypotheses of
+Theorem~\ref{thm:tfhe-mchain-custody}, each checked mechanically rather than
+by review:
+\begin{enumerate}[nosep]
+  \item \textbf{No whole key is generated.} \texttt{luxfi/fhe} ships whole-key
+        generators ($\mathsf{GenKeyPair}$, $\mathsf{GenSecretKey}$), a
+        trusted-dealer split ($\mathsf{Split}$, retained only as a
+        known-answer oracle), single-party decryptors and secret-key
+        encryptors. None is called from the lane. On the scheme side the
+        \texttt{go/ast} gate $\mathsf{TestGate}$
+        scans every non-test file of \texttt{protocols/tfhe}; on the wiring
+        side $\mathsf{TestNoWholeKeyInThresholdFHESource}$ scans
+        \texttt{luxfi/mpc/pkg/mpc/tfhe*.go} and
+        \texttt{luxfi/mpc/pkg/policy/fhe\_threshold*.go}. Each has a paired
+        negative control showing it flags an injected violation.
+  \item \textbf{No whole key crosses a process boundary.} The ceremony's wire
+        types ($\mathsf{tfhePublicShare}$, $\mathsf{tfheSubShare}$), the
+        scheme's own message types ($\mathsf{Public}$,
+        $\mathsf{Point}$, $\mathsf{Share}$,
+        $\mathsf{Partial}$) and the persisted member record
+        ($\mathsf{Member}$, $\mathsf{Decryption}$) have no secret-key field,
+        checked by reflection in
+        $\mathsf{TestTransport}$ and
+        $\mathsf{TestTFHEWireTypesCarryNoSecretKey}$.
+  \item \textbf{Each contribution is erased once spent.} A member calls
+        $\mathsf{Party.Zeroize}$ as soon as it holds its share ---
+        in $\mathsf{finalizeIfComplete}$, and again in $\mathsf{Stop}$ --- so
+        the contribution does not outlive the ceremony.
+\end{enumerate}
+\end{remark}
+
+\begin{remark}[What changed, and the counterexample it was]
+\label{rem:tfhe-prior-construction}
+The construction this replaced was not a weaker threshold scheme; it was not a
+threshold scheme. Every party stored the whole master key, partial decryption
+returned a MAC tag, and combination ignored the partials and ran single-party
+decryption. It therefore satisfied correctness --- $t$ parties recovered the
+plaintext --- while failing Definition~\ref{def:tfhe-custody} for every
+$t \ge 2$ by the trivial distinguisher: a coalition of size $1$ holds $s$, so
+its view is not simulatable without $s$.
+
+It is worth stating as a counterexample because it is the shape of failure that
+correctness testing cannot see. A round-trip test over that construction
+passed. It was removed from \texttt{github.com/luxfi/threshold} for that
+reason, and the scheme described here now occupies the same import path.
+\end{remark}
+
+\begin{remark}[Why this scheme sits with the other threshold schemes]
+\label{rem:tfhe-with-the-others}
+$\mathsf{tfhe}$ lives in \texttt{luxfi/threshold} beside threshold ECDSA
+(\texttt{protocols/cmp}, \texttt{protocols/doerner}), threshold Schnorr
+(\texttt{protocols/frost}), threshold BLS (\texttt{protocols/bls}) and the
+post-quantum threshold signatures (\texttt{protocols/corona},
+\texttt{protocols/mldsa}, \texttt{protocols/pulsar}). What it shares with them
+is the property being proved and the structure that delivers it: a committee of
+$n$ members at threshold $t$; a generation round in which each member
+contributes only its own secret and the group secret is never formed; a use
+round in which each member emits a masked partial result and the group secret
+is never reassembled. Definition~\ref{def:tfhe-custody} is the same definition
+those schemes are held to, with signing replaced by decryption. Keeping them
+apart invited the failure in
+Remark~\ref{rem:tfhe-prior-construction}: a scheme kept outside the module
+where that law is enforced was not measured against it.
+
+What it does not share is the arithmetic, and that boundary is stated in
+Remark~\ref{rem:tfhe-secret-sharing} rather than papered over.
+\end{remark}
+
+\begin{remark}[Which secret sharing, and why there are three]
+\label{rem:tfhe-secret-sharing}
+Three distinct linear secret-sharing objects appear in this stack and are not
+interchangeable. Recording which is which is load-bearing, because the
+correctness of threshold decryption depends on the third and on nothing else.
+\begin{enumerate}[nosep]
+  \item \textbf{Curve-scalar LSS} (\texttt{luxfi/threshold/protocols/lss}).
+        The field is an elliptic-curve group order, the Feldman commitments are
+        curve points, reconstruction uses modular inverses. This is the sharing
+        the threshold signature schemes use.
+  \item \textbf{Coefficientwise $\mathbb{Z}_q$ sharing}
+        (\texttt{protocols/tfhe}, $\mathsf{deal}$). A share is a
+        polynomial in $R_q$ shared coefficientwise over $\mathbb{Z}_q$, where
+        $q$ is the LWE modulus of the parameter set --- about $2^{27}$ at
+        PN10QP27. Reconstruction must avoid modular inverses entirely: the
+        combine scales each contribution by the \emph{integer} numerator
+        $\Lambda_j = \Delta \lambda_j$, $\Delta = n!$, precisely so that the
+        smudging noise $e_j'$ is multiplied by a bounded integer rather than by
+        an arbitrary field element. That is what keeps
+        $|\sum_j \Lambda_j e_j'|$ inside the decoding budget and makes
+        assumption~(3) of Theorem~\ref{thm:tfhe-mchain-custody} available.
+  \item \textbf{A 2048-bit MODP commitment sharing}
+        (\texttt{luxfi/fhe/pkg/keycommit}). Shamir with exponentiation-based
+        Feldman commitments over RFC~3526 Group~14, applied to the SHA-256
+        commitment of a key's components. It shares a hash, so its shares
+        cannot decrypt; it is a dealer-equivocation audit facility and is
+        named for that.
+\end{enumerate}
+Objects (1) and (2) are the same idea over different fields with different
+reconstruction, so they are not merged: sharing the FHE secret in a curve
+scalar field would share a different secret, and clearing denominators with
+modular inverses would destroy Theorem~\ref{thm:tfhe-mchain-custody}'s noise
+bound and with it correctness. Object (3) is not a threshold scheme at all and
+therefore does not belong beside either.
+\end{remark}
+
+\begin{definition}[Recombinable quorum]
+\label{def:tfhe-recombinable-quorum}
+For a quorum $S \subseteq [n]$ the Lagrange coefficient at zero of member
+$i \in S$ is
+\[
+  \lambda_i^S \;=\; \prod_{j \in S,\, j \neq i} \frac{x_j}{x_j - x_i},
+  \qquad x_k = k .
+\]
+$S$ is \emph{recombinable} when $\lambda_i^S \in \mathbb{Z}$ for every
+$i \in S$. Not every subset is: for $S = \{1,3\}$ one has
+$\lambda^S = (-3/2,\, 1/2)$.
+\end{definition}
+
+\begin{theorem}[Correctness on recombinable quorums, and refusal otherwise]
+\label{thm:tfhe-recombinable-correctness}
+Let $\mathsf{ct} = (c_0, c_1)$ encrypt $m$ under a well-formed committee
+(Definition~\ref{def:tfhe-committee}) and let each $i \in S$ contribute
+$d_i = c_1 \sigma_i + e_i'$. If $S$ is recombinable then
+\[
+  c_0 + \sum_{i \in S} \lambda_i^S d_i
+  \;=\; m + e + \sum_{i \in S} \lambda_i^S e_i' \pmod q,
+\]
+with $|\lambda_i^S| \le \binom{n-1}{t-1}$, and the plaintext decodes correctly
+whenever that noise stays inside the decoding margin. If $S$ is not
+recombinable, $\mathsf{combine}$ returns an error and no plaintext.
+\end{theorem}
+
+\begin{proof}
+The displayed identity is linearity of the sharing:
+$\sum_{i \in S} \lambda_i^S \sigma_i = s$ by Lagrange interpolation at zero,
+so the $c_1$ terms collapse to $c_1 s$ and $c_0 + c_1 s = m + e$. The
+coefficient bound is the standard bound on Lagrange coefficients over
+$\{1,\dots,n\}$. The second clause is by construction: the implementation
+computes each $\lambda_i^S$ as an exact integer quotient and returns an error
+when any remainder is non-zero, before touching the ciphertext.
+\end{proof}
+
+\begin{remark}[Gap found and closed: recombination by modular inverse]
+\label{rem:tfhe-modular-inverse-gap}
+The previous recombination did clear the denominator, and that was a
+correctness defect rather than a noise-budget question. It followed the
+Bendlin--Damg\aa rd presentation: recombine the scaled secret with integer
+numerators $\Lambda_i^S = \Delta \lambda_i^S$, $\Delta = n!$, obtaining
+$\Delta c_0 + \sum_i \Lambda_i^S d_i = \Delta(m+e) + \sum_i \Lambda_i^S e_i'$,
+and then recover $m$ by multiplying by $\Delta^{-1} \bmod q$.
+
+That last step is sound on the message term and destroys the noise term. The
+noise $\sum_i \Lambda_i^S e_i'$ is a multiple of $\Delta$ only when
+$\Delta \mid \Lambda_i^S$ for every $i$, which is exactly the condition
+$\lambda_i^S \in \mathbb{Z}$ of Definition~\ref{def:tfhe-recombinable-quorum}.
+When it fails, multiplication by $\Delta^{-1} \bmod q$ maps a small noise value
+to an arbitrary field element, the rounding margin is gone, and the recovered
+bit is wrong --- deterministically, with no error raised.
+
+The effect was measured before it was fixed, at both deployed parameter sets.
+Of the quorums of threshold size, those that recombine and those that decrypted
+correctly coincided exactly: at $2$-of-$3$, $2$ of $3$ quorums; at $3$-of-$4$,
+$3$ of $4$; at $3$-of-$5$, $5$ of $10$; at $4$-of-$7$, $13$ of $35$; at
+$5$-of-$9$, $45$ of $126$. The non-recombinable quorums returned the wrong
+plaintext for one or both plaintext polarities. Widening the modulus from
+$q \approx 2^{27}$ (PN10QP27) to $q \approx 2^{54}$ (PN11QP54) left the pattern
+unchanged, which is what distinguishes this from a noise-budget failure.
+
+It had gone unnoticed because the end-to-end tests recombined the quorum of the
+$t$ largest positions, $\{n-t+1, \dots, n\}$, which is recombinable for every
+$(t,n)$ --- a single favourable ordering standing in for the property.
+
+The fix is to not clear denominators at all: accept exactly the recombinable
+quorums, recombine with the integer $\lambda_i^S$ directly per
+Theorem~\ref{thm:tfhe-recombinable-correctness}, and refuse the rest. This
+also strictly improves the noise, since $|\lambda_i^S| \le \binom{n-1}{t-1}$
+replaces $|\Lambda_i^S| \le \Delta\binom{n-1}{t-1}$. Tests:
+$\mathsf{TestQuorate}$,
+$\mathsf{TestQuorum}$ (for every quorum:
+correct value or an error, never a different value), and
+$\mathsf{TestRefusal}$.
+\end{remark}
+
+\begin{remark}[The access structure that results, and its price]
+\label{rem:tfhe-access-structure}
+Restricting recombination to recombinable quorums does not weaken
+Theorem~\ref{thm:tfhe-mchain-custody}: custody is a statement about what
+$t-1$ members learn, and it is unchanged. What is restricted is
+\emph{availability}. The realised access structure is not every $t$-subset but
+the recombinable ones, so a committee whose only $t$ responsive members form a
+non-recombinable set refuses the decryption instead of answering it.
+
+Two facts keep that price small, and both are checked. The quorum of the $t$
+largest positions is recombinable for every $(t,n)$ in range
+($\mathsf{TestLargest}$, exhaustive
+for $n \le 24$), so a committee with all members responsive always has a usable
+quorum; and both consumers search the contributions they hold for a
+recombinable subset rather than fixing one in advance
+($\mathsf{Decrypt}$ via $\mathsf{choose}$, and the policy dispatcher via
+$\mathsf{Quorum}$, which keeps a round open for one more member instead of
+refusing at the threshold count).
+
+Restoring the full $t$-of-$n$ structure means removing the division rather than
+guarding it: either scale the plaintext by $\Delta$ at encryption time, so that
+recovering $\Delta m$ needs no correction, at the cost of $\log_2 \Delta$ bits
+of decoding margin; or replace Shamir with a monotone-span-program sharing
+whose reconstruction coefficients are $0/1$, at the cost of
+$\binom{n}{t-1}$-sized shares. Both are parameter and encoding changes with
+their own noise accounting, and neither is what the implementation does today.
+\end{remark}
+
+\begin{remark}[Gap found and closed: ciphertext binding]
+\label{rem:tfhe-ciphertext-binding}
+Theorem~\ref{thm:tfhe-mchain-custody} is a secrecy statement and holds without
+any binding between a partial decryption and its ciphertext. Correctness of a
+\emph{networked} combination does not.
+
+$\mathsf{combine}$ checks that the partials it is given agree on the LWE
+modulus and the committee size and carry distinct member positions. It cannot
+check which ciphertext a partial was computed for, because a partial carries no
+such information. A member --- or a relay --- that answers a request about
+$\mathsf{ct}$ with a partial decryption of some other $\mathsf{ct}'$ under the
+same committee key therefore contributes a well-formed-looking value that
+combines into a plaintext bearing no relation to either ciphertext. In the
+policy gate the recovered plaintext is a single verdict bit, so this is a
+one-bit corruption of an authorisation decision.
+
+The committee layer closes it by binding. $\mathsf{Decryption}$ carries
+$\mathsf{Digest} = H(\text{\texttt{LUX/THRESHOLD/TFHE/CIPHERTEXT/v1}} \,\|\,
+\mathsf{ct})$, computed inside $\mathsf{Member.Decrypt}$ from the same bytes it
+decrypts, so a producer cannot make the two disagree. $\mathsf{Decrypt}$
+refuses any contribution whose digest is not the digest of the ciphertext under
+decryption, and the policy dispatcher ($\mathsf{Committee.collect}$)
+additionally declines to count such a contribution towards the quorum, so one
+mismatching member does not deny a round that honest members can still carry.
+Tests: $\mathsf{TestBinding}$,
+$\mathsf{TestCommittee\_ReplayedPartialDoesNotFillQuorum}$,
+$\mathsf{TestCommittee\_ReplayedPartialRefusesWhenItIsTheQuorum}$.
+\end{remark}
+
+\begin{remark}[Residual: no proof of correct partial decryption]
+\label{rem:tfhe-active-corruption}
+Custody and robustness are different properties and only the first is proved
+here. Theorem~\ref{thm:tfhe-mchain-custody} bounds what a coalition
+\emph{learns}; it says nothing about what a coalition can make the committee
+\emph{output}. A member that submits $d_j' = d_j + \delta$ for a $\delta$ of
+its choosing, correctly bound to the right ciphertext, shifts the combined
+plaintext by $\Lambda_j \delta$, and nothing in the scheme detects it: a
+partial decryption carries no proof that it was computed under the member's own
+share. Closing this needs a proof of correct partial decryption --- the
+CDS/NIZK argument that accompanies the Asharov et al.\ scheme in the malicious
+model --- which this scheme does not implement. The behaviour is pinned by
+$\mathsf{TestTampered}$, which fails if an
+integrity check is ever added, forcing this remark to be revised with it.
+
+Authentication does not substitute for it. The ceremony and decryption messages
+are Ed25519-signed on the session wire ($\mathsf{session.sendMsg}$ /
+$\mathsf{verifyInboundSignature}$), which establishes \emph{which} member sent a
+partial decryption and nothing about whether that member computed it honestly.
+Attestation of the host (\texttt{luxfi/mpc/cc/attest}) is a third, separate
+property and likewise does not imply correct computation. The deployed integrity
+assumption is therefore: custody against any $t-1$ passive corruptions, and
+correctness of the recovered plaintext only when every member in the responding
+quorum is honest.
+\end{remark}
+
+\begin{remark}[Common reference polynomial]
+\label{rem:tfhe-crs}
+The reference polynomial $a$ is derived by
+$\mathsf{tfheCRSSeed} = H(\text{\texttt{LUX/MPC/TFHE/DKG/CRS/v1}} \,\|\,
+\mathsf{walletID} \,\|\, \langle \text{committee in canonical order}\rangle)$
+and expanded with a keyed PRNG, so every node derives the identical $a$ from
+local information and no agreement round is needed; $a$ is public and its only
+requirement is agreement. Modelled as a random-oracle output, $a$ is uniform on
+$R_q$ as assumption~(1) requires. Whoever chooses the wallet label influences
+$a$ only by selecting among random-oracle outputs, which is the standard
+hash-derived-CRS model; a beacon-supplied seed would remove even that.
+Determinism is load-bearing and is tested
+($\mathsf{TestTFHECRSSeed\_KnownAnswer}$,
+$\mathsf{TestTFHECRSSeed\_PermutationInvariant}$,
+$\mathsf{TestTFHECeremony\_ReferencePolynomialFollowsTheSeed}$): two nodes
+disagreeing on $a$ produce a committee that agrees on no public key.
+\end{remark}
+
+\begin{remark}[Scope: encryption and decryption, not homomorphic compute]
+\label{rem:tfhe-lane-scope}
+The dealerless lane generates the collective \emph{encryption} key and its
+$t$-of-$n$ shares. It does not generate the FHEW blind-rotation key, and
+dealerless generation of that key --- a separate multiparty-FHEW protocol ---
+is a documented residual. Consequently the committee can trustlessly encrypt
+and trustlessly threshold-decrypt, which is what
+Theorem~\ref{thm:tfhe-mchain-custody} covers and what the wallet path uses, but
+homomorphic \emph{evaluation} on ciphertexts under the collective key still
+requires an evaluation key produced outside the lane. Any deployment that
+expects the encrypted policy verdict of
+\texttt{luxfi/mpc/pkg/policy} to be computed homomorphically under the
+committee's collective key depends on that residual; the decryptor itself is
+correct for any ciphertext under the collective key, however produced.
+\end{remark}
