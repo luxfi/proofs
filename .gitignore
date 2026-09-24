@@ -16,3 +16,8 @@ out/
 .claude/worktrees/
 states/
 __pycache__/
+
+# Local symlinks to LLM.md
+CLAUDE.md
+AGENTS.md
+GEMINI.md
